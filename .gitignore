@@ -4,3 +4,18 @@ CLAUDE.md
 .mobile-agents/
 /mockups
 .DS_Store
+
+# SPM build artifacts
+.build/
+.swiftpm/
+*/.build/
+*/.swiftpm/
+Packages/.build/
+Packages/.swiftpm/
+
+# Xcode user state
+*.xcuserstate
+xcuserdata/
+
+# New Group (Xcode accident)
+NextOutcome/New\ Group/
