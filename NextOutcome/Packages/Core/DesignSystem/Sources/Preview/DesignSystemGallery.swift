@@ -5,7 +5,6 @@
 //  Created by Sok Pich on 30/06/2026.
 //
 
-
 import SwiftUI
 
 #Preview("DesignSystem Gallery") {
@@ -52,7 +51,7 @@ import SwiftUI
                 value: "$1,240.55",
                 change: "▲ +$84.20 (7.3%) today",
                 isPositive: true,
-                sparkData: Self.sampleData
+                sparkData: DesignSystemGallery_Previews.sampleData
             )
             .padding(.horizontal)
         }
