@@ -1,3 +1,24 @@
 /mobile-engineering-agents
 CLAUDE.md
 /docs
+.mobile-agents/
+/mockups
+.DS_Store
+
+# SPM build artifacts
+.build/
+.swiftpm/
+*/.build/
+*/.swiftpm/
+Packages/.build/
+Packages/.swiftpm/
+
+# Xcode user state
+*.xcuserstate
+xcuserdata/
+
+# New Group (Xcode accident)
+NextOutcome/New\ Group/
+/NextOutcome/NextOutcome.xcodeproj/project.xcworkspace
+/NextOutcome/NextOutcome.xcodeproj/xcuserdata
+/NextOutcome/NextOutcome.xcodeproj/xcuserdata/ctrcomputer.xcuserdatad/xcschemes

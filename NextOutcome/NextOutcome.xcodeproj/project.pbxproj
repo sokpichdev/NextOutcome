@@ -6,6 +6,15 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		691399DC2FF3B253007A6162 /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 691399DB2FF3B253007A6162 /* DesignSystem */; };
+		691399DE2FF3B253007A6162 /* MarketsData in Frameworks */ = {isa = PBXBuildFile; productRef = 691399DD2FF3B253007A6162 /* MarketsData */; };
+		691399E02FF3B253007A6162 /* MarketsDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 691399DF2FF3B253007A6162 /* MarketsDomain */; };
+		691399E22FF3B253007A6162 /* MarketsPresentation in Frameworks */ = {isa = PBXBuildFile; productRef = 691399E12FF3B253007A6162 /* MarketsPresentation */; };
+		691399E42FF3B253007A6162 /* Networking in Frameworks */ = {isa = PBXBuildFile; productRef = 691399E32FF3B253007A6162 /* Networking */; };
+		691399E62FF3B253007A6162 /* SharedDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 691399E52FF3B253007A6162 /* SharedDomain */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		699985412FF188AB0055E4BF /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -65,6 +74,12 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				691399DE2FF3B253007A6162 /* MarketsData in Frameworks */,
+				691399E62FF3B253007A6162 /* SharedDomain in Frameworks */,
+				691399E02FF3B253007A6162 /* MarketsDomain in Frameworks */,
+				691399E22FF3B253007A6162 /* MarketsPresentation in Frameworks */,
+				691399E42FF3B253007A6162 /* Networking in Frameworks */,
+				691399DC2FF3B253007A6162 /* DesignSystem in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -125,6 +140,12 @@
 			);
 			name = NextOutcome;
 			packageProductDependencies = (
+				691399DB2FF3B253007A6162 /* DesignSystem */,
+				691399DD2FF3B253007A6162 /* MarketsData */,
+				691399DF2FF3B253007A6162 /* MarketsDomain */,
+				691399E12FF3B253007A6162 /* MarketsPresentation */,
+				691399E32FF3B253007A6162 /* Networking */,
+				691399E52FF3B253007A6162 /* SharedDomain */,
 			);
 			productName = NextOutcome;
 			productReference = 6999852F2FF188A80055E4BF /* NextOutcome.app */;
@@ -208,6 +229,9 @@
 			);
 			mainGroup = 699985262FF188A80055E4BF;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				691399DA2FF3B253007A6162 /* XCLocalSwiftPackageReference "Packages" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 699985302FF188A80055E4BF /* Products */;
 			projectDirPath = "";
@@ -630,6 +654,40 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		691399DA2FF3B253007A6162 /* XCLocalSwiftPackageReference "Packages" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		691399DB2FF3B253007A6162 /* DesignSystem */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DesignSystem;
+		};
+		691399DD2FF3B253007A6162 /* MarketsData */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MarketsData;
+		};
+		691399DF2FF3B253007A6162 /* MarketsDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MarketsDomain;
+		};
+		691399E12FF3B253007A6162 /* MarketsPresentation */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MarketsPresentation;
+		};
+		691399E32FF3B253007A6162 /* Networking */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Networking;
+		};
+		691399E52FF3B253007A6162 /* SharedDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SharedDomain;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 699985272FF188A80055E4BF /* Project object */;
 }
