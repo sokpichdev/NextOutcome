@@ -2,12 +2,11 @@ import Foundation
 
 /// Pure display formatting for shell chrome (tab balance label, drawer address).
 public enum ShellFormat {
-    private static let currency: NumberFormatter = {
+    private static let amount: NumberFormatter = {
         let f = NumberFormatter()
-        f.numberStyle = .currency
+        f.numberStyle = .decimal
         f.locale = Locale(identifier: "en_US_POSIX")
-        f.currencyCode = "USD"
-        f.currencySymbol = "$"
+        f.usesGroupingSeparator = false
         f.minimumFractionDigits = 2
         f.maximumFractionDigits = 2
         return f
@@ -15,8 +14,8 @@ public enum ShellFormat {
 
     /// Live balance for the Portfolio tab label, e.g. "$7.02". `nil` → "$--".
     public static func balanceLabel(_ value: Decimal?) -> String {
-        guard let value else { return "$--" }
-        return currency.string(from: value as NSDecimalNumber) ?? "$--"
+        guard let value, let s = amount.string(from: value as NSDecimalNumber) else { return "$--" }
+        return "$" + s
     }
 
     /// Drawer header address: "0x" + first 8 chars + "…". `nil`/short → "—".
