@@ -17,5 +17,7 @@ public struct FetchTagsUseCase: Sendable {
     }
 
     /// Returns an instance whose `execute` always returns an empty array. Use in unit tests.
+    #if DEBUG
     public static let stub = FetchTagsUseCase(repository: StubMarketRepository())
+    #endif
 }

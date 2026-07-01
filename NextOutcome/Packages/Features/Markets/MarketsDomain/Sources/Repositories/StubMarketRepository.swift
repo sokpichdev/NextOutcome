@@ -9,6 +9,7 @@
 import Foundation
 import SharedDomain
 
+#if DEBUG
 struct StubMarketRepository: MarketRepository {
     func fetchEvents(cursor: String?, tagID: String?) async throws -> Page<Event> {
         Page(items: [], nextCursor: nil)
@@ -23,3 +24,4 @@ struct StubMarketRepository: MarketRepository {
     func fetchTags() async throws -> [Tag] { [] }
     func holders(conditionId: String) async throws -> [Holder] { [] }
 }
+#endif

@@ -144,6 +144,7 @@ public final class EventListViewModel {
     }
 
     /// Test seam: build a VM pre-seeded into `.loaded` without a use case round-trip.
+    #if DEBUG
     static func makeForTesting(events: [Event]) -> EventListViewModel {
         let vm = EventListViewModel(
             fetchEvents: FetchEventsUseCase.stub,
@@ -152,4 +153,5 @@ public final class EventListViewModel {
         vm.state = .loaded(events)
         return vm
     }
+    #endif
 }

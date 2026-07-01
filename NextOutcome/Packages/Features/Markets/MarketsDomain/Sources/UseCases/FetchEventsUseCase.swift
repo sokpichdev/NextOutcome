@@ -19,5 +19,7 @@ public struct FetchEventsUseCase: Sendable {
     }
 
     /// Returns an instance whose `execute` always returns an empty page. Use in unit tests.
+    #if DEBUG
     public static let stub = FetchEventsUseCase(repository: StubMarketRepository())
+    #endif
 }
