@@ -16,50 +16,81 @@ struct RootView: View {
     @State private var searchViewModel: SearchViewModel
     @State private var portfolioViewModel: PortfolioViewModel
     @State private var activityViewModel: ActivityViewModel
+    @State private var shellViewModel: ShellViewModel
     private let leaderboardViewModel: LeaderboardViewModel
     private let marketLiveFactory: MarketLiveViewModelFactory
     private let marketHoldersFactory: MarketHoldersViewModelFactory
 
+    @State private var selectedCategory: ShellCategory = .trending
+    @State private var isDrawerOpen = false
+
     @MainActor
     init(container: AppContainer = AppContainer()) {
+        let portfolio = container.makePortfolioViewModel()
         _eventListViewModel = State(initialValue: container.makeEventListViewModel())
         _searchViewModel = State(initialValue: container.makeSearchViewModel())
-        _portfolioViewModel = State(initialValue: container.makePortfolioViewModel())
+        _portfolioViewModel = State(initialValue: portfolio)
         _activityViewModel = State(initialValue: container.makeActivityViewModel())
+        _shellViewModel = State(initialValue: ShellViewModel(portfolio: portfolio))
         leaderboardViewModel = container.makeLeaderboardViewModel()
         marketLiveFactory = container.makeMarketLiveFactory()
         marketHoldersFactory = container.makeMarketHoldersFactory()
     }
 
     var body: some View {
+        ZStack(alignment: .leading) {
+            tabs
+            if isDrawerOpen { drawerOverlay.transition(.move(edge: .leading)) }
+        }
+        .tint(DSColor.accent)
+        .animation(.easeInOut(duration: 0.3), value: isDrawerOpen)
+        .environment(\.marketLiveFactory, marketLiveFactory)
+        .environment(\.marketHoldersFactory, marketHoldersFactory)
+    }
+
+    private var tabs: some View {
         TabView {
             NavigationStack {
-                EventListView(viewModel: eventListViewModel)
+                chrome { EventListView(viewModel: eventListViewModel) }
             }
-            .tabItem { Label("Markets", systemImage: "chart.line.uptrend.xyaxis") }
+            .tabItem { Label("Home", systemImage: "house") }
 
             NavigationStack {
-                SearchView(viewModel: searchViewModel)
+                chrome { SearchView(viewModel: searchViewModel) }
             }
             .tabItem { Label("Search", systemImage: "magnifyingglass") }
 
             NavigationStack {
-                PortfolioView(viewModel: portfolioViewModel)
+                chrome { ActivityView(viewModel: activityViewModel) }
             }
-            .tabItem { Label("Portfolio", systemImage: "chart.pie") }
+            .tabItem { Label("Breaking", systemImage: "circle.dashed") }
 
             NavigationStack {
-                ActivityView(viewModel: activityViewModel)
+                chrome { PortfolioView(viewModel: portfolioViewModel) }
             }
-            .tabItem { Label("Activity", systemImage: "bolt.horizontal") }
-
-            NavigationStack {
-                AccountView(leaderboardViewModel: leaderboardViewModel)
-            }
-            .tabItem { Label("Account", systemImage: "person.crop.circle") }
+            .tabItem { Label(shellViewModel.balanceLabel, systemImage: "chart.line.uptrend.xyaxis") }
         }
-        .tint(DSColor.accent)
-        .environment(\.marketLiveFactory, marketLiveFactory)
-        .environment(\.marketHoldersFactory, marketHoldersFactory)
+    }
+
+    @ViewBuilder
+    private func chrome<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        ShellChrome(
+            selectedCategory: $selectedCategory,
+            onAvatar: { isDrawerOpen = true }
+        ) { content() }
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var drawerOverlay: some View {
+        ZStack(alignment: .leading) {
+            Color.black.opacity(0.5).ignoresSafeArea()
+                .onTapGesture { isDrawerOpen = false }
+            SideMenuDrawer(
+                addressShort: shellViewModel.addressShort,
+                onSelect: { _ in isDrawerOpen = false },
+                onLogout: { isDrawerOpen = false }
+            )
+            .frame(width: 320)
+        }
     }
 }
