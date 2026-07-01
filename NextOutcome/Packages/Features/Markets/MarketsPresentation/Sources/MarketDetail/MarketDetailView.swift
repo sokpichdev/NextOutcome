@@ -12,6 +12,7 @@ import OrderbookPresentation
 
 public struct MarketDetailView: View {
     @Environment(\.marketLiveFactory) private var marketLiveFactory
+    @Environment(\.marketHoldersFactory) private var marketHoldersFactory
     private let market: Market
 
     public init(market: Market) {
@@ -24,6 +25,7 @@ public struct MarketDetailView: View {
                 priceHeader
                 liveSection
                 stats
+                holdersSection
             }
             .padding(.horizontal, DSLayout.margin)
             .padding(.top, DSLayout.spacing)
@@ -44,6 +46,14 @@ public struct MarketDetailView: View {
            let factory = marketLiveFactory,
            let assetID = market.yesOutcome?.id, !assetID.isEmpty {
             MarketLiveView(viewModel: factory(assetID))
+        }
+    }
+
+    /// Top holders, loaded via the injected factory when the market has a condition id.
+    @ViewBuilder
+    private var holdersSection: some View {
+        if let factory = marketHoldersFactory, !market.conditionId.isEmpty {
+            HoldersSection(viewModel: factory(market.conditionId))
         }
     }
 

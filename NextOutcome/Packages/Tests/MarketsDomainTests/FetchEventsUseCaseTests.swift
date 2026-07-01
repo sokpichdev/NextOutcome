@@ -28,4 +28,5 @@ private final class StubMarketRepository: MarketRepository {
     func fetchEvent(slug: String) async throws -> Event { fatalError("unused") }
     func searchMarkets(query: String) async throws -> [Market] { [] }
     func fetchTags() async throws -> [Tag] { [] }
+    func holders(conditionId: String) async throws -> [Holder] { [] }
 }

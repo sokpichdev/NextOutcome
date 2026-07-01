@@ -1,6 +1,30 @@
 import XCTest
+import MarketsDomain
 @testable import Networking
 @testable import MarketsData
+
+final class HolderDecodingTests: XCTestCase {
+    func test_holders_groupsFlattenSortAndLabelOutcome() throws {
+        let json = """
+        [
+          { "token": "yes", "holders": [
+            { "proxyWallet": "0xAAAA000000000000000000000000000000000001", "name": "Whale", "outcomeIndex": 0, "amount": 5000 }
+          ]},
+          { "token": "no", "holders": [
+            { "proxyWallet": "0xBBBB000000000000000000000000000000000002", "outcomeIndex": 1, "shares": "9000" }
+          ]}
+        ]
+        """.data(using: .utf8)!
+        let groups = try JSONDecoder.polymarket.decode([HolderGroupDTO].self, from: json)
+        let holders = MarketMapper.holders(from: groups)
+
+        XCTAssertEqual(holders.count, 2)
+        XCTAssertEqual(holders.first?.shares, 9000)          // sorted by shares desc
+        XCTAssertEqual(holders.first?.outcome, "No")
+        XCTAssertEqual(holders.last?.name, "Whale")          // name preferred
+        XCTAssertEqual(holders.last?.outcome, "Yes")
+    }
+}
 
 final class MarketDecodingTests: XCTestCase {
     func test_decimalString_parsesStringPrice() throws {
