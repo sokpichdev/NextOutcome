@@ -28,6 +28,10 @@ enum MarketMapper {
             imageURL: dto.image.flatMap(URL.init(string: )))
     }
     
+    static func tag(from dto: TagDTO) -> Tag {
+        Tag(id: dto.id, label: dto.label, slug: dto.slug)
+    }
+
     static func event(from dto: EventDTO) -> Event {
         Event(
             id: dto.id,

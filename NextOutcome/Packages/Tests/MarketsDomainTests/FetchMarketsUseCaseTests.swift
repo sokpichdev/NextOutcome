@@ -22,7 +22,9 @@ final class FetchMarketsUseCaseTests: XCTestCase {
 private final class MockMarketRepository: MarketRepository {
     let page: Page<Market>
     init(page: Page<Market>) { self.page = page }
+    func fetchEvents(cursor: String?, tagID: String?) async throws -> Page<Event> { Page(items: [], nextCursor: nil) }
     func fetchMarkets(cursor: String?) async throws -> Page<Market> { page }
     func fetchEvent(slug: String) async throws -> Event { fatalError() }
     func searchMarkets(query: String) async throws -> [Market] { [] }
+    func fetchTags() async throws -> [Tag] { [] }
 }

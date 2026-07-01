@@ -11,11 +11,21 @@ import MarketsDomain
 import SharedDomain
 
 public struct GammaMarketRepository: MarketRepository {
-    
     private let client: APIClient
     
     public init(client: APIClient) {
         self.client = client
+    }
+    
+    public func fetchEvents(cursor: String?, tagID: String?) async throws -> Page<Event> {
+        var query: [String: String] = ["limit": "20", "active": "true"]
+        if let cursor { query["next_cursor"] = cursor }
+        if let tagID { query["tag_id"] = tagID }
+
+        let endpoint = Endpoint(host: .gamma, path: "/events", query: query)
+        let envelope: EventsEnvelope = try await client.fetch(endpoint)
+        let events = envelope.data.map(MarketMapper.event(from:))
+        return Page(items: events, nextCursor: envelope.nextCursor)
     }
     
     public func fetchMarkets(cursor: String?) async throws -> Page<Market> {
@@ -44,4 +54,14 @@ public struct GammaMarketRepository: MarketRepository {
             let envelope: SearchEnvelope = try await client.fetch(endpoint)
             return envelope.markets.map(MarketMapper.market(from:))
         }
+
+    public func fetchTags() async throws -> [Tag] {
+        let endpoint = Endpoint(
+            host: .gamma,
+            path: "/tags",
+            query: ["limit": "50", "is_carousel": "true"]
+        )
+        let dtos: [TagDTO] = try await client.fetch(endpoint)
+        return dtos.map(MarketMapper.tag(from:))
+    }
 }

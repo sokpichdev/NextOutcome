@@ -40,3 +40,9 @@ struct EventsEnvelope: Decodable {
     let data: [EventDTO]
     let nextCursor: String?
 }
+
+struct TagDTO: Decodable {
+    let id: String
+    let label: String
+    let slug: String
+}
