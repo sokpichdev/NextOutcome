@@ -18,6 +18,7 @@ struct RootView: View {
     @State private var activityViewModel: ActivityViewModel
     private let leaderboardViewModel: LeaderboardViewModel
     private let marketLiveFactory: MarketLiveViewModelFactory
+    private let marketHoldersFactory: MarketHoldersViewModelFactory
 
     @MainActor
     init(container: AppContainer = AppContainer()) {
@@ -27,6 +28,7 @@ struct RootView: View {
         _activityViewModel = State(initialValue: container.makeActivityViewModel())
         leaderboardViewModel = container.makeLeaderboardViewModel()
         marketLiveFactory = container.makeMarketLiveFactory()
+        marketHoldersFactory = container.makeMarketHoldersFactory()
     }
 
     var body: some View {
@@ -58,5 +60,6 @@ struct RootView: View {
         }
         .tint(DSColor.accent)
         .environment(\.marketLiveFactory, marketLiveFactory)
+        .environment(\.marketHoldersFactory, marketHoldersFactory)
     }
 }

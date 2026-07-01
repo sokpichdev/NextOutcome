@@ -68,4 +68,11 @@ final class AppContainer {
             )
         }
     }
+
+    /// Factory for the Market Detail top-holders section.
+    func makeMarketHoldersFactory() -> MarketHoldersViewModelFactory {
+        MarketHoldersViewModelFactory { [repository] conditionId in
+            HoldersViewModel(conditionId: conditionId, fetchHolders: FetchHoldersUseCase(repository: repository))
+        }
+    }
 }
