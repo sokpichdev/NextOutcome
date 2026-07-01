@@ -48,8 +48,15 @@ public actor APIClient {
                     throw decodingError
                 }
             } catch let error as APIError {
-                // Decoding is deterministic; only retry transport/throttle/status errors.
-                if case .decoding = error { throw error }
+                // Deterministic errors: never retry. Decoding and client (4xx) failures
+                // won't change on a repeat — only transport/throttle/5xx are worth retrying.
+                if case .decoding = error {
+                    throw error
+                }
+                if case let .http(status, _) = error, (400..<500).contains(status) {
+                    logger.log(error: error, request: reques)
+                    throw error
+                }
                 let isLast = attempt == retry.maxAttempts - 1
                 if isLast {
                     logger.log(error: error, request: reques)

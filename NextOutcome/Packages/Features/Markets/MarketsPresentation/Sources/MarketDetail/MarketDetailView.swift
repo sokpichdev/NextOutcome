@@ -39,7 +39,10 @@ public struct MarketDetailView: View {
     /// when the App has injected a factory and the market has a CLOB token.
     @ViewBuilder
     private var liveSection: some View {
-        if let factory = marketLiveFactory, let assetID = market.yesOutcome?.id, !assetID.isEmpty {
+        // Resolved markets have no live order book — skip the live section entirely.
+        if !market.isResolved,
+           let factory = marketLiveFactory,
+           let assetID = market.yesOutcome?.id, !assetID.isEmpty {
             MarketLiveView(viewModel: factory(assetID))
         }
     }
