@@ -8,15 +8,18 @@
 import SwiftUI
 import DesignSystem
 import MarketsPresentation
+import OrderbookPresentation
 
 struct RootView: View {
     @State private var eventListViewModel: EventListViewModel
     @State private var searchViewModel: SearchViewModel
+    private let marketLiveFactory: MarketLiveViewModelFactory
 
     @MainActor
     init(container: AppContainer = AppContainer()) {
         _eventListViewModel = State(initialValue: container.makeEventListViewModel())
         _searchViewModel = State(initialValue: container.makeSearchViewModel())
+        marketLiveFactory = container.makeMarketLiveFactory()
     }
 
     var body: some View {
@@ -41,5 +44,6 @@ struct RootView: View {
                 .tabItem { Label("Account", systemImage: "person.crop.circle") }
         }
         .tint(DSColor.accent)
+        .environment(\.marketLiveFactory, marketLiveFactory)
     }
 }
