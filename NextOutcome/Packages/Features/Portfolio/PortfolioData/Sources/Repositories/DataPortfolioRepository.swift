@@ -50,4 +50,27 @@ public struct DataPortfolioRepository: PortfolioRepository {
         let nextCursor = dtos.count == Self.pageSize ? "\(offset + Self.pageSize)" : nil
         return Page(items: items, nextCursor: nextCursor)
     }
+
+    public func closedPositions(address: String) async throws -> [ClosedPosition] {
+        let endpoint = Endpoint(
+            host: .data,
+            path: "/closed-positions",
+            query: ["user": address, "limit": "100"]
+        )
+        let dtos: [ClosedPositionDTO] = try await client.fetch(endpoint)
+        return dtos.enumerated().map { LeaderboardMapper.closedPosition(from: $1, index: $0) }
+    }
+
+    public func leaderboard(
+        metric: LeaderboardMetric,
+        window: LeaderboardWindow
+    ) async throws -> [LeaderboardEntry] {
+        let endpoint = Endpoint(
+            host: .data,
+            path: "/v1/leaderboard",
+            query: ["rankBy": metric.rawValue, "window": window.rawValue, "limit": "50"]
+        )
+        let dtos: [LeaderboardEntryDTO] = try await client.fetch(endpoint)
+        return dtos.enumerated().map { LeaderboardMapper.entry(from: $1, rank: $0 + 1) }
+    }
 }
