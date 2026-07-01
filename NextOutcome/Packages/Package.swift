@@ -17,6 +17,9 @@ let package = Package(
         .library(name: "PortfolioDomain",        targets: ["PortfolioDomain"]),
         .library(name: "PortfolioData",          targets: ["PortfolioData"]),
         .library(name: "PortfolioPresentation",  targets: ["PortfolioPresentation"]),
+        // Trading — isolated, quarantined. The read-only app never links these.
+        .library(name: "TradingDomain",          targets: ["TradingDomain"]),
+        .library(name: "TradingData",            targets: ["TradingData"]),
     ],
     targets: [
         // Core
@@ -75,6 +78,18 @@ let package = Package(
             path: "Features/Portfolio/PortfolioPresentation/Sources"
         ),
 
+        // Trading feature (isolated; quarantined from the read-only app)
+        .target(
+            name: "TradingDomain",
+            dependencies: [],
+            path: "Features/Trading/TradingDomain/Sources"
+        ),
+        .target(
+            name: "TradingData",
+            dependencies: ["TradingDomain", "Networking"],
+            path: "Features/Trading/TradingData/Sources"
+        ),
+
         // Tests
         .testTarget(name: "NetworkingTests",     dependencies: ["Networking"]),
         .testTarget(name: "MarketsDomainTests",  dependencies: ["MarketsDomain"]),
@@ -91,6 +106,11 @@ let package = Package(
         .testTarget(
             name: "PortfolioDataTests",
             dependencies: ["PortfolioData", "PortfolioDomain", "Networking"]
+        ),
+        .testTarget(name: "TradingDomainTests", dependencies: ["TradingDomain"]),
+        .testTarget(
+            name: "TradingDataTests",
+            dependencies: ["TradingData", "TradingDomain", "Networking"]
         ),
     ]
 )
