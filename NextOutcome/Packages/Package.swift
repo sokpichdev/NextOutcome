@@ -91,6 +91,9 @@ let package = Package(
         ),
 
         // Tests
+        .testTarget(name: "DesignSystemTests",
+                    dependencies: ["DesignSystem"],
+                    path: "Tests/DesignSystemTests"),
         .testTarget(name: "NetworkingTests",     dependencies: ["Networking"]),
         .testTarget(name: "MarketsDomainTests",  dependencies: ["MarketsDomain"]),
         .testTarget(
