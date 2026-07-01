@@ -1,4 +1,5 @@
 import XCTest
+import SharedDomain
 @testable import PortfolioDomain
 
 final class PortfolioTests: XCTestCase {
@@ -32,11 +33,27 @@ final class PortfolioTests: XCTestCase {
                  iconURL: nil, size: 10, avgPrice: 0.5, curPrice: 0.6,
                  currentValue: 6, cashPnl: cashPnl, percentPnl: 20, redeemable: false)
     }
+
+    func test_fetchActivity_paginatesViaCursor() async throws {
+        let repo = StubRepo(value: 0, positions: [], activityPage: Page(
+            items: [activity()], nextCursor: "25"
+        ))
+        let page = try await FetchActivityUseCase(repository: repo).execute(address: "0xabc")
+        XCTAssertEqual(page.items.count, 1)
+        XCTAssertEqual(page.nextCursor, "25")
+    }
+
+    private func activity() -> Activity {
+        Activity(id: "a1", kind: .buy, title: "M", slug: "m", outcome: "Yes",
+                 iconURL: nil, size: 10, usdcSize: 6, price: 0.6, timestamp: .init(timeIntervalSince1970: 0))
+    }
 }
 
 private struct StubRepo: PortfolioRepository {
     let value: Decimal
     let positions: [Position]
+    var activityPage: Page<Activity> = Page(items: [], nextCursor: nil)
     func positions(address: String) async throws -> [Position] { positions }
     func value(address: String) async throws -> Decimal { value }
+    func activity(address: String, cursor: String?) async throws -> Page<Activity> { activityPage }
 }
