@@ -26,7 +26,7 @@ public struct HomeCard: View {
 #if DEBUG
 private func _sampleEvent(title: String, markets: [Market], tags: [String], image: Bool = false) -> Event {
     Event(id: title, title: title, slug: title, markets: markets, volume: 4_000_000_000,
-          imageURL: image ? URL(string: "https://polymarket-upload.s3.amazonaws.com/x.png") : nil,
+          imageURL: image ? URL(string: "https://example.com/x.png") : nil,
           tags: tags.map { Tag(id: $0, label: $0, slug: $0.lowercased()) })
 }
 private func _mkt(_ q: String, _ outs: [(String, Double)]) -> Market {
