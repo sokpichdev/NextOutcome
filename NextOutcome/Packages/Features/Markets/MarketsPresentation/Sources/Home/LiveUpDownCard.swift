@@ -40,10 +40,9 @@ public struct LiveUpDownCard: View {
         }
         .task {
             if model == nil, let up = upOutcome, let f = factory {
-                let m = LiveUpDownCardViewModel(upOutcome: up, factory: f)
-                model = m
-                m.start()
+                model = LiveUpDownCardViewModel(upOutcome: up, factory: f)
             }
+            model?.start()
         }
         .onDisappear { model?.stop() }
     }
