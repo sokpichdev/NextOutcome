@@ -8,8 +8,10 @@
 import Foundation
 import Networking
 import PortfolioDomain
+import SharedDomain
 
 public struct DataPortfolioRepository: PortfolioRepository {
+    private static let pageSize = 25
     private let client: APIClient
 
     public init(client: APIClient) {
@@ -34,5 +36,18 @@ public struct DataPortfolioRepository: PortfolioRepository {
         }
         let single: PortfolioValueDTO = try await client.fetch(endpoint)
         return single.value
+    }
+
+    public func activity(address: String, cursor: String?) async throws -> Page<Activity> {
+        let offset = cursor.flatMap(Int.init) ?? 0
+        let endpoint = Endpoint(
+            host: .data,
+            path: "/activity",
+            query: ["user": address, "limit": "\(Self.pageSize)", "offset": "\(offset)"]
+        )
+        let dtos: [ActivityDTO] = try await client.fetch(endpoint)
+        let items = dtos.enumerated().map { ActivityMapper.activity(from: $1, index: offset + $0) }
+        let nextCursor = dtos.count == Self.pageSize ? "\(offset + Self.pageSize)" : nil
+        return Page(items: items, nextCursor: nextCursor)
     }
 }
