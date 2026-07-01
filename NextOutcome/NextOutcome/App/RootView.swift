@@ -43,6 +43,7 @@ struct RootView: View {
             if isDrawerOpen { drawerOverlay }
         }
         .tint(DSColor.accent)
+        .animation(.easeInOut(duration: 0.3), value: isDrawerOpen)
         .environment(\.marketLiveFactory, marketLiveFactory)
         .environment(\.marketHoldersFactory, marketHoldersFactory)
     }
