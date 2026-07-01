@@ -14,6 +14,7 @@ public struct Event: Identifiable, Hashable {
     public let markets: [Market]
     public let volume: Decimal
     public let imageURL: URL?
+    public let tags: [Tag]
 
     public init(
         id: String,
@@ -21,7 +22,8 @@ public struct Event: Identifiable, Hashable {
         slug: String,
         markets: [Market],
         volume: Decimal,
-        imageURL: URL?
+        imageURL: URL?,
+        tags: [Tag] = []
     ) {
         self.id = id
         self.title = title
@@ -29,5 +31,6 @@ public struct Event: Identifiable, Hashable {
         self.markets = markets
         self.volume = volume
         self.imageURL = imageURL
+        self.tags = tags
     }
 }

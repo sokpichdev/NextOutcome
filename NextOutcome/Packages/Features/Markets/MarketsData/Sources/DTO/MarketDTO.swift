@@ -55,9 +55,10 @@ struct EventDTO: Decodable {
     let markets: [MarketDTO]
     let volume: Decimal
     let image: String?
+    let tags: [TagDTO]
 
     enum CodingKeys: String, CodingKey {
-        case id, title, slug, markets, volume, image
+        case id, title, slug, markets, volume, image, tags
     }
 
     init(from decoder: Decoder) throws {
@@ -69,6 +70,7 @@ struct EventDTO: Decodable {
         markets = (try? c.decode([MarketDTO].self, forKey: .markets)) ?? []
         volume = DTODecoding.decimal(c, .volume)
         image = try? c.decode(String.self, forKey: .image)
+        tags = (try? c.decode([TagDTO].self, forKey: .tags)) ?? []
     }
 }
 

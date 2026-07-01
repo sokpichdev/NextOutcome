@@ -70,7 +70,8 @@ enum MarketMapper {
             slug: dto.slug,
             markets: dto.markets.map(market(from:)),
             volume: dto.volume,
-            imageURL: dto.image.flatMap(URL.init(string:))
+            imageURL: dto.image.flatMap(URL.init(string:)),
+            tags: dto.tags.map(tag(from:))
         )
     }
 }

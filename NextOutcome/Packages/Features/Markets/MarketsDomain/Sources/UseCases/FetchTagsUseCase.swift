@@ -15,4 +15,9 @@ public struct FetchTagsUseCase: Sendable {
     public func execute() async throws -> [Tag] {
         try await repository.fetchTags()
     }
+
+    /// Returns an instance whose `execute` always returns an empty array. Use in unit tests.
+    #if DEBUG
+    public static let stub = FetchTagsUseCase(repository: StubMarketRepository())
+    #endif
 }

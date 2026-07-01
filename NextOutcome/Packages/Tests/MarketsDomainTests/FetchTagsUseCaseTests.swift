@@ -22,7 +22,7 @@ private final class StubMarketRepository: MarketRepository {
     let tags: [Tag]
     init(tags: [Tag]) { self.tags = tags }
 
-    func fetchEvents(cursor: String?, tagID: String?) async throws -> Page<Event> { Page(items: [], nextCursor: nil) }
+    func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus) async throws -> Page<Event> { Page(items: [], nextCursor: nil) }
     func fetchMarkets(cursor: String?) async throws -> Page<Market> { Page(items: [], nextCursor: nil) }
     func fetchEvent(slug: String) async throws -> Event { fatalError("unused") }
     func searchMarkets(query: String) async throws -> [Market] { [] }
