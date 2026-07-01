@@ -47,6 +47,10 @@ final class AppContainer {
         PortfolioViewModel(fetchPortfolio: FetchPortfolioUseCase(repository: portfolioRepository))
     }
 
+    func makeActivityViewModel() -> ActivityViewModel {
+        ActivityViewModel(fetchActivity: FetchActivityUseCase(repository: portfolioRepository))
+    }
+
     /// Factory injected into the environment so Market Detail can build its live view model.
     func makeMarketLiveFactory() -> MarketLiveViewModelFactory {
         MarketLiveViewModelFactory { [orderbookRepository, marketStream] assetID in
