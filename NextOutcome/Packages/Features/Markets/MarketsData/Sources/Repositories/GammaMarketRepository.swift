@@ -11,25 +11,51 @@ import MarketsDomain
 import SharedDomain
 
 public struct GammaMarketRepository: MarketRepository {
-    
     private let client: APIClient
     
     public init(client: APIClient) {
         self.client = client
     }
     
-    public func fetchMarkets(cursor: String?) async throws -> Page<Market> {
-        var query: [String: String] = ["limit": "20", "active": "true"]
-        if let cursor { query["next_cursor"] = cursor }
-        let endpoint = Endpoint(host: .gamma, path: "/events", query: query)
-        let envelope: EventsEnvelope = try await client.fetch(endpoint)
-        let markets = envelope.data.flatMap { $0.markets }.map(MarketMapper.market(from:))
-        return Page(items: markets, nextCursor: envelope.nextCursor)
+    private static let pageSize = 20
+
+    /// Gamma `/events` returns a bare JSON array and paginates by `offset`
+    /// (keyset cursors are rejected here), so we carry the offset in `Page.nextCursor`.
+    private func eventsQuery(offset: Int, tagID: String?) -> [String: String] {
+        var query: [String: String] = [
+            "limit": "\(Self.pageSize)",
+            "offset": "\(offset)",
+            "active": "true",
+            "closed": "false",
+            "order": "volume24hr",
+            "ascending": "false",
+        ]
+        if let tagID { query["tag_id"] = tagID }
+        return query
     }
-    
+
+    public func fetchEvents(cursor: String?, tagID: String?) async throws -> Page<Event> {
+        let offset = cursor.flatMap(Int.init) ?? 0
+        let endpoint = Endpoint(host: .gamma, path: "/events", query: eventsQuery(offset: offset, tagID: tagID))
+        let dtos: [EventDTO] = try await client.fetch(endpoint)
+        let events = dtos.map(MarketMapper.event(from:))
+        let nextCursor = dtos.count == Self.pageSize ? "\(offset + Self.pageSize)" : nil
+        return Page(items: events, nextCursor: nextCursor)
+    }
+
+    public func fetchMarkets(cursor: String?) async throws -> Page<Market> {
+        let offset = cursor.flatMap(Int.init) ?? 0
+        let endpoint = Endpoint(host: .gamma, path: "/events", query: eventsQuery(offset: offset, tagID: nil))
+        let dtos: [EventDTO] = try await client.fetch(endpoint)
+        let markets = dtos.flatMap { $0.markets }.map(MarketMapper.market(from:))
+        let nextCursor = dtos.count == Self.pageSize ? "\(offset + Self.pageSize)" : nil
+        return Page(items: markets, nextCursor: nextCursor)
+    }
+
     public func fetchEvent(slug: String) async throws -> Event {
-        let endpoint = Endpoint(host: .gamma, path: "/events/slug/\(slug)")
-        let dto: EventDTO = try await client.fetch(endpoint)
+        let endpoint = Endpoint(host: .gamma, path: "/events", query: ["slug": slug])
+        let dtos: [EventDTO] = try await client.fetch(endpoint)
+        guard let dto = dtos.first else { throw APIError.badURL }
         return MarketMapper.event(from: dto)
     }
     
@@ -44,4 +70,14 @@ public struct GammaMarketRepository: MarketRepository {
             let envelope: SearchEnvelope = try await client.fetch(endpoint)
             return envelope.markets.map(MarketMapper.market(from:))
         }
+
+    public func fetchTags() async throws -> [Tag] {
+        let endpoint = Endpoint(
+            host: .gamma,
+            path: "/tags",
+            query: ["limit": "50", "is_carousel": "true"]
+        )
+        let dtos: [TagDTO] = try await client.fetch(endpoint)
+        return dtos.map(MarketMapper.tag(from:))
+    }
 }

@@ -13,27 +13,37 @@ final class MarketDecodingTests: XCTestCase {
     }
 
     func test_marketDTO_decodesFromGammaShape() throws {
+        // Real Gamma `/events`-embedded market: stringified parallel arrays, `slug`, string volume.
         let json = """
         {
           "id": "abc",
           "question": "Will X win?",
-          "market_slug": "will-x-win",
-          "tokens": [
-            {"token_id": "t1", "outcome": "Yes", "price": "0.62"},
-            {"token_id": "t2", "outcome": "No",  "price": "0.38"}
-          ],
+          "slug": "will-x-win",
+          "outcomes": "[\\"Yes\\", \\"No\\"]",
+          "outcomePrices": "[\\"0.62\\", \\"0.38\\"]",
+          "clobTokenIds": "[\\"t1\\", \\"t2\\"]",
           "volume": "4200.00",
-          "liquidity": "1100.00",
-          "end_date_iso": null,
-          "closed": false,
-          "image": null
+          "endDateIso": "2024-05-13",
+          "closed": false
         }
         """.data(using: .utf8)!
 
         let dto = try JSONDecoder.polymarket.decode(MarketDTO.self, from: json)
 
         XCTAssertEqual(dto.question, "Will X win?")
-        XCTAssertEqual(dto.tokens.count, 2)
-        XCTAssertEqual(dto.tokens[0].price.wrappedValue, Decimal(string: "0.62"))
+        XCTAssertEqual(dto.slug, "will-x-win")
+        XCTAssertEqual(dto.outcomes, ["Yes", "No"])
+        XCTAssertEqual(dto.outcomePrices, [Decimal(string: "0.62"), Decimal(string: "0.38")])
+        XCTAssertEqual(dto.clobTokenIds, ["t1", "t2"])
+        XCTAssertEqual(dto.volume, Decimal(string: "4200.00"))
+        XCTAssertEqual(dto.liquidity, 0)   // absent → tolerant default
+    }
+
+    func test_marketDTO_toleratesMissingArrays() throws {
+        let json = #"{"id": "x", "question": "Q", "slug": "q", "volume": 12.5}"#.data(using: .utf8)!
+        let dto = try JSONDecoder.polymarket.decode(MarketDTO.self, from: json)
+        XCTAssertEqual(dto.outcomes, [])
+        XCTAssertEqual(dto.outcomePrices, [])
+        XCTAssertFalse(dto.closed)
     }
 }
