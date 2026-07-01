@@ -8,7 +8,9 @@
 import SharedDomain
 
 public protocol MarketRepository: Sendable {
+    func fetchEvents(cursor: String?, tagID: String?) async throws -> Page<Event>
     func fetchMarkets(cursor: String?) async throws -> Page<Market>
     func fetchEvent(slug: String) async throws -> Event
     func searchMarkets(query: String) async throws -> [Market]
+    func fetchTags() async throws -> [Tag]
 }

@@ -23,7 +23,7 @@ public struct StateView: View {
         case .empty:
             ContentUnavailableView("No results", systemImage: "tray")
         case .error(let msg):
-            ContentUnavailableView(msg, systemImage: "exclamationamark.triangle")
+            ContentUnavailableView(msg, systemImage: "exclamationmark.triangle")
         }
     }
 }
