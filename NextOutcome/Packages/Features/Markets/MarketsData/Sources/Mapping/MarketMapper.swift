@@ -10,22 +10,24 @@ import MarketsDomain
 
 enum MarketMapper {
     static func market(from dto: MarketDTO) -> Market {
-        Market(
+        let outcomes = dto.outcomes.enumerated().map { index, name in
+            Outcome(
+                id: index < dto.clobTokenIds.count ? dto.clobTokenIds[index] : "\(dto.id)-\(index)",
+                title: name,
+                price: index < dto.outcomePrices.count ? dto.outcomePrices[index] : 0,
+                isWinner: nil
+            )
+        }
+        return Market(
             id: dto.id,
             question: dto.question,
-            slug: dto.marketSlug,
-            outcomes: dto.tokens.map { token in
-                Outcome(
-                    id: token.tokenId,
-                    title: token.outcome,
-                    price: token.price.wrappedValue,
-                    isWinner: token.winner)
-            },
-            volume: dto.volume.wrappedValue,
-            liquidity: dto.liquidity.wrappedValue,
+            slug: dto.slug,
+            outcomes: outcomes,
+            volume: dto.volume,
+            liquidity: dto.liquidity,
             endDate: DateParsing.parse(dto.endDateIso),
             isResolved: dto.closed,
-            imageURL: dto.image.flatMap(URL.init(string: )))
+            imageURL: dto.image.flatMap(URL.init(string:)))
     }
     
     static func tag(from dto: TagDTO) -> Tag {
@@ -38,7 +40,7 @@ enum MarketMapper {
             title: dto.title,
             slug: dto.slug,
             markets: dto.markets.map(market(from:)),
-            volume: dto.volume.wrappedValue,
+            volume: dto.volume,
             imageURL: dto.image.flatMap(URL.init(string:))
         )
     }
