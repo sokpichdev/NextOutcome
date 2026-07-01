@@ -40,7 +40,7 @@ struct RootView: View {
     var body: some View {
         ZStack(alignment: .leading) {
             tabs
-            if isDrawerOpen { drawerOverlay }
+            if isDrawerOpen { drawerOverlay.transition(.move(edge: .leading)) }
         }
         .tint(DSColor.accent)
         .animation(.easeInOut(duration: 0.3), value: isDrawerOpen)
@@ -91,7 +91,6 @@ struct RootView: View {
                 onLogout: { isDrawerOpen = false }
             )
             .frame(width: 320)
-            .transition(.move(edge: .leading))
         }
     }
 }

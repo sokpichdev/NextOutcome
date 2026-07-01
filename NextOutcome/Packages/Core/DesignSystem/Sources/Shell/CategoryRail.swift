@@ -33,6 +33,7 @@ public struct CategoryRail: View {
                 Text(category.title)
             }
             .font(DSFont.headline)
+            .fontWeight(isActive ? .bold : .regular)
             .foregroundStyle(isActive ? category.activeColor : DSColor.textSecondary)
         }
         .buttonStyle(.plain)
