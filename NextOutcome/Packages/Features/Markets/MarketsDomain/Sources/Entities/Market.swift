@@ -10,6 +10,7 @@ import SharedDomain
 
 public struct Market: Identifiable, Hashable {
     public let id: String
+    public let conditionId: String   // for holders / CLOB lookups
     public let question: String
     public let slug: String
     public let outcomes: [Outcome]
@@ -18,9 +19,10 @@ public struct Market: Identifiable, Hashable {
     public let endDate: Date?
     public let isResolved: Bool
     public let imageURL: URL?
-    
+
     public init(
         id: String,
+        conditionId: String = "",
         question: String,
         slug: String,
         outcomes: [Outcome],
@@ -31,6 +33,7 @@ public struct Market: Identifiable, Hashable {
         imageURL: URL?
     ) {
         self.id = id
+        self.conditionId = conditionId
         self.question = question
         self.slug = slug
         self.outcomes = outcomes

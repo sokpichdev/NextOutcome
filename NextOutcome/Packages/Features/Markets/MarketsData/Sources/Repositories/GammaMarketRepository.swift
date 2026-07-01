@@ -71,6 +71,16 @@ public struct GammaMarketRepository: MarketRepository {
             return envelope.markets.map(MarketMapper.market(from:))
         }
 
+    public func holders(conditionId: String) async throws -> [Holder] {
+        let endpoint = Endpoint(
+            host: .data,
+            path: "/holders",
+            query: ["market": conditionId, "limit": "20"]
+        )
+        let groups: [HolderGroupDTO] = try await client.fetch(endpoint)
+        return MarketMapper.holders(from: groups)
+    }
+
     public func fetchTags() async throws -> [Tag] {
         let endpoint = Endpoint(
             host: .gamma,

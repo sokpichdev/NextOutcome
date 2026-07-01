@@ -20,6 +20,7 @@ enum MarketMapper {
         }
         return Market(
             id: dto.id,
+            conditionId: dto.conditionId,
             question: dto.question,
             slug: dto.slug,
             outcomes: outcomes,
@@ -32,6 +33,34 @@ enum MarketMapper {
     
     static func tag(from dto: TagDTO) -> Tag {
         Tag(id: dto.id, label: dto.label, slug: dto.slug)
+    }
+
+    static func holders(from groups: [HolderGroupDTO]) -> [Holder] {
+        groups.flatMap(\.holders).enumerated().map { index, dto in
+            Holder(
+                id: dto.proxyWallet ?? "holder-\(index)",
+                name: holderName(dto),
+                profileImageURL: dto.profileImage.flatMap(URL.init(string:)),
+                outcome: outcomeLabel(dto.outcomeIndex),
+                shares: dto.amount
+            )
+        }
+        .sorted { $0.shares > $1.shares }
+    }
+
+    private static func outcomeLabel(_ index: Int?) -> String {
+        switch index {
+        case 0: return "Yes"
+        case 1: return "No"
+        default: return ""
+        }
+    }
+
+    private static func holderName(_ dto: HolderDTO) -> String {
+        if let name = dto.name, !name.isEmpty { return name }
+        if let pseudonym = dto.pseudonym, !pseudonym.isEmpty { return pseudonym }
+        guard let wallet = dto.proxyWallet, wallet.count > 10 else { return dto.proxyWallet ?? "Anonymous" }
+        return "\(wallet.prefix(6))…\(wallet.suffix(4))"
     }
 
     static func event(from dto: EventDTO) -> Event {

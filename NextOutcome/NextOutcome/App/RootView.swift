@@ -16,7 +16,9 @@ struct RootView: View {
     @State private var searchViewModel: SearchViewModel
     @State private var portfolioViewModel: PortfolioViewModel
     @State private var activityViewModel: ActivityViewModel
+    private let leaderboardViewModel: LeaderboardViewModel
     private let marketLiveFactory: MarketLiveViewModelFactory
+    private let marketHoldersFactory: MarketHoldersViewModelFactory
 
     @MainActor
     init(container: AppContainer = AppContainer()) {
@@ -24,7 +26,9 @@ struct RootView: View {
         _searchViewModel = State(initialValue: container.makeSearchViewModel())
         _portfolioViewModel = State(initialValue: container.makePortfolioViewModel())
         _activityViewModel = State(initialValue: container.makeActivityViewModel())
+        leaderboardViewModel = container.makeLeaderboardViewModel()
         marketLiveFactory = container.makeMarketLiveFactory()
+        marketHoldersFactory = container.makeMarketHoldersFactory()
     }
 
     var body: some View {
@@ -49,10 +53,13 @@ struct RootView: View {
             }
             .tabItem { Label("Activity", systemImage: "bolt.horizontal") }
 
-            NavigationStack { ComingSoonView(title: "Account") }
-                .tabItem { Label("Account", systemImage: "person.crop.circle") }
+            NavigationStack {
+                AccountView(leaderboardViewModel: leaderboardViewModel)
+            }
+            .tabItem { Label("Account", systemImage: "person.crop.circle") }
         }
         .tint(DSColor.accent)
         .environment(\.marketLiveFactory, marketLiveFactory)
+        .environment(\.marketHoldersFactory, marketHoldersFactory)
     }
 }
