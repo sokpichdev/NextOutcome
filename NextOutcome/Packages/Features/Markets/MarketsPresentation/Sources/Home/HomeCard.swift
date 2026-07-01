@@ -14,10 +14,10 @@ public struct HomeCard: View {
 
     public var body: some View {
         switch kind {
-        case .liveUpDown:  EventCard(event: event)   // TEMP → LiveUpDownCard in Task 6
+        case .liveUpDown:  LiveUpDownCard(event: event)
         case .news:        NewsCard(event: event)
         case .multiOutcome: MultiOutcomeCard(event: event)
-        case .hero:        EventCard(event: event)   // TEMP → HeroPromoCard in Task 5
+        case .hero:        HeroPromoCard(event: event)
         case .standard:    EventCard(event: event)
         }
     }
