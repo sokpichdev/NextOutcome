@@ -14,7 +14,12 @@ public struct FetchEventsUseCase: Sendable {
         self.repository = repository
     }
     
-    public func execute(cursor: String? = nil, tagID: String? = nil) async throws -> Page<Event> {
-        try await repository.fetchEvents(cursor: cursor, tagID: tagID)
+    public func execute(cursor: String? = nil, tagID: String? = nil, sort: EventSort = .volume24h, status: EventStatus = .active) async throws -> Page<Event> {
+        try await repository.fetchEvents(cursor: cursor, tagID: tagID, sort: sort, status: status)
     }
+
+    /// Returns an instance whose `execute` always returns an empty page. Use in unit tests.
+    #if DEBUG
+    public static let stub = FetchEventsUseCase(repository: StubMarketRepository())
+    #endif
 }

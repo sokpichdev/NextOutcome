@@ -8,6 +8,7 @@
 import Foundation
 import MarketsDomain
 import SharedDomain
+import DesignSystem
 
 @MainActor
 @Observable
@@ -23,6 +24,68 @@ public final class EventListViewModel {
     public private(set) var tags: [Tag] = []
     public private(set) var selectedTagID: String?
 
+    public enum MarketSort: String, CaseIterable {
+        case volume24h, liquidity, newest, endingSoon, competitive
+        public var title: String {
+            switch self {
+            case .volume24h:   return "24hr Volume"
+            case .liquidity:   return "Liquidity"
+            case .newest:      return "Newest"
+            case .endingSoon:  return "Ending Soon"
+            case .competitive: return "Competitive"
+            }
+        }
+    }
+
+    public enum MarketStatus: String, CaseIterable {
+        case active, all
+        public var title: String { self == .active ? "Active" : "All" }
+    }
+
+    public private(set) var sort: MarketSort = .volume24h
+    public private(set) var status: MarketStatus = .active
+    public private(set) var hideSports: Bool = false
+
+    /// Loaded events with the hide-sports client filter applied.
+    public var visibleEvents: [Event] {
+        guard case .loaded(let events) = state else { return [] }
+        return hideSports ? events.filter { !HomeCardKind.isSports($0) } : events
+    }
+
+    /// Map a shell category to a Gamma tag id using the loaded tag list. `nil` = no filter.
+    public static func tagID(for category: ShellCategory, in tags: [Tag]) -> String? {
+        let wanted: Set<String>
+        switch category {
+        case .trending: return nil
+        case .worldCup: wanted = ["world cup", "soccer", "football"]
+        case .breaking: wanted = ["breaking", "news"]
+        case .politics: wanted = ["politics"]
+        case .sports:   wanted = ["sports"]
+        }
+        return tags.first { wanted.contains($0.slug.lowercased()) || wanted.contains($0.label.lowercased()) }?.id
+    }
+
+    public func apply(category: ShellCategory) async {
+        let id = Self.tagID(for: category, in: tags)
+        await select(tagID: id)
+    }
+
+    public func setSort(_ newSort: MarketSort) async {
+        guard newSort != sort else { return }
+        sort = newSort
+        nextCursor = nil
+        await load()
+    }
+
+    public func setStatus(_ newStatus: MarketStatus) async {
+        guard newStatus != status else { return }
+        status = newStatus
+        nextCursor = nil
+        await load()
+    }
+
+    public func toggleHideSports() { hideSports.toggle() }
+
     private var nextCursor: String?
     public var hasMore: Bool { nextCursor != nil }
 
@@ -34,11 +97,23 @@ public final class EventListViewModel {
         self.fetchTags = fetchTags
     }
 
+    private var domainSort: EventSort {
+        switch sort {
+        case .volume24h:   return .volume24h
+        case .liquidity:   return .liquidity
+        case .newest:      return .newest
+        case .endingSoon:  return .endingSoon
+        case .competitive: return .competitive
+        }
+    }
+
+    private var domainStatus: EventStatus { status == .active ? .active : .all }
+
     public func load() async {
         state = .loading
         if tags.isEmpty { await loadTags() }
         do {
-            let page = try await fetchEvents.execute(tagID: selectedTagID)
+            let page = try await fetchEvents.execute(tagID: selectedTagID, sort: domainSort, status: domainStatus)
             nextCursor = page.nextCursor
             state = page.items.isEmpty ? .empty : .loaded(page.items)
         } catch {
@@ -67,9 +142,23 @@ public final class EventListViewModel {
         isLoadingMore = true
         defer { isLoadingMore = false }
         do {
-            let page = try await fetchEvents.execute(cursor: cursor, tagID: selectedTagID)
+            let page = try await fetchEvents.execute(cursor: cursor, tagID: selectedTagID, sort: domainSort, status: domainStatus)
             nextCursor = page.nextCursor
             state = .loaded(current + page.items)
+
+            // If hideSports filtered out all new items and more pages exist, keep fetching
+            // (bounded to 5 extra fetches) so the visible feed can advance.
+            if hideSports {
+                let before = visibleEvents.count
+                var extra = 0
+                while nextCursor != nil && visibleEvents.count == before && extra < 5 {
+                    guard case .loaded(let all) = state, let nc = nextCursor else { break }
+                    let next = try await fetchEvents.execute(cursor: nc, tagID: selectedTagID, sort: domainSort, status: domainStatus)
+                    nextCursor = next.nextCursor
+                    state = .loaded(all + next.items)
+                    extra += 1
+                }
+            }
         } catch {
             // non-fatal: keep the list we already have; user can scroll again to retry.
         }
@@ -79,4 +168,23 @@ public final class EventListViewModel {
         // Tags are a non-critical enhancement — a failure just hides the filter row.
         tags = (try? await fetchTags.execute()) ?? []
     }
+
+    /// Test seam: build a VM pre-seeded into `.loaded` without a use case round-trip.
+    #if DEBUG
+    static func makeForTesting(events: [Event]) -> EventListViewModel {
+        let vm = EventListViewModel(
+            fetchEvents: FetchEventsUseCase.stub,
+            fetchTags: FetchTagsUseCase.stub
+        )
+        vm.state = .loaded(events)
+        return vm
+    }
+
+    /// Seed the VM with explicit state for unit testing loadMore() pagination scenarios.
+    func seedForTesting(state: State, nextCursor: String?, hideSports: Bool = false) {
+        self.state = state
+        self.nextCursor = nextCursor
+        if hideSports { self.hideSports = true }
+    }
+    #endif
 }
