@@ -44,11 +44,18 @@ final class AppContainer {
     }
 
     func makePortfolioViewModel() -> PortfolioViewModel {
-        PortfolioViewModel(fetchPortfolio: FetchPortfolioUseCase(repository: portfolioRepository))
+        PortfolioViewModel(
+            fetchPortfolio: FetchPortfolioUseCase(repository: portfolioRepository),
+            fetchClosed: FetchClosedPositionsUseCase(repository: portfolioRepository)
+        )
     }
 
     func makeActivityViewModel() -> ActivityViewModel {
         ActivityViewModel(fetchActivity: FetchActivityUseCase(repository: portfolioRepository))
+    }
+
+    func makeLeaderboardViewModel() -> LeaderboardViewModel {
+        LeaderboardViewModel(fetchLeaderboard: FetchLeaderboardUseCase(repository: portfolioRepository))
     }
 
     /// Factory injected into the environment so Market Detail can build its live view model.
@@ -59,6 +66,13 @@ final class AppContainer {
                 observeBook: ObserveOrderBookUseCase(repository: orderbookRepository, stream: marketStream),
                 fetchHistory: FetchPriceHistoryUseCase(repository: orderbookRepository)
             )
+        }
+    }
+
+    /// Factory for the Market Detail top-holders section.
+    func makeMarketHoldersFactory() -> MarketHoldersViewModelFactory {
+        MarketHoldersViewModelFactory { [repository] conditionId in
+            HoldersViewModel(conditionId: conditionId, fetchHolders: FetchHoldersUseCase(repository: repository))
         }
     }
 }

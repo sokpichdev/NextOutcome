@@ -13,4 +13,5 @@ public protocol MarketRepository: Sendable {
     func fetchEvent(slug: String) async throws -> Event
     func searchMarkets(query: String) async throws -> [Market]
     func fetchTags() async throws -> [Tag]
+    func holders(conditionId: String) async throws -> [Holder]
 }

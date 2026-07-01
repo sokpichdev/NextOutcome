@@ -51,4 +51,24 @@ final class PositionDecodingTests: XCTestCase {
         XCTAssertEqual(ActivityMapper.kind(type: "TRADE", side: "BUY"), .buy)
         XCTAssertEqual(ActivityMapper.kind(type: "WEIRD", side: nil), .other)
     }
+
+    func test_closedPositionDTO_decodes() throws {
+        let json = """
+        { "conditionId": "0xc", "title": "Won?", "outcome": "Yes",
+          "realizedPnl": 12.5, "percentRealizedPnl": 30, "timestamp": 1699999999 }
+        """.data(using: .utf8)!
+        let dto = try JSONDecoder.polymarket.decode(ClosedPositionDTO.self, from: json)
+        let closed = LeaderboardMapper.closedPosition(from: dto, index: 0)
+        XCTAssertEqual(closed.realizedPnl, Decimal(string: "12.5"))
+        XCTAssertTrue(closed.isProfitable)
+    }
+
+    func test_leaderboardEntry_fallsBackToWalletName() throws {
+        let json = #"{"proxyWallet": "0x1234567890abcdef", "volume": 5000}"#.data(using: .utf8)!
+        let dto = try JSONDecoder.polymarket.decode(LeaderboardEntryDTO.self, from: json)
+        let entry = LeaderboardMapper.entry(from: dto, rank: 1)
+        XCTAssertEqual(entry.name, "0x1234…cdef")   // shortened wallet
+        XCTAssertEqual(entry.amount, 5000)          // picked up from `volume`
+        XCTAssertEqual(entry.rank, 1)
+    }
 }

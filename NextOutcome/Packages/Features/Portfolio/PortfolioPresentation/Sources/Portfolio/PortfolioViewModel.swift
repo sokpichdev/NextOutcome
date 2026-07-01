@@ -24,11 +24,19 @@ public final class PortfolioViewModel {
     public var addressInput: String = ""
     public private(set) var inputError: String?
 
+    public private(set) var closedPositions: [ClosedPosition] = []
+
     private let fetchPortfolio: FetchPortfolioUseCase
+    private let fetchClosed: FetchClosedPositionsUseCase
     private let addressStore: WatchAddressStore
 
-    public init(fetchPortfolio: FetchPortfolioUseCase, addressStore: WatchAddressStore = WatchAddressStore()) {
+    public init(
+        fetchPortfolio: FetchPortfolioUseCase,
+        fetchClosed: FetchClosedPositionsUseCase,
+        addressStore: WatchAddressStore = WatchAddressStore()
+    ) {
         self.fetchPortfolio = fetchPortfolio
+        self.fetchClosed = fetchClosed
         self.addressStore = addressStore
         self.address = addressStore.address
     }
@@ -66,6 +74,8 @@ public final class PortfolioViewModel {
         state = .loading
         do {
             let portfolio = try await fetchPortfolio.execute(address: address)
+            // Closed positions are supplementary — a failure just hides that section.
+            closedPositions = (try? await fetchClosed.execute(address: address)) ?? []
             state = portfolio.isEmpty ? .empty : .loaded(portfolio)
         } catch {
             state = .failed("Couldn't load this wallet. Pull to refresh.")

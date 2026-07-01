@@ -101,8 +101,16 @@ public struct PortfolioView: View {
                     sparkData: []
                 )
 
+                sectionHeader("Open positions")
                 ForEach(portfolio.positions) { position in
                     PositionRow(position: position)
+                }
+
+                if !viewModel.closedPositions.isEmpty {
+                    sectionHeader("Closed positions")
+                    ForEach(viewModel.closedPositions) { closed in
+                        ClosedPositionRow(position: closed)
+                    }
                 }
             }
             .padding(.horizontal, DSLayout.margin)
@@ -110,5 +118,15 @@ public struct PortfolioView: View {
         }
         .background(DSColor.background)
         .refreshable { await viewModel.refresh() }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        HStack {
+            Text(title)
+                .font(DSFont.caption.bold())
+                .foregroundStyle(DSColor.textSecondary)
+            Spacer()
+        }
+        .padding(.top, DSLayout.spacing)
     }
 }
