@@ -31,4 +31,24 @@ final class PositionDecodingTests: XCTestCase {
         XCTAssertEqual(dto.avgPrice, 0)   // missing → 0
         XCTAssertFalse(dto.redeemable)
     }
+
+    func test_activityDTO_mapsTradeSideToKind() throws {
+        let json = """
+        { "type": "TRADE", "side": "SELL", "title": "Will X?", "outcome": "Yes",
+          "size": 10, "usdcSize": 6.1, "price": 0.61, "timestamp": 1699999999,
+          "transactionHash": "0xhash" }
+        """.data(using: .utf8)!
+        let dto = try JSONDecoder.polymarket.decode(ActivityDTO.self, from: json)
+        let activity = ActivityMapper.activity(from: dto, index: 0)
+        XCTAssertEqual(activity.kind, .sell)
+        XCTAssertEqual(activity.usdcSize, Decimal(string: "6.1"))
+        XCTAssertTrue(activity.isCredit)
+    }
+
+    func test_activityMapper_mapsLifecycleTypes() {
+        XCTAssertEqual(ActivityMapper.kind(type: "REDEEM", side: nil), .redeem)
+        XCTAssertEqual(ActivityMapper.kind(type: "SPLIT", side: nil), .split)
+        XCTAssertEqual(ActivityMapper.kind(type: "TRADE", side: "BUY"), .buy)
+        XCTAssertEqual(ActivityMapper.kind(type: "WEIRD", side: nil), .other)
+    }
 }

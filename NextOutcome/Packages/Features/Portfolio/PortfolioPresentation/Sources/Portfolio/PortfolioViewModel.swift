@@ -25,13 +25,12 @@ public final class PortfolioViewModel {
     public private(set) var inputError: String?
 
     private let fetchPortfolio: FetchPortfolioUseCase
-    private let defaults: UserDefaults
-    private static let addressKey = "portfolio.watchAddress"
+    private let addressStore: WatchAddressStore
 
-    public init(fetchPortfolio: FetchPortfolioUseCase, defaults: UserDefaults = .standard) {
+    public init(fetchPortfolio: FetchPortfolioUseCase, addressStore: WatchAddressStore = WatchAddressStore()) {
         self.fetchPortfolio = fetchPortfolio
-        self.defaults = defaults
-        self.address = defaults.string(forKey: Self.addressKey)
+        self.addressStore = addressStore
+        self.address = addressStore.address
     }
 
     public func start() async {
@@ -47,14 +46,14 @@ public final class PortfolioViewModel {
         }
         inputError = nil
         address = wallet.value
-        defaults.set(wallet.value, forKey: Self.addressKey)
+        addressStore.save(wallet.value)
         await load()
     }
 
     public func changeWallet() {
         address = nil
         addressInput = ""
-        defaults.removeObject(forKey: Self.addressKey)
+        addressStore.clear()
         state = .needsAddress
     }
 
