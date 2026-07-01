@@ -1,0 +1,25 @@
+//
+//  StubMarketRepository.swift
+//  NextOutcome
+//
+//  Test-only stub that satisfies MarketRepository with empty responses.
+//  Used by FetchEventsUseCase.stub and FetchTagsUseCase.stub.
+//
+
+import Foundation
+import SharedDomain
+
+struct StubMarketRepository: MarketRepository {
+    func fetchEvents(cursor: String?, tagID: String?) async throws -> Page<Event> {
+        Page(items: [], nextCursor: nil)
+    }
+    func fetchMarkets(cursor: String?) async throws -> Page<Market> {
+        Page(items: [], nextCursor: nil)
+    }
+    func fetchEvent(slug: String) async throws -> Event {
+        throw URLError(.unknown)
+    }
+    func searchMarkets(query: String) async throws -> [Market] { [] }
+    func fetchTags() async throws -> [Tag] { [] }
+    func holders(conditionId: String) async throws -> [Holder] { [] }
+}
