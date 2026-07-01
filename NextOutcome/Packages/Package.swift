@@ -100,6 +100,9 @@ let package = Package(
             name: "MarketsDataTests",
             dependencies: ["MarketsData", "MarketsDomain", "Networking"]
         ),
+        .testTarget(name: "MarketsPresentationTests",
+                    dependencies: ["MarketsPresentation"],
+                    path: "Tests/MarketsPresentationTests"),
         .testTarget(name: "OrderbookDomainTests", dependencies: ["OrderbookDomain"]),
         .testTarget(
             name: "OrderbookDataTests",
