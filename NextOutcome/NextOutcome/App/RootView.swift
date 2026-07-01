@@ -51,7 +51,7 @@ struct RootView: View {
     private var tabs: some View {
         TabView {
             NavigationStack {
-                chrome { EventListView(viewModel: eventListViewModel) }
+                chrome { EventListView(viewModel: eventListViewModel, selectedCategory: selectedCategory) }
             }
             .tabItem { Label("Home", systemImage: "house") }
 

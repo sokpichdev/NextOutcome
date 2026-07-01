@@ -11,86 +11,51 @@ import DesignSystem
 
 public struct EventListView: View {
     @State private var viewModel: EventListViewModel
-    
-    public init(viewModel: EventListViewModel) {
+    private let selectedCategory: ShellCategory
+
+    public init(viewModel: EventListViewModel, selectedCategory: ShellCategory = .trending) {
         self._viewModel = State(initialValue: viewModel)
+        self.selectedCategory = selectedCategory
     }
-    
+
     public var body: some View {
         VStack(spacing: 0) {
-            filterBar
+            SecondaryFilterRow(viewModel: viewModel)
             content
         }
         .background(DSColor.background)
-            .navigationTitle("Markets")
-            .navigationDestination(for: Event.self) { event in
-                EventDetailView(event: event)
-            }
-            .navigationDestination(for: Market.self) { market in
-                MarketDetailView(market: market)
-            }
-            .task {
-                if case .idle = viewModel.state { await viewModel.load() }
-            }
-    }
-    
-    @ViewBuilder
-    private var filterBar: some View {
-        if !viewModel.tags.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    DSChip("All", isActive: viewModel.selectedTagID == nil) {
-                        Task { await viewModel.select(tagID: nil) }
-                    }
-                    ForEach(viewModel.tags) { tag in
-                        DSChip(tag.label, isActive: viewModel.selectedTagID == tag.id) {
-                            Task { await viewModel.select(tagID: tag.id) }
-                        }
-                    }
-                }
-                .padding(.horizontal, DSLayout.margin)
-                .padding(.vertical, DSLayout.spacing)
-            }
-        }
+        .navigationDestination(for: Event.self) { EventDetailView(event: $0) }
+        .navigationDestination(for: Market.self) { MarketDetailView(market: $0) }
+        .task { if case .idle = viewModel.state { await viewModel.load() } }
+        .onChange(of: selectedCategory) { _, new in Task { await viewModel.apply(category: new) } }
     }
 
     @ViewBuilder
     private var content: some View {
         switch viewModel.state {
         case .idle, .loading: StateView(.loading)
-        case .empty: StateView(.empty)
-        case .failed(let message): StateView(.error(message))
-        case .loaded(let events): list(events)
+        case .empty:          StateView(.empty)
+        case .failed(let m):  StateView(.error(m))
+        case .loaded:         feed
         }
     }
-    
-    private func list(_ events: [Event]) -> some View {
+
+    private var feed: some View {
         ScrollView {
             LazyVStack(spacing: DSLayout.spacing) {
-                ForEach(events) { event in
-                    NavigationLink(value: event) {
-                        EventCard(event: event)
-                    }
-                    .buttonStyle(.plain)
-                    .task {
-                        if event.id == events.last?.id {
-                            await viewModel.loadMore()
-                        }
-                    }
-                }
-                
-                if viewModel.isLoadingMore {
-                    ProgressView()
-                        .tint(DSColor.accent)
-                        .padding()
+                ForEach(viewModel.visibleEvents) { event in
+                    HomeCard(event: event, kindOverride: heroID == event.id ? .hero : nil)
+                        .onAppear { Task { if event.id == viewModel.visibleEvents.last?.id { await viewModel.loadMore() } } }
                 }
             }
             .padding(.horizontal, DSLayout.margin)
             .padding(.vertical, DSLayout.spacing)
         }
-        .background(DSColor.background)
-        .refreshable {
-            await viewModel.refresh()
-        }
+        .refreshable { await viewModel.refresh() }
+    }
+
+    /// The first sports event in the visible feed becomes the hero slot.
+    private var heroID: String? {
+        viewModel.visibleEvents.first { HomeCardKind.isSports($0) }?.id
     }
 }

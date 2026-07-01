@@ -1,0 +1,55 @@
+//
+//  SecondaryFilterRow.swift
+//  NextOutcome
+//
+//  Created by Sok Pich on 01/07/2026.
+//
+
+import SwiftUI
+import DesignSystem
+
+/// Home's secondary filter row: sort menu, status menu, Hide-sports toggle.
+public struct SecondaryFilterRow: View {
+    @Bindable private var viewModel: EventListViewModel
+    public init(viewModel: EventListViewModel) { self.viewModel = viewModel }
+
+    public var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Menu {
+                    ForEach(EventListViewModel.MarketSort.allCases, id: \.self) { s in
+                        Button(s.title) { Task { await viewModel.setSort(s) } }
+                    }
+                } label: { DSMenuLabel(viewModel.sort.title, systemImage: "arrow.up.arrow.down") }
+
+                Menu {
+                    ForEach(EventListViewModel.MarketStatus.allCases, id: \.self) { s in
+                        Button(s.title) { Task { await viewModel.setStatus(s) } }
+                    }
+                } label: { DSMenuLabel(viewModel.status.title, systemImage: "chevron.down") }
+
+                Button { viewModel.toggleHideSports() } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: viewModel.hideSports ? "checkmark.square.fill" : "square")
+                        Text("Hide sports")
+                    }
+                    .font(DSFont.caption).foregroundStyle(DSColor.textSecondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, DSLayout.margin)
+            .padding(.vertical, DSLayout.spacing)
+        }
+    }
+}
+
+private struct DSMenuLabel: View {
+    let title: String; let systemImage: String
+    init(_ title: String, systemImage: String) { self.title = title; self.systemImage = systemImage }
+    var body: some View {
+        HStack(spacing: 6) { Image(systemName: systemImage); Text(title) }
+            .font(DSFont.caption).foregroundStyle(DSColor.textPrimary)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(DSColor.surface).clipShape(Capsule())
+    }
+}
