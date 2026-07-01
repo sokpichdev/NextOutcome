@@ -11,6 +11,9 @@ let package = Package(
         .library(name: "MarketsDomain",        targets: ["MarketsDomain"]),
         .library(name: "MarketsData",          targets: ["MarketsData"]),
         .library(name: "MarketsPresentation",  targets: ["MarketsPresentation"]),
+        .library(name: "OrderbookDomain",        targets: ["OrderbookDomain"]),
+        .library(name: "OrderbookData",          targets: ["OrderbookData"]),
+        .library(name: "OrderbookPresentation",  targets: ["OrderbookPresentation"]),
     ],
     targets: [
         // Core
@@ -31,8 +34,25 @@ let package = Package(
         ),
         .target(
             name: "MarketsPresentation",
-            dependencies: ["MarketsDomain", "DesignSystem"],
+            dependencies: ["MarketsDomain", "DesignSystem", "OrderbookPresentation"],
             path: "Features/Markets/MarketsPresentation/Sources"
+        ),
+
+        // Orderbook feature (vertical slice + realtime)
+        .target(
+            name: "OrderbookDomain",
+            dependencies: [],
+            path: "Features/Orderbook/OrderbookDomain/Sources"
+        ),
+        .target(
+            name: "OrderbookData",
+            dependencies: ["OrderbookDomain", "Networking"],
+            path: "Features/Orderbook/OrderbookData/Sources"
+        ),
+        .target(
+            name: "OrderbookPresentation",
+            dependencies: ["OrderbookDomain", "DesignSystem"],
+            path: "Features/Orderbook/OrderbookPresentation/Sources"
         ),
 
         // Tests
@@ -41,6 +61,11 @@ let package = Package(
         .testTarget(
             name: "MarketsDataTests",
             dependencies: ["MarketsData", "MarketsDomain", "Networking"]
+        ),
+        .testTarget(name: "OrderbookDomainTests", dependencies: ["OrderbookDomain"]),
+        .testTarget(
+            name: "OrderbookDataTests",
+            dependencies: ["OrderbookData", "OrderbookDomain", "Networking"]
         ),
     ]
 )

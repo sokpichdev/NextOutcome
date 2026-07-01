@@ -13,6 +13,9 @@
 		691399E22FF3B253007A6162 /* MarketsPresentation in Frameworks */ = {isa = PBXBuildFile; productRef = 691399E12FF3B253007A6162 /* MarketsPresentation */; };
 		691399E42FF3B253007A6162 /* Networking in Frameworks */ = {isa = PBXBuildFile; productRef = 691399E32FF3B253007A6162 /* Networking */; };
 		691399E62FF3B253007A6162 /* SharedDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 691399E52FF3B253007A6162 /* SharedDomain */; };
+		6913AB012FF3B253007A6162 /* OrderbookDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AB002FF3B253007A6162 /* OrderbookDomain */; };
+		6913AB032FF3B253007A6162 /* OrderbookData in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AB022FF3B253007A6162 /* OrderbookData */; };
+		6913AB052FF3B253007A6162 /* OrderbookPresentation in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AB042FF3B253007A6162 /* OrderbookPresentation */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -80,6 +83,9 @@
 				691399E22FF3B253007A6162 /* MarketsPresentation in Frameworks */,
 				691399E42FF3B253007A6162 /* Networking in Frameworks */,
 				691399DC2FF3B253007A6162 /* DesignSystem in Frameworks */,
+				6913AB012FF3B253007A6162 /* OrderbookDomain in Frameworks */,
+				6913AB032FF3B253007A6162 /* OrderbookData in Frameworks */,
+				6913AB052FF3B253007A6162 /* OrderbookPresentation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -146,6 +152,9 @@
 				691399E12FF3B253007A6162 /* MarketsPresentation */,
 				691399E32FF3B253007A6162 /* Networking */,
 				691399E52FF3B253007A6162 /* SharedDomain */,
+				6913AB002FF3B253007A6162 /* OrderbookDomain */,
+				6913AB022FF3B253007A6162 /* OrderbookData */,
+				6913AB042FF3B253007A6162 /* OrderbookPresentation */,
 			);
 			productName = NextOutcome;
 			productReference = 6999852F2FF188A80055E4BF /* NextOutcome.app */;
@@ -686,6 +695,18 @@
 		691399E52FF3B253007A6162 /* SharedDomain */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = SharedDomain;
+		};
+		6913AB002FF3B253007A6162 /* OrderbookDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = OrderbookDomain;
+		};
+		6913AB022FF3B253007A6162 /* OrderbookData */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = OrderbookData;
+		};
+		6913AB042FF3B253007A6162 /* OrderbookPresentation */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = OrderbookPresentation;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
