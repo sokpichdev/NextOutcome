@@ -14,6 +14,7 @@ import Networking
 /// a missing/odd field degrades that market, it never fails the whole page.
 struct MarketDTO: Decodable {
     let id: String
+    let conditionId: String
     let question: String
     let slug: String
     let outcomes: [String]
@@ -26,13 +27,14 @@ struct MarketDTO: Decodable {
     let image: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, question, slug, outcomes, outcomePrices, clobTokenIds
+        case id, conditionId, question, slug, outcomes, outcomePrices, clobTokenIds
         case volume, liquidity, endDateIso, closed, image
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
+        conditionId = (try? c.decode(String.self, forKey: .conditionId)) ?? ""
         question = (try? c.decode(String.self, forKey: .question)) ?? ""
         slug = (try? c.decode(String.self, forKey: .slug)) ?? ""
         outcomes = DTODecoding.stringArray(c, .outcomes)
