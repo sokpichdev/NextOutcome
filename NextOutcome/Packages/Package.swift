@@ -14,6 +14,9 @@ let package = Package(
         .library(name: "OrderbookDomain",        targets: ["OrderbookDomain"]),
         .library(name: "OrderbookData",          targets: ["OrderbookData"]),
         .library(name: "OrderbookPresentation",  targets: ["OrderbookPresentation"]),
+        .library(name: "PortfolioDomain",        targets: ["PortfolioDomain"]),
+        .library(name: "PortfolioData",          targets: ["PortfolioData"]),
+        .library(name: "PortfolioPresentation",  targets: ["PortfolioPresentation"]),
     ],
     targets: [
         // Core
@@ -55,6 +58,23 @@ let package = Package(
             path: "Features/Orderbook/OrderbookPresentation/Sources"
         ),
 
+        // Portfolio feature (watch-only)
+        .target(
+            name: "PortfolioDomain",
+            dependencies: [],
+            path: "Features/Portfolio/PortfolioDomain/Sources"
+        ),
+        .target(
+            name: "PortfolioData",
+            dependencies: ["PortfolioDomain", "Networking"],
+            path: "Features/Portfolio/PortfolioData/Sources"
+        ),
+        .target(
+            name: "PortfolioPresentation",
+            dependencies: ["PortfolioDomain", "DesignSystem"],
+            path: "Features/Portfolio/PortfolioPresentation/Sources"
+        ),
+
         // Tests
         .testTarget(name: "NetworkingTests",     dependencies: ["Networking"]),
         .testTarget(name: "MarketsDomainTests",  dependencies: ["MarketsDomain"]),
@@ -66,6 +86,11 @@ let package = Package(
         .testTarget(
             name: "OrderbookDataTests",
             dependencies: ["OrderbookData", "OrderbookDomain", "Networking"]
+        ),
+        .testTarget(name: "PortfolioDomainTests", dependencies: ["PortfolioDomain"]),
+        .testTarget(
+            name: "PortfolioDataTests",
+            dependencies: ["PortfolioData", "PortfolioDomain", "Networking"]
         ),
     ]
 )
