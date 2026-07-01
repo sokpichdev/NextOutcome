@@ -8,8 +8,10 @@
 import SwiftUI
 import MarketsDomain
 import DesignSystem
+import OrderbookPresentation
 
 public struct MarketDetailView: View {
+    @Environment(\.marketLiveFactory) private var marketLiveFactory
     private let market: Market
 
     public init(market: Market) {
@@ -20,6 +22,7 @@ public struct MarketDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSLayout.spacingLarge) {
                 priceHeader
+                liveSection
                 stats
             }
             .padding(.horizontal, DSLayout.margin)
@@ -30,6 +33,15 @@ public struct MarketDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+    }
+
+    /// Live orderbook + price chart, driven by the Yes token id. Rendered only
+    /// when the App has injected a factory and the market has a CLOB token.
+    @ViewBuilder
+    private var liveSection: some View {
+        if let factory = marketLiveFactory, let assetID = market.yesOutcome?.id, !assetID.isEmpty {
+            MarketLiveView(viewModel: factory(assetID))
+        }
     }
 
     @ViewBuilder
