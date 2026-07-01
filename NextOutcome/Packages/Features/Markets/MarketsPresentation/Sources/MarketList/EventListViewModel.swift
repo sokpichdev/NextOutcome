@@ -97,11 +97,23 @@ public final class EventListViewModel {
         self.fetchTags = fetchTags
     }
 
+    private var domainSort: EventSort {
+        switch sort {
+        case .volume24h:   return .volume24h
+        case .liquidity:   return .liquidity
+        case .newest:      return .newest
+        case .endingSoon:  return .endingSoon
+        case .competitive: return .competitive
+        }
+    }
+
+    private var domainStatus: EventStatus { status == .active ? .active : .all }
+
     public func load() async {
         state = .loading
         if tags.isEmpty { await loadTags() }
         do {
-            let page = try await fetchEvents.execute(tagID: selectedTagID)
+            let page = try await fetchEvents.execute(tagID: selectedTagID, sort: domainSort, status: domainStatus)
             nextCursor = page.nextCursor
             state = page.items.isEmpty ? .empty : .loaded(page.items)
         } catch {
@@ -130,9 +142,23 @@ public final class EventListViewModel {
         isLoadingMore = true
         defer { isLoadingMore = false }
         do {
-            let page = try await fetchEvents.execute(cursor: cursor, tagID: selectedTagID)
+            let page = try await fetchEvents.execute(cursor: cursor, tagID: selectedTagID, sort: domainSort, status: domainStatus)
             nextCursor = page.nextCursor
             state = .loaded(current + page.items)
+
+            // If hideSports filtered out all new items and more pages exist, keep fetching
+            // (bounded to 5 extra fetches) so the visible feed can advance.
+            if hideSports {
+                let before = visibleEvents.count
+                var extra = 0
+                while nextCursor != nil && visibleEvents.count == before && extra < 5 {
+                    guard case .loaded(let all) = state, let nc = nextCursor else { break }
+                    let next = try await fetchEvents.execute(cursor: nc, tagID: selectedTagID, sort: domainSort, status: domainStatus)
+                    nextCursor = next.nextCursor
+                    state = .loaded(all + next.items)
+                    extra += 1
+                }
+            }
         } catch {
             // non-fatal: keep the list we already have; user can scroll again to retry.
         }
@@ -152,6 +178,13 @@ public final class EventListViewModel {
         )
         vm.state = .loaded(events)
         return vm
+    }
+
+    /// Seed the VM with explicit state for unit testing loadMore() pagination scenarios.
+    func seedForTesting(state: State, nextCursor: String?, hideSports: Bool = false) {
+        self.state = state
+        self.nextCursor = nextCursor
+        if hideSports { self.hideSports = true }
     }
     #endif
 }
