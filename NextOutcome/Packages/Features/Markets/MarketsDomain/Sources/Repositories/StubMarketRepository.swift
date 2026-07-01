@@ -11,7 +11,7 @@ import SharedDomain
 
 #if DEBUG
 struct StubMarketRepository: MarketRepository {
-    func fetchEvents(cursor: String?, tagID: String?) async throws -> Page<Event> {
+    func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus) async throws -> Page<Event> {
         Page(items: [], nextCursor: nil)
     }
     func fetchMarkets(cursor: String?) async throws -> Page<Market> {

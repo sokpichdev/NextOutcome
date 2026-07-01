@@ -19,24 +19,10 @@ public struct GammaMarketRepository: MarketRepository {
     
     private static let pageSize = 20
 
-    /// Gamma `/events` returns a bare JSON array and paginates by `offset`
-    /// (keyset cursors are rejected here), so we carry the offset in `Page.nextCursor`.
-    private func eventsQuery(offset: Int, tagID: String?) -> [String: String] {
-        var query: [String: String] = [
-            "limit": "\(Self.pageSize)",
-            "offset": "\(offset)",
-            "active": "true",
-            "closed": "false",
-            "order": "volume24hr",
-            "ascending": "false",
-        ]
-        if let tagID { query["tag_id"] = tagID }
-        return query
-    }
-
-    public func fetchEvents(cursor: String?, tagID: String?) async throws -> Page<Event> {
+    public func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus) async throws -> Page<Event> {
         let offset = cursor.flatMap(Int.init) ?? 0
-        let endpoint = Endpoint(host: .gamma, path: "/events", query: eventsQuery(offset: offset, tagID: tagID))
+        let query = GammaEventQuery.params(offset: offset, tagID: tagID, sort: sort, status: status)
+        let endpoint = Endpoint(host: .gamma, path: "/events", query: query)
         let dtos: [EventDTO] = try await client.fetch(endpoint)
         let events = dtos.map(MarketMapper.event(from:))
         let nextCursor = dtos.count == Self.pageSize ? "\(offset + Self.pageSize)" : nil
@@ -45,7 +31,7 @@ public struct GammaMarketRepository: MarketRepository {
 
     public func fetchMarkets(cursor: String?) async throws -> Page<Market> {
         let offset = cursor.flatMap(Int.init) ?? 0
-        let endpoint = Endpoint(host: .gamma, path: "/events", query: eventsQuery(offset: offset, tagID: nil))
+        let endpoint = Endpoint(host: .gamma, path: "/events", query: GammaEventQuery.params(offset: offset, tagID: nil, sort: .volume24h, status: .active))
         let dtos: [EventDTO] = try await client.fetch(endpoint)
         let markets = dtos.flatMap { $0.markets }.map(MarketMapper.market(from:))
         let nextCursor = dtos.count == Self.pageSize ? "\(offset + Self.pageSize)" : nil
@@ -89,5 +75,36 @@ public struct GammaMarketRepository: MarketRepository {
         )
         let dtos: [TagDTO] = try await client.fetch(endpoint)
         return dtos.map(MarketMapper.tag(from:))
+    }
+}
+
+/// Pure, testable mapper from domain query params to Gamma API query dictionary.
+public enum GammaEventQuery {
+    private static let pageSize = 20
+
+    public static func params(offset: Int, tagID: String?, sort: EventSort, status: EventStatus) -> [String: String] {
+        let (order, ascending) = sortParams(for: sort)
+        var query: [String: String] = [
+            "limit": "\(pageSize)",
+            "offset": "\(offset)",
+            "order": order,
+            "ascending": ascending,
+        ]
+        if status == .active {
+            query["active"] = "true"
+            query["closed"] = "false"
+        }
+        if let tagID { query["tag_id"] = tagID }
+        return query
+    }
+
+    private static func sortParams(for sort: EventSort) -> (order: String, ascending: String) {
+        switch sort {
+        case .volume24h:   return ("volume24hr", "false")
+        case .liquidity:   return ("liquidity",  "false")
+        case .newest:      return ("startDate",  "false")
+        case .endingSoon:  return ("endDate",    "true")
+        case .competitive: return ("competitive","false")
+        }
     }
 }
