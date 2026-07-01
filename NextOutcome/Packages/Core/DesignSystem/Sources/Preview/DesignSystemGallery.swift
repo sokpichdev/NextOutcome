@@ -60,6 +60,37 @@ import SwiftUI
     .background(DSColor.background)
 }
 
+#Preview("Shell — Top bar + rail") {
+    struct Demo: View {
+        @State var category: ShellCategory = .worldCup
+        var body: some View {
+            VStack(spacing: 0) {
+                NOTopBar()
+                CategoryRail(selected: $category)
+            }
+            .background(DSColor.background)
+        }
+    }
+    return Demo()
+}
+
+#Preview("Shell — Drawer") {
+    SideMenuDrawer(addressShort: "0xd8C7e8F2…", onSelect: { _ in })
+        .frame(width: 320)
+}
+
+#Preview("Shell — Chrome") {
+    struct Demo: View {
+        @State var category: ShellCategory = .trending
+        var body: some View {
+            ShellChrome(selectedCategory: $category, onAvatar: {}) {
+                ScrollView { Text("Content").foregroundStyle(DSColor.textPrimary).padding() }
+            }
+        }
+    }
+    return Demo()
+}
+
 private extension DesignSystemGallery_Previews {
     static var sampleData: [PricePoint] {
         (0..<30).map { i in
