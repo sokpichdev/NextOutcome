@@ -61,17 +61,17 @@ let package = Package(
         // Portfolio feature (watch-only)
         .target(
             name: "PortfolioDomain",
-            dependencies: [],
+            dependencies: ["SharedDomain"],
             path: "Features/Portfolio/PortfolioDomain/Sources"
         ),
         .target(
             name: "PortfolioData",
-            dependencies: ["PortfolioDomain", "Networking"],
+            dependencies: ["PortfolioDomain", "Networking", "SharedDomain"],
             path: "Features/Portfolio/PortfolioData/Sources"
         ),
         .target(
             name: "PortfolioPresentation",
-            dependencies: ["PortfolioDomain", "DesignSystem"],
+            dependencies: ["PortfolioDomain", "DesignSystem", "SharedDomain"],
             path: "Features/Portfolio/PortfolioPresentation/Sources"
         ),
 
