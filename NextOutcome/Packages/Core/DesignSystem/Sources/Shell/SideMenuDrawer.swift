@@ -61,7 +61,7 @@ public struct SideMenuDrawer: View {
             }
         }
         .padding(20)
-        .padding(.top, 44)
+        .safeAreaPadding(.top)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(DSColor.surface)
     }

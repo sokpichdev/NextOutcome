@@ -29,15 +29,18 @@ public struct NOTopBar: View {
             Button(action: onGift) {
                 Image(systemName: "gift").foregroundStyle(DSColor.textSecondary)
             }
+            .accessibilityLabel("Rewards")
             Button(action: onBell) {
                 Image(systemName: "bell").foregroundStyle(DSColor.textSecondary)
             }
+            .accessibilityLabel("Notifications")
             Button(action: onAvatar) {
                 Circle()
                     .fill(DSGradient.accent)
                     .frame(width: 32, height: 32)
                     .glowAccent(radius: 6)
             }
+            .accessibilityLabel("Account menu")
         }
         .buttonStyle(.plain)
         .font(.title3)
