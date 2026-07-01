@@ -3,11 +3,11 @@ import XCTest
 
 final class ShellFormatTests: XCTestCase {
     func test_balanceLabel_formatsTwoDecimalsWithDollar() {
-        XCTAssertEqual(ShellFormat.balanceLabel(Decimal(string: "7.02")), "$7.02")
+        XCTAssertEqual(ShellFormat.balanceLabel(Decimal(string: "7.02")), "$\u{A0}7.02")
     }
 
     func test_balanceLabel_wholeNumber_stillTwoDecimals() {
-        XCTAssertEqual(ShellFormat.balanceLabel(Decimal(7)), "$7.00")
+        XCTAssertEqual(ShellFormat.balanceLabel(Decimal(7)), "$\u{A0}7.00")
     }
 
     func test_balanceLabel_nilIsPlaceholder() {

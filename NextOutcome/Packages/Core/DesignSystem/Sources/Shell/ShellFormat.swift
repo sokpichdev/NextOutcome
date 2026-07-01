@@ -5,6 +5,7 @@ public enum ShellFormat {
     private static let currency: NumberFormatter = {
         let f = NumberFormatter()
         f.numberStyle = .currency
+        f.locale = Locale(identifier: "en_US_POSIX")
         f.currencyCode = "USD"
         f.currencySymbol = "$"
         f.minimumFractionDigits = 2
