@@ -16,6 +16,9 @@
 		6913AB012FF3B253007A6162 /* OrderbookDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AB002FF3B253007A6162 /* OrderbookDomain */; };
 		6913AB032FF3B253007A6162 /* OrderbookData in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AB022FF3B253007A6162 /* OrderbookData */; };
 		6913AB052FF3B253007A6162 /* OrderbookPresentation in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AB042FF3B253007A6162 /* OrderbookPresentation */; };
+		6913AC012FF3B253007A6162 /* PortfolioDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AC002FF3B253007A6162 /* PortfolioDomain */; };
+		6913AC032FF3B253007A6162 /* PortfolioData in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AC022FF3B253007A6162 /* PortfolioData */; };
+		6913AC052FF3B253007A6162 /* PortfolioPresentation in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AC042FF3B253007A6162 /* PortfolioPresentation */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -86,6 +89,9 @@
 				6913AB012FF3B253007A6162 /* OrderbookDomain in Frameworks */,
 				6913AB032FF3B253007A6162 /* OrderbookData in Frameworks */,
 				6913AB052FF3B253007A6162 /* OrderbookPresentation in Frameworks */,
+				6913AC012FF3B253007A6162 /* PortfolioDomain in Frameworks */,
+				6913AC032FF3B253007A6162 /* PortfolioData in Frameworks */,
+				6913AC052FF3B253007A6162 /* PortfolioPresentation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -155,6 +161,9 @@
 				6913AB002FF3B253007A6162 /* OrderbookDomain */,
 				6913AB022FF3B253007A6162 /* OrderbookData */,
 				6913AB042FF3B253007A6162 /* OrderbookPresentation */,
+				6913AC002FF3B253007A6162 /* PortfolioDomain */,
+				6913AC022FF3B253007A6162 /* PortfolioData */,
+				6913AC042FF3B253007A6162 /* PortfolioPresentation */,
 			);
 			productName = NextOutcome;
 			productReference = 6999852F2FF188A80055E4BF /* NextOutcome.app */;
@@ -707,6 +716,18 @@
 		6913AB042FF3B253007A6162 /* OrderbookPresentation */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = OrderbookPresentation;
+		};
+		6913AC002FF3B253007A6162 /* PortfolioDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PortfolioDomain;
+		};
+		6913AC022FF3B253007A6162 /* PortfolioData */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PortfolioData;
+		};
+		6913AC042FF3B253007A6162 /* PortfolioPresentation */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PortfolioPresentation;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

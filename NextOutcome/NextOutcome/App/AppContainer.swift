@@ -13,18 +13,23 @@ import MarketsPresentation
 import OrderbookData
 import OrderbookDomain
 import OrderbookPresentation
+import PortfolioData
+import PortfolioDomain
+import PortfolioPresentation
 
 @MainActor
 final class AppContainer {
     private let repository: MarketRepository
     private let orderbookRepository: OrderbookRepository
     private let marketStream: MarketStreaming
+    private let portfolioRepository: PortfolioRepository
 
     nonisolated init() {
         let client = APIClient()
         self.repository = GammaMarketRepository(client: client)
         self.orderbookRepository = ClobOrderbookRepository(client: client)
         self.marketStream = MarketSocket()
+        self.portfolioRepository = DataPortfolioRepository(client: client)
     }
 
     func makeEventListViewModel() -> EventListViewModel {
@@ -36,6 +41,10 @@ final class AppContainer {
 
     func makeSearchViewModel() -> SearchViewModel {
         SearchViewModel(searchMarkets: SearchMarketsUseCase(repository: repository))
+    }
+
+    func makePortfolioViewModel() -> PortfolioViewModel {
+        PortfolioViewModel(fetchPortfolio: FetchPortfolioUseCase(repository: portfolioRepository))
     }
 
     /// Factory injected into the environment so Market Detail can build its live view model.

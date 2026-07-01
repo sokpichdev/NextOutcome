@@ -9,16 +9,19 @@ import SwiftUI
 import DesignSystem
 import MarketsPresentation
 import OrderbookPresentation
+import PortfolioPresentation
 
 struct RootView: View {
     @State private var eventListViewModel: EventListViewModel
     @State private var searchViewModel: SearchViewModel
+    @State private var portfolioViewModel: PortfolioViewModel
     private let marketLiveFactory: MarketLiveViewModelFactory
 
     @MainActor
     init(container: AppContainer = AppContainer()) {
         _eventListViewModel = State(initialValue: container.makeEventListViewModel())
         _searchViewModel = State(initialValue: container.makeSearchViewModel())
+        _portfolioViewModel = State(initialValue: container.makePortfolioViewModel())
         marketLiveFactory = container.makeMarketLiveFactory()
     }
 
@@ -34,8 +37,10 @@ struct RootView: View {
             }
             .tabItem { Label("Search", systemImage: "magnifyingglass") }
 
-            NavigationStack { ComingSoonView(title: "Portfolio") }
-                .tabItem { Label("Portfolio", systemImage: "chart.pie") }
+            NavigationStack {
+                PortfolioView(viewModel: portfolioViewModel)
+            }
+            .tabItem { Label("Portfolio", systemImage: "chart.pie") }
 
             NavigationStack { ComingSoonView(title: "Activity") }
                 .tabItem { Label("Activity", systemImage: "bolt.horizontal") }
