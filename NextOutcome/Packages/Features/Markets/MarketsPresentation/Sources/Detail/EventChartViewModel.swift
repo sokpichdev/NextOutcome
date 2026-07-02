@@ -29,7 +29,11 @@ public final class EventChartViewModel {
     public func load() async {
         loadGeneration += 1
         let generation = loadGeneration
-        state = .loading
+        if case .loaded = state {
+            // keep showing the previous chart while new data loads
+        } else {
+            state = .loading
+        }
         let interval = timeframe.interval
         let markets = topMarkets
         let provider = provider
@@ -56,7 +60,7 @@ public final class EventChartViewModel {
             state = built.isEmpty ? .empty : .loaded(built)
         } catch {
             guard generation == loadGeneration else { return }
-            state = .failed(message: error.localizedDescription)
+            state = .failed(message: "Couldn't load chart data. Check your connection and try again.")
         }
     }
 
