@@ -31,7 +31,7 @@ public struct DetailHeader: View {
     }
 
     public var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DSLayout.spacing) {
             Button(action: onBack) { Image(systemName: "chevron.left") }
                 .accessibilityLabel("Back")
             Spacer()
@@ -43,7 +43,7 @@ public struct DetailHeader: View {
         }
         .font(.title3)
         .foregroundStyle(DSColor.textPrimary)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, DSLayout.margin)
         .padding(.vertical, 10)
         .buttonStyle(.plain)
     }
