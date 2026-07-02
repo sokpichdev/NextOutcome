@@ -28,7 +28,9 @@ enum MarketMapper {
             liquidity: dto.liquidity,
             endDate: DateParsing.parse(dto.endDateIso),
             isResolved: dto.closed,
-            imageURL: dto.image.flatMap(URL.init(string:)))
+            imageURL: dto.image.flatMap(URL.init(string:)),
+            sportsMarketType: dto.sportsMarketType,
+            groupItemTitle: dto.groupItemTitle)
     }
     
     static func tag(from dto: TagDTO) -> Tag {

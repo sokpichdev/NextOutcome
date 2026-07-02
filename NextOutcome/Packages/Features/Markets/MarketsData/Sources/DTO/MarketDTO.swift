@@ -25,10 +25,15 @@ struct MarketDTO: Decodable {
     let endDateIso: String?
     let closed: Bool
     let image: String?
+    /// Sports section hint, e.g. "moneyline" / "spreads" / "totals". Absent for non-sports markets.
+    let sportsMarketType: String?
+    /// Sports sub-label, e.g. a team name or "Both Teams to Score". Absent for non-sports markets.
+    let groupItemTitle: String?
 
     enum CodingKeys: String, CodingKey {
         case id, conditionId, question, slug, outcomes, outcomePrices, clobTokenIds
         case volume, liquidity, endDateIso, closed, image
+        case sportsMarketType, groupItemTitle
     }
 
     init(from decoder: Decoder) throws {
@@ -45,6 +50,8 @@ struct MarketDTO: Decodable {
         endDateIso = try? c.decode(String.self, forKey: .endDateIso)
         closed = (try? c.decode(Bool.self, forKey: .closed)) ?? false
         image = try? c.decode(String.self, forKey: .image)
+        sportsMarketType = try? c.decode(String.self, forKey: .sportsMarketType)
+        groupItemTitle = try? c.decode(String.self, forKey: .groupItemTitle)
     }
 }
 
