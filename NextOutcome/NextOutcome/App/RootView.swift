@@ -20,6 +20,7 @@ struct RootView: View {
     private let leaderboardViewModel: LeaderboardViewModel
     private let marketLiveFactory: MarketLiveViewModelFactory
     private let marketHoldersFactory: MarketHoldersViewModelFactory
+    private let priceHistoryProvider: PriceHistoryProvider
 
     @State private var selectedCategory: ShellCategory = .trending
     @State private var isDrawerOpen = false
@@ -35,6 +36,7 @@ struct RootView: View {
         leaderboardViewModel = container.makeLeaderboardViewModel()
         marketLiveFactory = container.makeMarketLiveFactory()
         marketHoldersFactory = container.makeMarketHoldersFactory()
+        priceHistoryProvider = container.makePriceHistoryProvider()
     }
 
     var body: some View {
@@ -46,6 +48,7 @@ struct RootView: View {
         .animation(.easeInOut(duration: 0.3), value: isDrawerOpen)
         .environment(\.marketLiveFactory, marketLiveFactory)
         .environment(\.marketHoldersFactory, marketHoldersFactory)
+        .environment(\.priceHistoryProvider, priceHistoryProvider)
     }
 
     private var tabs: some View {
