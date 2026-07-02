@@ -47,6 +47,10 @@ public struct MarketDetailView: View {
         if let yes = market.yesOutcome {
             ChanceHeader(chanceFraction: yes.price, deltaPoints: nil,
                          leadingColor: DSColor.positive)
+        } else {
+            Text("Outcomes unavailable")
+                .font(DSFont.subheadline)
+                .foregroundStyle(DSColor.textSecondary)
         }
     }
 

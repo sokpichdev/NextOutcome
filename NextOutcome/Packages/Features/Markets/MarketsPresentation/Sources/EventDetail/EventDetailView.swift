@@ -22,7 +22,7 @@ public struct EventDetailView: View {
     }
 
     private var breadcrumb: String {
-        event.tags.first.map { "Sports · \($0.label)" } ?? event.title
+        event.tags.first.map(\.label) ?? event.title
     }
 
     public var body: some View {
