@@ -8,18 +8,33 @@
 import SwiftUI
 import MarketsDomain
 import DesignSystem
+import OrderbookPresentation
 
 public struct EventDetailView: View {
     private let event: Event
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.priceHistoryProvider) private var priceHistoryProvider
+    @State private var chart: EventChartViewModel?
+    @State private var timeframe: ChartTimeframe = .max
 
     public init(event: Event) {
         self.event = event
     }
 
+    private var breadcrumb: String {
+        event.tags.first.map { "Sports · \($0.label)" } ?? event.title
+    }
+
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSLayout.spacing) {
-                header
+                DetailHeader(title: .breadcrumb(breadcrumb), actions: [.bookmark, .link],
+                             onBack: { dismiss() })
+                Text(event.title).font(DSFont.title).foregroundStyle(DSColor.textPrimary)
+                if let chart, !chart.series.isEmpty {
+                    MultiSeriesChart(series: chart.series).frame(height: 200)
+                }
+                TimeframePicker(selected: $timeframe)
                 ForEach(event.markets) { market in
                     NavigationLink(value: market) {
                         MarketCard(market: market)
@@ -31,23 +46,16 @@ public struct EventDetailView: View {
             .padding(.top, DSLayout.spacing)
         }
         .background(DSColor.background)
-        .navigationTitle(event.title)
         #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         #endif
-    }
-
-    private var header: some View {
-        DSCard {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(event.title)
-                    .font(DSFont.title)
-                    .foregroundStyle(DSColor.textPrimary)
-                Text("\(MarketFormatting.compactUSD(event.volume)) Vol · \(event.markets.count) markets")
-                    .font(DSFont.caption)
-                    .foregroundStyle(DSColor.textSecondary)
+        .task {
+            if chart == nil, let provider = priceHistoryProvider {
+                let vm = EventChartViewModel(event: event, provider: provider)
+                chart = vm
+                await vm.load()
             }
         }
+        .onChange(of: timeframe) { _, new in chart?.timeframe = new }
     }
 }
-
