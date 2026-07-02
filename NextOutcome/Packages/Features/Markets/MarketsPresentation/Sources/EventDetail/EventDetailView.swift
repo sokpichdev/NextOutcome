@@ -31,8 +31,18 @@ public struct EventDetailView: View {
                 DetailHeader(title: .breadcrumb(breadcrumb), actions: [.bookmark, .link],
                              onBack: { dismiss() })
                 Text(event.title).font(DSFont.title).foregroundStyle(DSColor.textPrimary)
-                if let chart, !chart.series.isEmpty {
-                    MultiSeriesChart(series: chart.series).frame(height: 200)
+                if let chart {
+                    switch chart.state {
+                    case .loaded(let series):
+                        MultiSeriesChart(series: series).frame(height: 200)
+                    case .failed(let message):
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(message).font(DSFont.caption).foregroundStyle(DSColor.textSecondary)
+                            Button("Retry") { Task { await chart.retry() } }
+                        }
+                    case .idle, .loading, .empty:
+                        EmptyView()
+                    }
                 }
                 TimeframePicker(selected: $timeframe)
                 ForEach(event.markets) { market in
@@ -49,12 +59,11 @@ public struct EventDetailView: View {
         #if os(iOS)
         .toolbar(.hidden, for: .navigationBar)
         #endif
-        .task {
-            if chart == nil, let provider = priceHistoryProvider {
-                let vm = EventChartViewModel(event: event, provider: provider)
-                chart = vm
-                await vm.load()
-            }
+        .task(id: event.id) {
+            guard let provider = priceHistoryProvider else { return }
+            let vm = EventChartViewModel(event: event, provider: provider)
+            chart = vm
+            await vm.load()
         }
         .onChange(of: timeframe) { _, new in chart?.timeframe = new }
     }

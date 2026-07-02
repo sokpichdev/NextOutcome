@@ -2,7 +2,7 @@ import SwiftUI
 import Charts
 
 /// One labeled, colored price line. `points` are 0…1 fractions.
-public struct PriceSeries: Identifiable {
+public struct PriceSeries: Identifiable, Sendable {
     public let id: String
     public let label: String
     public let color: Color
