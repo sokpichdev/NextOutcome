@@ -10,6 +10,28 @@ import MarketsDomain
 import DesignSystem
 import OrderbookPresentation
 
+/// Pure helper for deriving the sticky-header's paired team abbreviations from an event's
+/// moneyline markets, so pairing survives non-alternating market ordering.
+enum StickyHeaderAbbreviations {
+    /// Derives the left/right abbreviations from the first two markets in the event's
+    /// moneyline group (`MarketGroupClassifier`). Returns `nil` when there's no moneyline
+    /// group, it has fewer than two markets, or either market's `groupItemTitle` is missing
+    /// or empty — callers should fall back to their own chain in that case.
+    static func stickyAbbreviations(for markets: [Market]) -> (left: String, right: String)? {
+        guard let moneyline = MarketGroupClassifier.groups(for: markets)
+            .first(where: { $0.group == .moneyline })?.markets,
+            moneyline.count >= 2,
+            let leftTitle = moneyline[0].groupItemTitle.flatMap({ $0.isEmpty ? nil : $0 }),
+            let rightTitle = moneyline[1].groupItemTitle.flatMap({ $0.isEmpty ? nil : $0 })
+        else { return nil }
+        return (left: abbreviate(leftTitle), right: abbreviate(rightTitle))
+    }
+
+    static func abbreviate(_ s: String) -> String {
+        String(s.prefix(3)).uppercased()
+    }
+}
+
 /// Tracks how far the hero region (breadcrumb → header → chart) has scrolled past the top
 /// of the scroll view, so `EventDetailView` can decide when to overlay `StickyEventHeader`.
 private struct HeroScrollOffsetKey: PreferenceKey {
@@ -156,7 +178,12 @@ public struct EventDetailView: View {
                     Text(message).font(DSFont.caption).foregroundStyle(DSColor.textSecondary)
                     Button("Retry") { Task { await chart.retry() } }
                 }
-            case .idle, .loading, .empty:
+            case .idle, .loading:
+                // Reserve the same height as the loaded chart so the `heroOffsetReader`
+                // marker (attached below `chartBlock`) stays put during the load
+                // transition instead of jumping once the chart lays out (Finding 1).
+                Color.clear.frame(height: 200)
+            case .empty:
                 EmptyView()
             }
         }
@@ -190,19 +217,33 @@ public struct EventDetailView: View {
         return MarketFormatting.percent(yes.price)
     }
 
+    private var stickyMoneylineAbbrevs: (left: String, right: String)? {
+        StickyHeaderAbbreviations.stickyAbbreviations(for: event.markets)
+    }
+
     private var stickyLeftAbbrev: String {
-        abbreviate(topMarket?.groupItemTitle ?? topMarket?.yesOutcome?.title ?? "Yes")
+        if let pair = stickyMoneylineAbbrevs { return pair.left }
+        let groupTitle = topMarket?.groupItemTitle.flatMap { $0.isEmpty ? nil : $0 }
+        let yesTitle = topMarket?.yesOutcome?.title
+        let yesTitleOrNil = (yesTitle?.isEmpty ?? true) ? nil : yesTitle
+        let fallback = groupTitle ?? yesTitleOrNil ?? "Yes"
+        return abbreviate(fallback)
     }
 
     private var stickyRightAbbrev: String {
-        if event.hasTeams, let second = event.markets.dropFirst().first?.groupItemTitle {
+        if let pair = stickyMoneylineAbbrevs { return pair.right }
+        if event.hasTeams,
+           let second = event.markets.dropFirst().first?.groupItemTitle.flatMap({ $0.isEmpty ? nil : $0 }) {
             return abbreviate(second)
         }
-        return abbreviate(topMarket?.noOutcome?.title ?? "No")
+        let noTitle = topMarket?.noOutcome?.title
+        let noTitleOrNil = (noTitle?.isEmpty ?? true) ? nil : noTitle
+        let fallback = noTitleOrNil ?? "No"
+        return abbreviate(fallback)
     }
 
     private func abbreviate(_ s: String) -> String {
-        String(s.prefix(3)).uppercased()
+        StickyHeaderAbbreviations.abbreviate(s)
     }
 }
 
