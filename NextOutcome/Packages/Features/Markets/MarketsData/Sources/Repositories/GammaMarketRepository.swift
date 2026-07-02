@@ -67,6 +67,26 @@ public struct GammaMarketRepository: MarketRepository {
         return MarketMapper.holders(from: groups)
     }
 
+    public func comments(eventID: String) async throws -> [Comment] {
+        let endpoint = Endpoint(
+            host: .gamma,
+            path: "/comments",
+            query: ["parent_entity_type": "Event", "parent_entity_id": eventID]
+        )
+        let dtos: [CommentDTO] = try await client.fetch(endpoint)
+        return MarketMapper.comments(from: dtos)
+    }
+
+    public func trades(conditionId: String) async throws -> [ActivityTrade] {
+        let endpoint = Endpoint(
+            host: .data,
+            path: "/trades",
+            query: ["market": conditionId, "limit": "50"]
+        )
+        let dtos: [ActivityTradeDTO] = try await client.fetch(endpoint)
+        return MarketMapper.trades(from: dtos)
+    }
+
     public func fetchTags() async throws -> [Tag] {
         let endpoint = Endpoint(
             host: .gamma,
