@@ -30,7 +30,8 @@ enum MarketMapper {
             isResolved: dto.closed,
             imageURL: dto.image.flatMap(URL.init(string:)),
             sportsMarketType: dto.sportsMarketType,
-            groupItemTitle: dto.groupItemTitle)
+            groupItemTitle: dto.groupItemTitle,
+            rules: dto.description)
     }
     
     static func tag(from dto: TagDTO) -> Tag {
@@ -73,7 +74,9 @@ enum MarketMapper {
             markets: dto.markets.map(market(from:)),
             volume: dto.volume,
             imageURL: dto.image.flatMap(URL.init(string:)),
-            tags: dto.tags.map(tag(from:))
+            tags: dto.tags.map(tag(from:)),
+            gameStartTime: DateParsing.parse(dto.gameStartTime),
+            description: dto.description
         )
     }
 }
