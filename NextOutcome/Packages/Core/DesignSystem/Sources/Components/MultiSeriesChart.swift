@@ -24,13 +24,12 @@ public struct MultiSeriesChart: View {
                 ForEach(series) { s in
                     ForEach(s.points) { p in
                         LineMark(x: .value("Date", p.date), y: .value("Price", p.price))
-                            .foregroundStyle(s.color)
                             .lineStyle(StrokeStyle(lineWidth: 2))
                     }
                     .foregroundStyle(by: .value("Series", s.label))
                 }
             }
-            .chartForegroundStyleScale(range: series.map(\.color))
+            .chartForegroundStyleScale(domain: series.map(\.label), range: series.map(\.color))
             .chartLegend(.hidden)
             .chartYScale(domain: 0...1)
         }
