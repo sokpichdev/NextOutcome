@@ -41,10 +41,10 @@ public struct DetailHeader: View {
             if actions.contains(.bookmark) { actionButton("bookmark", .bookmark, "Bookmark") }
             if actions.contains(.link) { actionButton("link", .link, "Share link") }
         }
-        .font(.title3)
+        .font(DSFont.title3)
         .foregroundStyle(DSColor.textPrimary)
         .padding(.horizontal, DSLayout.margin)
-        .padding(.vertical, 10)
+        .padding(.vertical, DSLayout.spacingMedium)
         .buttonStyle(.plain)
     }
 
@@ -52,10 +52,11 @@ public struct DetailHeader: View {
     private var titleView: some View {
         switch title {
         case .text(let s, let iconURL):
-            HStack(spacing: 8) {
+            HStack(spacing: DSLayout.spacingSmall) {
                 if let iconURL {
                     AsyncImage(url: iconURL) { $0.resizable().scaledToFill() } placeholder: { DSColor.surfaceElevated }
-                        .frame(width: 24, height: 24).clipShape(RoundedRectangle(cornerRadius: 6))
+                        .frame(width: DSLayout.spacingXLarge, height: DSLayout.spacingXLarge)
+                        .clipShape(RoundedRectangle(cornerRadius: DSLayout.spacingXSmall))
                 }
                 Text(s).font(DSFont.headline).foregroundStyle(DSColor.textPrimary)
             }
