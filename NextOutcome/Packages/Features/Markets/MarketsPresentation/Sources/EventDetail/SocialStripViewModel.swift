@@ -58,7 +58,9 @@ public final class SocialStripViewModel {
                 let items = try await fetchComments.execute(eventID: eventID)
                 commentsState = items.isEmpty ? .empty : .loaded(items)
             } catch {
-                commentsState = .failed(message: "Couldn't load comments. Check your connection and try again.")
+                commentsState = isCancellation(error)
+                    ? .idle
+                    : .failed(message: "Couldn't load comments. Check your connection and try again.")
             }
         case .holders:
             guard case .idle = holdersState else { return }
@@ -68,7 +70,9 @@ public final class SocialStripViewModel {
                 let items = try await fetchHolders.execute(conditionId: conditionId)
                 holdersState = items.isEmpty ? .empty : .loaded(items)
             } catch {
-                holdersState = .failed(message: "Couldn't load top holders. Check your connection and try again.")
+                holdersState = isCancellation(error)
+                    ? .idle
+                    : .failed(message: "Couldn't load top holders. Check your connection and try again.")
             }
         case .positions:
             return // static empty-state; never fetches
@@ -80,9 +84,20 @@ public final class SocialStripViewModel {
                 let items = try await fetchActivity.execute(conditionId: conditionId)
                 activityState = items.isEmpty ? .empty : .loaded(items)
             } catch {
-                activityState = .failed(message: "Couldn't load activity. Check your connection and try again.")
+                activityState = isCancellation(error)
+                    ? .idle
+                    : .failed(message: "Couldn't load activity. Check your connection and try again.")
             }
         }
+    }
+
+    /// A cancelled fetch (e.g. from a `.task(id: selectedTab)` restart on rapid tab
+    /// switching) is not a network failure — it must reset the tab to `.idle` so the
+    /// next visit refetches, instead of showing a false "connection error" retry row.
+    private func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if (error as? URLError)?.code == .cancelled { return true }
+        return Task.isCancelled
     }
 
     /// Resets `tab`'s state to `.idle` and re-fetches. Used by the inline retry row.
