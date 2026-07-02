@@ -101,7 +101,7 @@ let package = Package(
             dependencies: ["MarketsData", "MarketsDomain", "Networking"]
         ),
         .testTarget(name: "MarketsPresentationTests",
-                    dependencies: ["MarketsPresentation", "OrderbookDomain"],
+                    dependencies: ["MarketsPresentation", "OrderbookDomain", "OrderbookPresentation"],
                     path: "Tests/MarketsPresentationTests"),
         .testTarget(name: "OrderbookDomainTests", dependencies: ["OrderbookDomain"]),
         .testTarget(
