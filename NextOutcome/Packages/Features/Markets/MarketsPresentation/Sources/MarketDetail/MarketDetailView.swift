@@ -13,6 +13,7 @@ import OrderbookPresentation
 public struct MarketDetailView: View {
     @Environment(\.marketLiveFactory) private var marketLiveFactory
     @Environment(\.marketHoldersFactory) private var marketHoldersFactory
+    @Environment(\.dismiss) private var dismiss
     private let market: Market
 
     public init(market: Market) {
@@ -22,7 +23,12 @@ public struct MarketDetailView: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSLayout.spacingLarge) {
-                priceHeader
+                DetailHeader(
+                    title: .text(market.question, iconURL: market.imageURL),
+                    actions: [.code, .bookmark, .link],
+                    onBack: { dismiss() }
+                )
+                chanceHeader
                 liveSection
                 stats
                 holdersSection
@@ -31,10 +37,21 @@ public struct MarketDetailView: View {
             .padding(.top, DSLayout.spacing)
         }
         .background(DSColor.background)
-        .navigationTitle(market.question)
         #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         #endif
+    }
+
+    @ViewBuilder
+    private var chanceHeader: some View {
+        if let yes = market.yesOutcome {
+            ChanceHeader(chanceFraction: yes.price, deltaPoints: nil,
+                         leadingColor: DSColor.positive)
+        } else {
+            Text("Outcomes unavailable")
+                .font(DSFont.subheadline)
+                .foregroundStyle(DSColor.textSecondary)
+        }
     }
 
     /// Live orderbook + price chart, driven by the Yes token id. Rendered only
@@ -54,39 +71,6 @@ public struct MarketDetailView: View {
     private var holdersSection: some View {
         if let factory = marketHoldersFactory, !market.conditionId.isEmpty {
             HoldersSection(viewModel: factory(market.conditionId))
-        }
-    }
-
-    @ViewBuilder
-    private var priceHeader: some View {
-        if let yes = market.yesOutcome {
-            DSCard(highlighted: true) {
-                VStack(alignment: .leading, spacing: DSLayout.spacing) {
-                    HStack(spacing: DSLayout.spacingLarge) {
-                        priceColumn("Yes", MarketFormatting.percent(yes.price), DSColor.positive)
-                        priceColumn("No", MarketFormatting.percent(yes.complement), DSColor.negative)
-                        Spacer()
-                    }
-                    ProbabilityBar(yesFraction: MarketFormatting.fraction(yes.price))
-                }
-            }
-        } else {
-            DSCard {
-                Text("Outcomes unavailable")
-                    .font(DSFont.subheadline)
-                    .foregroundStyle(DSColor.textSecondary)
-            }
-        }
-    }
-
-    private func priceColumn(_ title: String, _ value: String, _ color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(DSFont.caption)
-                .foregroundStyle(DSColor.textSecondary)
-            Text(value)
-                .font(DSFont.price)
-                .foregroundStyle(color)
         }
     }
 
