@@ -81,7 +81,7 @@ final class AppContainer {
     func makePriceHistoryProvider() -> PriceHistoryProvider {
         let useCase = FetchPriceHistoryUseCase(repository: orderbookRepository)
         return PriceHistoryProvider { assetID, interval in
-            (try? await useCase.execute(assetID: assetID, interval: interval)) ?? []
+            try await useCase.execute(assetID: assetID, interval: interval)
         }
     }
 }

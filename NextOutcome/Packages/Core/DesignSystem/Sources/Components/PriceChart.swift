@@ -9,7 +9,7 @@ import SwiftUI
 import Charts
 import Foundation
 
-public struct PricePoint: Identifiable {
+public struct PricePoint: Identifiable, Sendable {
     public let id = UUID()
     public let date: Date
     public let price: Double // 0...1 (fraction, e.g. 0.62 = 62¢)

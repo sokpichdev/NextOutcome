@@ -2,6 +2,7 @@ import SwiftUI
 import MarketsDomain
 import OrderbookPresentation
 import DesignSystem
+import SharedDomain
 
 /// Builds one price-history line per top outcome of an event for the MultiSeriesChart.
 @MainActor
@@ -10,11 +11,11 @@ public final class EventChartViewModel {
     private let event: Event
     private let provider: PriceHistoryProvider
     public var timeframe: ChartTimeframe = .max { didSet { Task { await load() } } }
-    public private(set) var series: [PriceSeries] = []
+    public private(set) var state: LoadState<[PriceSeries]> = .idle
 
     /// Monotonically increasing token used to discard stale `load()` results when
     /// rapid timeframe changes spawn overlapping unstructured Tasks (see `didSet` above).
-    /// Only the most recently started `load()` call is allowed to write `series`.
+    /// Only the most recently started `load()` call is allowed to write `state`.
     private var loadGeneration = 0
 
     public init(event: Event, provider: PriceHistoryProvider) {
@@ -28,19 +29,39 @@ public final class EventChartViewModel {
     public func load() async {
         loadGeneration += 1
         let generation = loadGeneration
+        state = .loading
         let interval = timeframe.interval
-        var built: [PriceSeries] = []
-        for (index, market) in topMarkets.enumerated() {
-            guard let yes = market.yesOutcome else { continue }
-            let history = await provider(yes.id, interval)
-            let points = history.map { PricePoint(date: $0.date, price: NSDecimalNumber(decimal: $0.price).doubleValue) }
-            let fallback = points.isEmpty
-                ? [PricePoint(date: Date(), price: NSDecimalNumber(decimal: yes.price).doubleValue)]
-                : points
-            built.append(PriceSeries(id: market.id, label: market.question,
-                                     color: OutcomePalette.color(index), points: fallback))
+        let markets = topMarkets
+        let provider = provider
+
+        do {
+            let built = try await withThrowingTaskGroup(of: (Int, PriceSeries).self) { group in
+                for (index, market) in markets.enumerated() {
+                    guard let yes = market.yesOutcome else { continue }
+                    group.addTask {
+                        let history = try await provider(yes.id, interval)
+                        let points = history.map { PricePoint(date: $0.date, price: NSDecimalNumber(decimal: $0.price).doubleValue) }
+                        let fallback = points.isEmpty
+                            ? [PricePoint(date: Date(), price: NSDecimalNumber(decimal: yes.price).doubleValue)]
+                            : points
+                        return (index, PriceSeries(id: market.id, label: market.question,
+                                                   color: OutcomePalette.color(index), points: fallback))
+                    }
+                }
+                var results: [(Int, PriceSeries)] = []
+                for try await item in group { results.append(item) }
+                return results.sorted { $0.0 < $1.0 }.map(\.1)
+            }
+            guard generation == loadGeneration else { return }
+            state = built.isEmpty ? .empty : .loaded(built)
+        } catch {
+            guard generation == loadGeneration else { return }
+            state = .failed(message: error.localizedDescription)
         }
-        guard generation == loadGeneration else { return }
-        series = built
+    }
+
+    /// Re-runs `load()` with the current `timeframe`, e.g. after a `.failed` state.
+    public func retry() async {
+        await load()
     }
 }

@@ -4,12 +4,12 @@ import OrderbookDomain
 /// App-provided async fetch of price history for one asset id, so feature screens can
 /// build charts without importing the Data layer or opening a websocket.
 public struct PriceHistoryProvider: Sendable {
-    private let fetch: @Sendable (String, PriceHistoryInterval) async -> [PriceHistoryPoint]
-    public init(_ fetch: @escaping @Sendable (String, PriceHistoryInterval) async -> [PriceHistoryPoint]) {
+    private let fetch: @Sendable (String, PriceHistoryInterval) async throws -> [PriceHistoryPoint]
+    public init(_ fetch: @escaping @Sendable (String, PriceHistoryInterval) async throws -> [PriceHistoryPoint]) {
         self.fetch = fetch
     }
-    public func callAsFunction(_ assetID: String, _ interval: PriceHistoryInterval) async -> [PriceHistoryPoint] {
-        await fetch(assetID, interval)
+    public func callAsFunction(_ assetID: String, _ interval: PriceHistoryInterval) async throws -> [PriceHistoryPoint] {
+        try await fetch(assetID, interval)
     }
 }
 

@@ -40,7 +40,7 @@ let package = Package(
         ),
         .target(
             name: "MarketsPresentation",
-            dependencies: ["MarketsDomain", "DesignSystem", "OrderbookPresentation", "OrderbookDomain"],
+            dependencies: ["MarketsDomain", "DesignSystem", "OrderbookPresentation", "OrderbookDomain", "SharedDomain"],
             path: "Features/Markets/MarketsPresentation/Sources"
         ),
 
@@ -101,7 +101,7 @@ let package = Package(
             dependencies: ["MarketsData", "MarketsDomain", "Networking"]
         ),
         .testTarget(name: "MarketsPresentationTests",
-                    dependencies: ["MarketsPresentation", "OrderbookDomain", "OrderbookPresentation"],
+                    dependencies: ["MarketsPresentation", "OrderbookDomain", "OrderbookPresentation", "SharedDomain"],
                     path: "Tests/MarketsPresentationTests"),
         .testTarget(name: "OrderbookDomainTests", dependencies: ["OrderbookDomain"]),
         .testTarget(
