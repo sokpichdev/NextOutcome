@@ -194,7 +194,7 @@ private struct PositionsEmptyState: View {
             Text("No positions to show")
                 .font(DSFont.subheadline.bold())
                 .foregroundStyle(DSColor.textPrimary)
-            Text("Portfolio data arrives in a later release of NextOutcome.")
+            Text("Sign-in and funding arrive in a later release of NextOutcome.")
                 .font(DSFont.caption)
                 .foregroundStyle(DSColor.textSecondary)
         }
