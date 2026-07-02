@@ -46,7 +46,9 @@ public struct EventDetailView: View {
     private let onSelect: (Market, Side) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.priceHistoryProvider) private var priceHistoryProvider
+    @Environment(\.socialStripFactory) private var socialStripFactory
     @State private var chart: EventChartViewModel?
+    @State private var socialStrip: SocialStripViewModel?
     @State private var timeframe: ChartTimeframe = .max
     @State private var segmentSelection = 0
     @State private var showsStickyHeader = false
@@ -109,7 +111,7 @@ public struct EventDetailView: View {
                     }
 
                     RulesExpander(eventDescription: event.description, marketRules: marketRules)
-                    socialStripPlaceholder
+                    socialStripSection
                 }
                 .padding(.horizontal, DSLayout.margin)
                 .padding(.top, DSLayout.spacing)
@@ -124,6 +126,10 @@ public struct EventDetailView: View {
                 let vm = EventChartViewModel(event: event, provider: provider)
                 chart = vm
                 await vm.load()
+            }
+            .task(id: event.id) {
+                guard let factory = socialStripFactory else { return }
+                socialStrip = factory(eventID: event.id, conditionId: topMarket?.conditionId)
             }
             .onChange(of: timeframe) { _, new in chart?.timeframe = new }
             .onPreferenceChange(HeroScrollOffsetKey.self) { offset in
@@ -205,10 +211,10 @@ public struct EventDetailView: View {
         .padding(.vertical, DSLayout.spacingLarge)
     }
 
-    private var socialStripPlaceholder: some View {
-        VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
-            Text("Comments").font(DSFont.subheadline.bold()).foregroundStyle(DSColor.textPrimary)
-            Text("Comments are coming soon.").font(DSFont.caption).foregroundStyle(DSColor.textSecondary)
+    @ViewBuilder
+    private var socialStripSection: some View {
+        if let socialStrip {
+            SocialStripView(viewModel: socialStrip)
         }
     }
 

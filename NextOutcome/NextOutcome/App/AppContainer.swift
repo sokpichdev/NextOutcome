@@ -76,6 +76,19 @@ final class AppContainer {
         }
     }
 
+    /// Factory for the Event Detail social strip (Comments · Top Holders · Positions · Activity).
+    func makeSocialStripFactory() -> SocialStripViewModelFactory {
+        SocialStripViewModelFactory { [repository] eventID, conditionId in
+            SocialStripViewModel(
+                eventID: eventID,
+                conditionId: conditionId,
+                fetchComments: FetchCommentsUseCase(repository: repository),
+                fetchHolders: FetchHoldersUseCase(repository: repository),
+                fetchActivity: FetchActivityTradesUseCase(repository: repository)
+            )
+        }
+    }
+
     /// Provider injected into the environment so feature screens can build price-history
     /// charts without importing the Data layer.
     func makePriceHistoryProvider() -> PriceHistoryProvider {
