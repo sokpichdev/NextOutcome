@@ -75,4 +75,13 @@ final class AppContainer {
             HoldersViewModel(conditionId: conditionId, fetchHolders: FetchHoldersUseCase(repository: repository))
         }
     }
+
+    /// Provider injected into the environment so feature screens can build price-history
+    /// charts without importing the Data layer.
+    func makePriceHistoryProvider() -> PriceHistoryProvider {
+        let useCase = FetchPriceHistoryUseCase(repository: orderbookRepository)
+        return PriceHistoryProvider { assetID, interval in
+            (try? await useCase.execute(assetID: assetID, interval: interval)) ?? []
+        }
+    }
 }
