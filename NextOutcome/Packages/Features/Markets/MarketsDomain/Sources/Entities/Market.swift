@@ -23,6 +23,8 @@ public struct Market: Identifiable, Hashable {
     public let sportsMarketType: String?
     /// Sports sub-label from Gamma, e.g. a team name or "Both Teams to Score". Absent for non-sports markets.
     public let groupItemTitle: String?
+    /// Full resolution-criteria text from Gamma's per-market `description`, shown in the Rules expander.
+    public let rules: String?
 
     public init(
         id: String,
@@ -36,7 +38,8 @@ public struct Market: Identifiable, Hashable {
         isResolved: Bool,
         imageURL: URL?,
         sportsMarketType: String? = nil,
-        groupItemTitle: String? = nil
+        groupItemTitle: String? = nil,
+        rules: String? = nil
     ) {
         self.id = id
         self.conditionId = conditionId
@@ -50,6 +53,7 @@ public struct Market: Identifiable, Hashable {
         self.imageURL = imageURL
         self.sportsMarketType = sportsMarketType
         self.groupItemTitle = groupItemTitle
+        self.rules = rules
     }
     public var yesOutcome: Outcome? { outcomes.first { $0.title == "Yes" } }
     public var noOutcome: Outcome? { outcomes.first { $0.title == "No" } }
