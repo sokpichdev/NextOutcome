@@ -198,7 +198,7 @@ public struct EventDetailView: View {
     @ViewBuilder
     private var marketGroupSections: some View {
         ForEach(groups, id: \.group) { entry in
-            MarketGroupSection(group: entry.group, markets: entry.markets, onSelect: onSelect)
+            MarketGroupSection(group: entry.group, markets: entry.markets, eventID: event.id, onSelect: onSelect)
         }
     }
 

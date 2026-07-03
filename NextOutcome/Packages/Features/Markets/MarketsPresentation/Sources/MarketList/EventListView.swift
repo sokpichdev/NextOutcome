@@ -25,7 +25,9 @@ public struct EventListView: View {
         }
         .background(DSColor.background)
         .navigationDestination(for: Event.self) { EventDetailView(event: $0) }
-        .navigationDestination(for: Market.self) { MarketDetailView(market: $0) }
+        .navigationDestination(for: MarketNavigationTarget.self) {
+            MarketDetailView(market: $0.market, eventID: $0.eventID)
+        }
         .task { if case .idle = viewModel.state { await viewModel.load() } }
         .onChange(of: selectedCategory) { _, new in Task { await viewModel.apply(category: new) } }
     }

@@ -16,11 +16,13 @@ public enum Side {
 public struct MarketGroupSection: View {
     private let group: MarketGroup
     private let markets: [Market]
+    private let eventID: String
     private let onSelect: (Market, Side) -> Void
 
-    public init(group: MarketGroup, markets: [Market], onSelect: @escaping (Market, Side) -> Void = { _, _ in }) {
+    public init(group: MarketGroup, markets: [Market], eventID: String, onSelect: @escaping (Market, Side) -> Void = { _, _ in }) {
         self.group = group
         self.markets = markets
+        self.eventID = eventID
         self.onSelect = onSelect
     }
 
@@ -43,7 +45,7 @@ public struct MarketGroupSection: View {
     @ViewBuilder
     private func row(for market: Market) -> some View {
         VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
-            NavigationLink(value: market) {
+            NavigationLink(value: MarketNavigationTarget(market: market, eventID: eventID)) {
                 HStack {
                     Text(rowTitle(market))
                         .font(DSFont.subheadline)
@@ -98,7 +100,8 @@ private func _mkt(_ groupTitle: String, _ yes: Double, sportsType: String) -> Ma
             MarketGroupSection(
                 group: .moneyline,
                 markets: [_mkt("Argentina", 0.86, sportsType: "moneyline"),
-                          _mkt("Cabo Verde", 0.043, sportsType: "moneyline")]
+                          _mkt("Cabo Verde", 0.043, sportsType: "moneyline")],
+                eventID: "preview-event"
             )
             .padding()
         }

@@ -19,7 +19,7 @@ public struct MultiOutcomeCard: View {
                     Spacer()
                 }
                 ForEach(topMarkets) { market in
-                    NavigationLink(value: market) {
+                    NavigationLink(value: MarketNavigationTarget(market: market, eventID: event.id)) {
                         HStack {
                             Text(market.question).font(DSFont.subheadline)
                                 .foregroundStyle(DSColor.textPrimary).lineLimit(1)

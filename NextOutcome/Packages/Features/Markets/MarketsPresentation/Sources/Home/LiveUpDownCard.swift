@@ -12,6 +12,9 @@ public struct LiveUpDownCard: View {
     public init(event: Event) { self.event = event }
 
     private var market: Market? { event.markets.first }
+    private var navigationTarget: MarketNavigationTarget? {
+        market.map { MarketNavigationTarget(market: $0, eventID: event.id) }
+    }
     private var upOutcome: Outcome? {
         market?.outcomes.first { $0.title.lowercased() == "up" }
     }
@@ -26,9 +29,9 @@ public struct LiveUpDownCard: View {
                             .foregroundStyle(DSColor.textPrimary).lineLimit(1)
                     }
                     HStack {
-                        NavigationLink(value: market) { Text("Up").frame(maxWidth: .infinity) }
+                        NavigationLink(value: navigationTarget) { Text("Up").frame(maxWidth: .infinity) }
                             .buttonStyle(DSBuyYesButtonStyle())
-                        NavigationLink(value: market) { Text("Down").frame(maxWidth: .infinity) }
+                        NavigationLink(value: navigationTarget) { Text("Down").frame(maxWidth: .infinity) }
                             .buttonStyle(DSBuyNoButtonStyle())
                     }
                     Label("LIVE · Bitcoin", systemImage: "circle.fill")

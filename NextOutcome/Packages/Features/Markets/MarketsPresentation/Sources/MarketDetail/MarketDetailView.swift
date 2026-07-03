@@ -10,6 +10,19 @@ import MarketsDomain
 import DesignSystem
 import OrderbookPresentation
 
+/// Pushed as a `NavigationLink(value:)` target instead of a bare `Market` wherever the
+/// pushing view has a parent `Event` in scope, so `MarketDetailView` can thread the real
+/// event id down to `SocialStripView` (Gamma scopes `/comments` per-event, not per-market).
+public struct MarketNavigationTarget: Hashable {
+    public let market: Market
+    public let eventID: String
+
+    public init(market: Market, eventID: String) {
+        self.market = market
+        self.eventID = eventID
+    }
+}
+
 public struct MarketDetailView: View {
     @Environment(\.marketLiveFactory) private var marketLiveFactory
     @Environment(\.orderbookFactory) private var orderbookFactory
@@ -17,9 +30,14 @@ public struct MarketDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var portfolioSegment = 0
     private let market: Market
+    /// The parent event's id, used to scope the Comments strip. `nil` when this screen was
+    /// reached from a flow with no event context (Search results are flat markets with no
+    /// parent event attached) — the comments strip is hidden rather than sending a wrong id.
+    private let eventID: String?
 
-    public init(market: Market) {
+    public init(market: Market, eventID: String? = nil) {
         self.market = market
+        self.eventID = eventID
     }
 
     public var body: some View {
@@ -120,14 +138,13 @@ public struct MarketDetailView: View {
         }
     }
 
-    /// Comments · Top holders strip, reused from Task 5's Event Detail. Market Detail
-    /// has no parent event id of its own, so the market's own id stands in as the
-    /// comments-thread key (Gamma scopes comments per-event; single-market screens
-    /// have no separate event id to pass).
+    /// Comments · Top holders strip, reused from Task 5's Event Detail. Requires the real
+    /// parent event id (Gamma scopes `/comments` per-event); hidden entirely when this
+    /// screen has no event in scope rather than fetching comments under the wrong id.
     @ViewBuilder
     private var socialStripSection: some View {
-        if let factory = socialStripFactory {
-            SocialStripView(viewModel: factory(eventID: market.id, conditionId: market.conditionId))
+        if let factory = socialStripFactory, let eventID {
+            SocialStripView(viewModel: factory(eventID: eventID, conditionId: market.conditionId))
         }
     }
 
