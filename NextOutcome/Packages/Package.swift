@@ -46,7 +46,7 @@ let package = Package(
             // TradingDomain (mock trade sheet + simulated submitter only) is the one
             // Trading target the read-only app links; TradingData's real wallet-signing
             // and proxy gateway stay quarantined until Task D.
-            dependencies: ["MarketsDomain", "DesignSystem", "OrderbookPresentation", "OrderbookDomain", "SharedDomain", "TradingDomain"],
+            dependencies: ["MarketsDomain", "DesignSystem", "OrderbookPresentation", "OrderbookDomain", "SharedDomain", "TradingDomain", "LiveStatsPresentation", "LiveStatsDomain"],
             path: "Features/Markets/MarketsPresentation/Sources"
         ),
 
@@ -150,6 +150,11 @@ let package = Package(
         .testTarget(
             name: "LiveStatsDataTests",
             dependencies: ["LiveStatsData", "LiveStatsDomain", "Networking"]
+        ),
+        .testTarget(
+            name: "LiveStatsPresentationTests",
+            dependencies: ["LiveStatsPresentation", "LiveStatsDomain", "DesignSystem", "SharedDomain"],
+            path: "Tests/LiveStatsPresentationTests"
         ),
     ]
 )

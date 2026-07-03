@@ -9,6 +9,7 @@ import SwiftUI
 import MarketsDomain
 import DesignSystem
 import OrderbookPresentation
+import LiveStatsPresentation
 
 /// Pure helper for deriving the sticky-header's paired team abbreviations from an event's
 /// moneyline markets, so pairing survives non-alternating market ordering.
@@ -103,7 +104,7 @@ public struct EventDetailView: View {
                     }
 
                     if showsLive && segmentSelection == 1 {
-                        liveTabPlaceholder
+                        LiveTabView(gameID: event.id)
                     } else {
                         chartBlock
                             .background(heroOffsetReader)
@@ -214,15 +215,6 @@ public struct EventDetailView: View {
         ForEach(groups, id: \.group) { entry in
             MarketGroupSection(group: entry.group, markets: entry.markets, eventID: event.id, onSelect: presentTrade)
         }
-    }
-
-    private var liveTabPlaceholder: some View {
-        VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
-            Text("Live stats").font(DSFont.subheadline.bold()).foregroundStyle(DSColor.textPrimary)
-            Text("Live match stats are coming soon.").font(DSFont.caption).foregroundStyle(DSColor.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, DSLayout.spacingLarge)
     }
 
     @ViewBuilder
