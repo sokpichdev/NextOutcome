@@ -13,6 +13,8 @@ import MarketsPresentation
 import OrderbookData
 import OrderbookDomain
 import OrderbookPresentation
+import LiveStatsData
+import LiveStatsDomain
 import PortfolioData
 import PortfolioDomain
 import PortfolioPresentation
@@ -120,6 +122,12 @@ final class AppContainer {
     /// with zero UI changes.
     func makeTradeSubmitter() -> TradeSubmitting {
         SimulatedTradeSubmitter()
+    }
+
+    /// Live sports-stats streamer injected into the environment so the Live sub-tab can
+    /// subscribe without importing the Data layer.
+    func makeSportsStreamer() -> any SportsStateStreaming {
+        SportsSocket()
     }
 
     /// Provider injected into the environment so feature screens can build price-history

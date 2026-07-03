@@ -9,6 +9,8 @@ import SwiftUI
 import DesignSystem
 import MarketsPresentation
 import OrderbookPresentation
+import LiveStatsDomain
+import LiveStatsPresentation
 import PortfolioPresentation
 import TradingDomain
 
@@ -26,6 +28,7 @@ struct RootView: View {
     private let priceHistoryProvider: PriceHistoryProvider
     private let btcLiveFactory: BTCLiveViewModelFactory
     private let tradeSubmitter: TradeSubmitting
+    private let sportsStreamer: any SportsStateStreaming
 
     @State private var selectedCategory: ShellCategory = .trending
     @State private var isDrawerOpen = false
@@ -46,6 +49,7 @@ struct RootView: View {
         priceHistoryProvider = container.makePriceHistoryProvider()
         btcLiveFactory = container.makeBTCLiveFactory()
         tradeSubmitter = container.makeTradeSubmitter()
+        sportsStreamer = container.makeSportsStreamer()
     }
 
     var body: some View {
@@ -62,6 +66,7 @@ struct RootView: View {
         .environment(\.priceHistoryProvider, priceHistoryProvider)
         .environment(\.btcLiveFactory, btcLiveFactory)
         .environment(\.tradeSubmitter, tradeSubmitter)
+        .environment(\.sportsStreamer, sportsStreamer)
     }
 
     private var tabs: some View {
