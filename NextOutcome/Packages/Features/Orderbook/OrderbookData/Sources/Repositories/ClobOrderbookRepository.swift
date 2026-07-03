@@ -34,4 +34,21 @@ public struct ClobOrderbookRepository: OrderbookRepository {
         let dto: PriceHistoryDTO = try await client.fetch(endpoint)
         return OrderbookMapper.priceHistory(from: dto)
     }
+
+    public func serverTime() async throws -> Date {
+        // CLOB `GET /time` returns a bare epoch-seconds integer (e.g. `1783008640`).
+        let endpoint = Endpoint(host: .clob, path: "/time")
+        let epoch: Double = try await client.fetch(endpoint)
+        return Date(timeIntervalSince1970: epoch)
+    }
+
+    public func recentTrades(eventID: String, limit: Int) async throws -> [RecentTrade] {
+        let endpoint = Endpoint(
+            host: .data,
+            path: "/trades",
+            query: ["eventId": eventID, "limit": String(limit), "offset": "0"]
+        )
+        let dtos: [TradeDTO] = try await client.fetch(endpoint)
+        return OrderbookMapper.recentTrades(from: dtos)
+    }
 }

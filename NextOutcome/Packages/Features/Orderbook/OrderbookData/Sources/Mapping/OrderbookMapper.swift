@@ -28,6 +28,23 @@ enum OrderbookMapper {
         }
     }
 
+    static func recentTrades(from dtos: [TradeDTO]) -> [RecentTrade] {
+        dtos.enumerated().compactMap { index, dto in
+            guard let price = dto.price, let size = dto.size else { return nil }
+            let ts = dto.timestamp ?? 0
+            let id = dto.transactionHash
+                ?? "\(dto.proxyWallet ?? "?")-\(Int(ts))-\(index)"
+            return RecentTrade(
+                id: id,
+                side: dto.side?.uppercased() == "SELL" ? .sell : .buy,
+                price: Decimal(price),
+                size: Decimal(size),
+                outcome: dto.outcome ?? "",
+                timestamp: Date(timeIntervalSince1970: ts)
+            )
+        }
+    }
+
     // MARK: WebSocket → normalized events
 
     static func events(from message: MarketMessageDTO) -> [OrderBookEvent] {
