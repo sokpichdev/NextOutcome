@@ -19,6 +19,7 @@ struct RootView: View {
     @State private var shellViewModel: ShellViewModel
     private let leaderboardViewModel: LeaderboardViewModel
     private let marketLiveFactory: MarketLiveViewModelFactory
+    private let orderbookFactory: OrderbookViewModelFactory
     private let marketHoldersFactory: MarketHoldersViewModelFactory
     private let socialStripFactory: SocialStripViewModelFactory
     private let priceHistoryProvider: PriceHistoryProvider
@@ -36,6 +37,7 @@ struct RootView: View {
         _shellViewModel = State(initialValue: ShellViewModel(portfolio: portfolio))
         leaderboardViewModel = container.makeLeaderboardViewModel()
         marketLiveFactory = container.makeMarketLiveFactory()
+        orderbookFactory = container.makeOrderbookFactory()
         marketHoldersFactory = container.makeMarketHoldersFactory()
         socialStripFactory = container.makeSocialStripFactory()
         priceHistoryProvider = container.makePriceHistoryProvider()
@@ -49,6 +51,7 @@ struct RootView: View {
         .tint(DSColor.accent)
         .animation(.easeInOut(duration: 0.3), value: isDrawerOpen)
         .environment(\.marketLiveFactory, marketLiveFactory)
+        .environment(\.orderbookFactory, orderbookFactory)
         .environment(\.marketHoldersFactory, marketHoldersFactory)
         .environment(\.socialStripFactory, socialStripFactory)
         .environment(\.priceHistoryProvider, priceHistoryProvider)

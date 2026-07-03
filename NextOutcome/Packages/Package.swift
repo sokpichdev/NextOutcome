@@ -57,7 +57,7 @@ let package = Package(
         ),
         .target(
             name: "OrderbookPresentation",
-            dependencies: ["OrderbookDomain", "DesignSystem"],
+            dependencies: ["OrderbookDomain", "DesignSystem", "SharedDomain"],
             path: "Features/Orderbook/OrderbookPresentation/Sources"
         ),
 

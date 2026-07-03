@@ -69,6 +69,14 @@ final class AppContainer {
         }
     }
 
+    /// Factory injected into the environment so Market Detail can build its expandable
+    /// live order book independently of the chart's view model.
+    func makeOrderbookFactory() -> OrderbookViewModelFactory {
+        OrderbookViewModelFactory { [orderbookRepository, marketStream] assetID in
+            OrderbookViewModel(assetID: assetID, repository: orderbookRepository, stream: marketStream)
+        }
+    }
+
     /// Factory for the Market Detail top-holders section.
     func makeMarketHoldersFactory() -> MarketHoldersViewModelFactory {
         MarketHoldersViewModelFactory { [repository] conditionId in
