@@ -27,8 +27,11 @@ public struct MarketDetailView: View {
     @Environment(\.marketLiveFactory) private var marketLiveFactory
     @Environment(\.orderbookFactory) private var orderbookFactory
     @Environment(\.socialStripFactory) private var socialStripFactory
+    @Environment(\.tradeSubmitter) private var tradeSubmitter
     @Environment(\.dismiss) private var dismiss
     @State private var portfolioSegment = 0
+    /// Task 8's mock trade sheet, opened from the Yes/No buttons next to the order book.
+    @State private var tradeContext: TradeSheetContext?
     private let market: Market
     /// The parent event's id, used to scope the Comments strip. `nil` when this screen was
     /// reached from a flow with no event context (Search results are flat markets with no
@@ -49,6 +52,7 @@ public struct MarketDetailView: View {
                     onBack: { dismiss() }
                 )
                 chanceHeader
+                tradeRow
                 liveSection
                 orderbookSection
                 stats
@@ -62,6 +66,28 @@ public struct MarketDetailView: View {
         #if os(iOS)
         .toolbar(.hidden, for: .navigationBar)
         #endif
+        .sheet(item: $tradeContext) { context in
+            TradeSheet(viewModel: TradeSheetViewModel(market: context.market, side: context.side, submitter: tradeSubmitter))
+        }
+    }
+
+    /// Yes/No entry into the mock trade sheet — Task 8's hook next to the order book.
+    @ViewBuilder
+    private var tradeRow: some View {
+        if let yes = market.yesOutcome, let no = market.noOutcome {
+            HStack(spacing: DSLayout.spacingSmall) {
+                PriceButton(title: yes.title, price: cents(yes.price), style: .yes) {
+                    tradeContext = TradeSheetContext(market: market, side: .yes)
+                }
+                PriceButton(title: no.title, price: cents(no.price), style: .no) {
+                    tradeContext = TradeSheetContext(market: market, side: .no)
+                }
+            }
+        }
+    }
+
+    private func cents(_ price: Decimal) -> String {
+        MarketFormatting.percent(price).replacingOccurrences(of: "%", with: "¢")
     }
 
     @ViewBuilder

@@ -40,7 +40,10 @@ let package = Package(
         ),
         .target(
             name: "MarketsPresentation",
-            dependencies: ["MarketsDomain", "DesignSystem", "OrderbookPresentation", "OrderbookDomain", "SharedDomain"],
+            // TradingDomain (mock trade sheet + simulated submitter only) is the one
+            // Trading target the read-only app links; TradingData's real wallet-signing
+            // and proxy gateway stay quarantined until Task D.
+            dependencies: ["MarketsDomain", "DesignSystem", "OrderbookPresentation", "OrderbookDomain", "SharedDomain", "TradingDomain"],
             path: "Features/Markets/MarketsPresentation/Sources"
         ),
 

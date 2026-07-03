@@ -10,6 +10,7 @@ import DesignSystem
 import MarketsPresentation
 import OrderbookPresentation
 import PortfolioPresentation
+import TradingDomain
 
 struct RootView: View {
     @State private var eventListViewModel: EventListViewModel
@@ -24,6 +25,7 @@ struct RootView: View {
     private let socialStripFactory: SocialStripViewModelFactory
     private let priceHistoryProvider: PriceHistoryProvider
     private let btcLiveFactory: BTCLiveViewModelFactory
+    private let tradeSubmitter: TradeSubmitting
 
     @State private var selectedCategory: ShellCategory = .trending
     @State private var isDrawerOpen = false
@@ -43,6 +45,7 @@ struct RootView: View {
         socialStripFactory = container.makeSocialStripFactory()
         priceHistoryProvider = container.makePriceHistoryProvider()
         btcLiveFactory = container.makeBTCLiveFactory()
+        tradeSubmitter = container.makeTradeSubmitter()
     }
 
     var body: some View {
@@ -58,6 +61,7 @@ struct RootView: View {
         .environment(\.socialStripFactory, socialStripFactory)
         .environment(\.priceHistoryProvider, priceHistoryProvider)
         .environment(\.btcLiveFactory, btcLiveFactory)
+        .environment(\.tradeSubmitter, tradeSubmitter)
     }
 
     private var tabs: some View {

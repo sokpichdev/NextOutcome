@@ -16,6 +16,7 @@ import OrderbookPresentation
 import PortfolioData
 import PortfolioDomain
 import PortfolioPresentation
+import TradingDomain
 
 @MainActor
 final class AppContainer {
@@ -112,6 +113,13 @@ final class AppContainer {
                 onQuickBet: onQuickBet
             )
         }
+    }
+
+    /// The mock trade sheet's order-sending dependency. Simulated only — sends nothing,
+    /// persists nothing. Task D swaps this for a real submitter behind `TradeSubmitting`
+    /// with zero UI changes.
+    func makeTradeSubmitter() -> TradeSubmitting {
+        SimulatedTradeSubmitter()
     }
 
     /// Provider injected into the environment so feature screens can build price-history
