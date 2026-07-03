@@ -28,7 +28,10 @@ enum MarketMapper {
             liquidity: dto.liquidity,
             endDate: DateParsing.parse(dto.endDateIso),
             isResolved: dto.closed,
-            imageURL: dto.image.flatMap(URL.init(string:)))
+            imageURL: dto.image.flatMap(URL.init(string:)),
+            sportsMarketType: dto.sportsMarketType,
+            groupItemTitle: dto.groupItemTitle,
+            rules: dto.description)
     }
     
     static func tag(from dto: TagDTO) -> Tag {
@@ -63,6 +66,46 @@ enum MarketMapper {
         return "\(wallet.prefix(6))…\(wallet.suffix(4))"
     }
 
+    static func comments(from dtos: [CommentDTO]) -> [Comment] {
+        dtos.map { dto in
+            Comment(
+                id: dto.id,
+                authorName: commentAuthorName(dto.profile),
+                avatarURL: dto.profile?.profileImage.flatMap { $0.isEmpty ? nil : URL(string: $0) },
+                createdAt: DateParsing.parse(dto.createdAt),
+                body: dto.body
+            )
+        }
+    }
+
+    private static func commentAuthorName(_ profile: CommentProfileDTO?) -> String {
+        if let name = profile?.name, !name.isEmpty { return name }
+        if let pseudonym = profile?.pseudonym, !pseudonym.isEmpty { return pseudonym }
+        return "Anonymous"
+    }
+
+    static func trades(from dtos: [ActivityTradeDTO]) -> [ActivityTrade] {
+        dtos.enumerated().map { index, dto in
+            ActivityTrade(
+                id: dto.transactionHash ?? "trade-\(index)",
+                side: dto.side?.uppercased() == "SELL" ? .sell : .buy,
+                actorName: tradeActorName(dto),
+                outcome: dto.outcome ?? "",
+                size: dto.size,
+                price: dto.price,
+                timestamp: Date(timeIntervalSince1970: dto.timestamp),
+                avatarURL: dto.profileImage.flatMap { $0.isEmpty ? nil : URL(string: $0) }
+            )
+        }
+    }
+
+    private static func tradeActorName(_ dto: ActivityTradeDTO) -> String {
+        if let name = dto.name, !name.isEmpty { return name }
+        if let pseudonym = dto.pseudonym, !pseudonym.isEmpty { return pseudonym }
+        guard let wallet = dto.proxyWallet, wallet.count > 10 else { return dto.proxyWallet ?? "Anonymous" }
+        return "\(wallet.prefix(6))…\(wallet.suffix(4))"
+    }
+
     static func event(from dto: EventDTO) -> Event {
         Event(
             id: dto.id,
@@ -71,7 +114,9 @@ enum MarketMapper {
             markets: dto.markets.map(market(from:)),
             volume: dto.volume,
             imageURL: dto.image.flatMap(URL.init(string:)),
-            tags: dto.tags.map(tag(from:))
+            tags: dto.tags.map(tag(from:)),
+            gameStartTime: DateParsing.parse(dto.gameStartTime),
+            description: dto.description
         )
     }
 }

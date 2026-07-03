@@ -25,10 +25,17 @@ struct MarketDTO: Decodable {
     let endDateIso: String?
     let closed: Bool
     let image: String?
+    /// Sports section hint, e.g. "moneyline" / "spreads" / "totals". Absent for non-sports markets.
+    let sportsMarketType: String?
+    /// Sports sub-label, e.g. a team name or "Both Teams to Score". Absent for non-sports markets.
+    let groupItemTitle: String?
+    /// Resolution-criteria text. Absent for many markets.
+    let description: String?
 
     enum CodingKeys: String, CodingKey {
         case id, conditionId, question, slug, outcomes, outcomePrices, clobTokenIds
         case volume, liquidity, endDateIso, closed, image
+        case sportsMarketType, groupItemTitle, description
     }
 
     init(from decoder: Decoder) throws {
@@ -45,6 +52,9 @@ struct MarketDTO: Decodable {
         endDateIso = try? c.decode(String.self, forKey: .endDateIso)
         closed = (try? c.decode(Bool.self, forKey: .closed)) ?? false
         image = try? c.decode(String.self, forKey: .image)
+        sportsMarketType = try? c.decode(String.self, forKey: .sportsMarketType)
+        groupItemTitle = try? c.decode(String.self, forKey: .groupItemTitle)
+        description = try? c.decode(String.self, forKey: .description)
     }
 }
 
@@ -56,9 +66,13 @@ struct EventDTO: Decodable {
     let volume: Decimal
     let image: String?
     let tags: [TagDTO]
+    /// Kickoff time for sports events. Absent for non-sports events.
+    let gameStartTime: String?
+    /// Event-level context/description. Absent for many events.
+    let description: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, slug, markets, volume, image, tags
+        case id, title, slug, markets, volume, image, tags, gameStartTime, description
     }
 
     init(from decoder: Decoder) throws {
@@ -71,6 +85,8 @@ struct EventDTO: Decodable {
         volume = DTODecoding.decimal(c, .volume)
         image = try? c.decode(String.self, forKey: .image)
         tags = (try? c.decode([TagDTO].self, forKey: .tags)) ?? []
+        gameStartTime = try? c.decode(String.self, forKey: .gameStartTime)
+        description = try? c.decode(String.self, forKey: .description)
     }
 }
 

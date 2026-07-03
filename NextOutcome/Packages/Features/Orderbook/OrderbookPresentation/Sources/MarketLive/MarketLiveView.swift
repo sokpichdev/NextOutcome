@@ -9,7 +9,8 @@ import SwiftUI
 import OrderbookDomain
 import DesignSystem
 
-/// Live orderbook + price-history section embedded in the Market Detail screen.
+/// Price-history section embedded in the Market Detail screen. The order book itself
+/// is `OrderbookView` (expandable, live-updating) rendered separately below this.
 public struct MarketLiveView: View {
     @State private var viewModel: MarketLiveViewModel
 
@@ -18,12 +19,9 @@ public struct MarketLiveView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: DSLayout.spacingLarge) {
-            chartSection
-            bookSection
-        }
-        .onAppear { viewModel.start() }
-        .onDisappear { viewModel.stop() }
+        chartSection
+            .onAppear { viewModel.start() }
+            .onDisappear { viewModel.stop() }
     }
 
     // MARK: Chart
@@ -92,68 +90,9 @@ public struct MarketLiveView: View {
         }
     }
 
-    // MARK: Order book
-
-    @ViewBuilder
-    private var bookSection: some View {
-        DSCard {
-            VStack(alignment: .leading, spacing: DSLayout.spacing) {
-                HStack {
-                    Text("Order book")
-                        .font(DSFont.headline)
-                        .foregroundStyle(DSColor.textPrimary)
-                    Spacer()
-                    if let spread = viewModel.book?.spread {
-                        Text("Spread \(cents(spread))")
-                            .font(DSFont.caption)
-                            .foregroundStyle(DSColor.textSecondary)
-                    }
-                }
-                if let book = viewModel.book, !book.isEmpty {
-                    OrderbookDepthView(
-                        bids: depthLevels(book.bids),
-                        asks: depthLevels(book.asks)
-                    )
-                } else {
-                    Text("Waiting for book…")
-                        .font(DSFont.caption)
-                        .foregroundStyle(DSColor.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.vertical, DSLayout.spacing)
-                }
-            }
-        }
-    }
-
-    private func depthLevels(_ levels: [PriceLevel], limit: Int = 8) -> [DepthLevel] {
-        let shown = Array(levels.prefix(limit))
-        let maxSize = shown.map(\.size).max() ?? 1
-        return shown.map { level in
-            DepthLevel(
-                price: cents(level.price),
-                size: compact(level.size),
-                fraction: fractionValue(maxSize == 0 ? 0 : level.size / maxSize)
-            )
-        }
-    }
-
     // MARK: Formatting (Decimal stays domain-side; Double only here)
 
     private func fractionValue(_ value: Decimal) -> Double {
         min(1, max(0, NSDecimalNumber(decimal: value).doubleValue))
-    }
-
-    private func cents(_ price: Decimal) -> String {
-        let value = NSDecimalNumber(decimal: price * 100).doubleValue
-        return String(format: "%.1f¢", value)
-    }
-
-    private func compact(_ size: Decimal) -> String {
-        let value = NSDecimalNumber(decimal: size).doubleValue
-        switch value {
-        case 1_000_000...: return String(format: "%.1fM", value / 1_000_000)
-        case 1_000...: return String(format: "%.1fK", value / 1_000)
-        default: return String(Int(value.rounded()))
-        }
     }
 }

@@ -21,6 +21,9 @@ public struct SearchView: View {
         content
             .navigationTitle("Search")
             .navigationDestination(for: Market.self) { market in
+                // Search results are flat markets with no parent event attached (Gamma's
+                // market-search endpoint doesn't return one), so there is no real event id
+                // to thread here; MarketDetailView hides its Comments strip in that case.
                 MarketDetailView(market: market)
             }
             .searchable(
@@ -53,7 +56,7 @@ public struct SearchView: View {
             Image(systemName: "magnifyingglass")
                 .font(.largeTitle)
                 .foregroundStyle(DSColor.textSecondary)
-            Text("Search Polymarket markets")
+            Text("Search NextOutcome markets")
                 .font(DSFont.subheadline)
                 .foregroundStyle(DSColor.textSecondary)
         }

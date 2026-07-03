@@ -70,4 +70,52 @@ final class MarketDecodingTests: XCTestCase {
         XCTAssertEqual(dto.outcomePrices, [])
         XCTAssertFalse(dto.closed)
     }
+
+    /// Real market object (id 2718913, "Will Spain win on 2026-07-02?") captured from a live
+    /// Gamma-shaped `/events/slug/fifwc-esp-aut-2026-07-02` response embedded in
+    /// `~/Desktop/scripts/api_map.json` — verifies the new sports fields decode tolerantly.
+    func test_marketDTO_decodesSportsFieldsFromRealGammaMarket() throws {
+        let json = """
+        {
+          "id": "2718913",
+          "conditionId": "0xc5943cca27ce657f519619520b1664829b1209f9a5ef9266be7f2954be1b0260",
+          "question": "Will Spain win on 2026-07-02?",
+          "slug": "fifwc-esp-aut-2026-07-02-esp",
+          "outcomes": ["Yes", "No"],
+          "outcomePrices": ["0.76375", "0.23625"],
+          "active": true,
+          "closed": false,
+          "archived": false,
+          "groupItemTitle": "Spain",
+          "groupItemThreshold": "0",
+          "sportsMarketType": "moneyline",
+          "negRiskSportsMarketType": "home",
+          "image": "https://polymarket-upload.s3.us-east-2.amazonaws.com/soccer ball-bba4025f77.png",
+          "icon": "https://polymarket-upload.s3.us-east-2.amazonaws.com/soccer ball-bba4025f77.png",
+          "clobTokenIds": [
+            "110474601866909537724044216141585040787927916157559633438159999666255694855775",
+            "87195879292900083989013965233465465154610009955293265578539308193346452705988"
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let dto = try JSONDecoder.polymarket.decode(MarketDTO.self, from: json)
+
+        XCTAssertEqual(dto.sportsMarketType, "moneyline")
+        XCTAssertEqual(dto.groupItemTitle, "Spain")
+    }
+
+    func test_marketDTO_sportsFields_toleratesMissingOrMistyped() throws {
+        let missing = #"{"id": "x", "question": "Q", "slug": "q"}"#.data(using: .utf8)!
+        let missingDTO = try JSONDecoder.polymarket.decode(MarketDTO.self, from: missing)
+        XCTAssertNil(missingDTO.sportsMarketType)
+        XCTAssertNil(missingDTO.groupItemTitle)
+
+        // Wrong type (number instead of string) must degrade to nil, never fail the decode.
+        let mistyped = #"{"id": "x", "question": "Q", "slug": "q", "sportsMarketType": 42, "groupItemTitle": false}"#
+            .data(using: .utf8)!
+        let mistypedDTO = try JSONDecoder.polymarket.decode(MarketDTO.self, from: mistyped)
+        XCTAssertNil(mistypedDTO.sportsMarketType)
+        XCTAssertNil(mistypedDTO.groupItemTitle)
+    }
 }

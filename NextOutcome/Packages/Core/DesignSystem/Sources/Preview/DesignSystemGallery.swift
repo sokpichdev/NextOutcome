@@ -91,6 +91,23 @@ import SwiftUI
     return Demo()
 }
 
+#Preview("Detail — header + chart") {
+    VStack(spacing: 16) {
+        DetailHeader(title: .breadcrumb("Sports · World Cup"),
+                     actions: [.bookmark, .link], onBack: {})
+        DetailHeader(title: .text("France", iconURL: nil),
+                     actions: [.code, .bookmark, .link], onBack: {})
+        MultiSeriesChart(series: [
+            PriceSeries(id: "fr", label: "France", color: DSColor.accent,
+                        points: (0..<8).map { PricePoint(date: Date().addingTimeInterval(Double($0) * 3600), price: 0.2 + Double($0) * 0.02) }),
+            PriceSeries(id: "ar", label: "Argentina", color: DSColor.positive,
+                        points: (0..<8).map { PricePoint(date: Date().addingTimeInterval(Double($0) * 3600), price: 0.18 - Double($0) * 0.005) })
+        ]).frame(height: 200)
+    }
+    .padding()
+    .background(DSColor.background)
+}
+
 private extension DesignSystemGallery_Previews {
     static var sampleData: [PricePoint] {
         (0..<30).map { i in

@@ -53,7 +53,7 @@ public struct PortfolioView: View {
             Text("Watch a wallet")
                 .font(DSFont.headline)
                 .foregroundStyle(DSColor.textPrimary)
-            Text("Enter any Polymarket wallet address to track its positions and PnL. Read-only.")
+            Text("Enter any NextOutcome wallet address to track its positions and PnL. Read-only.")
                 .font(DSFont.subheadline)
                 .foregroundStyle(DSColor.textSecondary)
                 .multilineTextAlignment(.center)

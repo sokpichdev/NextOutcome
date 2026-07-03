@@ -25,7 +25,9 @@ public struct EventListView: View {
         }
         .background(DSColor.background)
         .navigationDestination(for: Event.self) { EventDetailView(event: $0) }
-        .navigationDestination(for: Market.self) { MarketDetailView(market: $0) }
+        .navigationDestination(for: MarketNavigationTarget.self) {
+            MarketDetailView(market: $0.market, eventID: $0.eventID)
+        }
         .task { if case .idle = viewModel.state { await viewModel.load() } }
         .onChange(of: selectedCategory) { _, new in Task { await viewModel.apply(category: new) } }
     }
@@ -44,8 +46,11 @@ public struct EventListView: View {
         ScrollView {
             LazyVStack(spacing: DSLayout.spacing) {
                 ForEach(viewModel.visibleEvents) { event in
-                    HomeCard(event: event, kindOverride: heroID == event.id ? .hero : nil)
-                        .onAppear { Task { if event.id == viewModel.visibleEvents.last?.id { await viewModel.loadMore() } } }
+                    NavigationLink(value: event) {
+                        HomeCard(event: event, kindOverride: heroID == event.id ? .hero : nil)
+                    }
+                    .buttonStyle(.plain)
+                    .onAppear { Task { if event.id == viewModel.visibleEvents.last?.id { await viewModel.loadMore() } } }
                 }
             }
             .padding(.horizontal, DSLayout.margin)

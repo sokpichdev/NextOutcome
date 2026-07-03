@@ -52,7 +52,26 @@ public final class EventListViewModel {
         return hideSports ? events.filter { !HomeCardKind.isSports($0) } : events
     }
 
-    /// Map a shell category to a Gamma tag id using the loaded tag list. `nil` = no filter.
+    /// Stable Gamma tag ids for the top-level category rail. `nil` = no filter (Trending).
+    ///
+    /// The app fetches the carousel-tags endpoint (`/tags?is_carousel=true`) for the filter
+    /// row, but that returns almost nothing, so resolving a category against that list left
+    /// every chip mapping to `nil` and silently no-op'ing. These ids are resolved directly and
+    /// were verified against `gamma /tags/slug/<slug>` (world-cup=519, breaking-news=198,
+    /// politics=2, sports=1).
+    public static func tagID(for category: ShellCategory) -> String? {
+        switch category {
+        case .trending: return nil
+        case .worldCup: return "519"
+        case .breaking: return "198"
+        case .politics: return "2"
+        case .sports:   return "1"
+        }
+    }
+
+    /// Map a shell category to a Gamma tag id using a loaded tag list (slug/label match).
+    /// Retained as a fallback for when a live tag list is available; the rail resolves via
+    /// the stable-id overload above.
     public static func tagID(for category: ShellCategory, in tags: [Tag]) -> String? {
         let wanted: Set<String>
         switch category {
@@ -66,8 +85,7 @@ public final class EventListViewModel {
     }
 
     public func apply(category: ShellCategory) async {
-        let id = Self.tagID(for: category, in: tags)
-        await select(tagID: id)
+        await select(tagID: Self.tagID(for: category))
     }
 
     public func setSort(_ newSort: MarketSort) async {

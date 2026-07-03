@@ -10,31 +10,96 @@ import MarketsDomain
 import DesignSystem
 import OrderbookPresentation
 
+/// Pushed as a `NavigationLink(value:)` target instead of a bare `Market` wherever the
+/// pushing view has a parent `Event` in scope, so `MarketDetailView` can thread the real
+/// event id down to `SocialStripView` (Gamma scopes `/comments` per-event, not per-market).
+public struct MarketNavigationTarget: Hashable {
+    public let market: Market
+    public let eventID: String
+
+    public init(market: Market, eventID: String) {
+        self.market = market
+        self.eventID = eventID
+    }
+}
+
 public struct MarketDetailView: View {
     @Environment(\.marketLiveFactory) private var marketLiveFactory
-    @Environment(\.marketHoldersFactory) private var marketHoldersFactory
+    @Environment(\.orderbookFactory) private var orderbookFactory
+    @Environment(\.socialStripFactory) private var socialStripFactory
+    @Environment(\.tradeSubmitter) private var tradeSubmitter
+    @Environment(\.dismiss) private var dismiss
+    @State private var portfolioSegment = 0
+    /// Task 8's mock trade sheet, opened from the Yes/No buttons next to the order book.
+    @State private var tradeContext: TradeSheetContext?
     private let market: Market
+    /// The parent event's id, used to scope the Comments strip. `nil` when this screen was
+    /// reached from a flow with no event context (Search results are flat markets with no
+    /// parent event attached) — the comments strip is hidden rather than sending a wrong id.
+    private let eventID: String?
 
-    public init(market: Market) {
+    public init(market: Market, eventID: String? = nil) {
         self.market = market
+        self.eventID = eventID
     }
 
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSLayout.spacingLarge) {
-                priceHeader
+                DetailHeader(
+                    title: .text(market.question, iconURL: market.imageURL),
+                    actions: [.code, .bookmark, .link],
+                    onBack: { dismiss() }
+                )
+                chanceHeader
+                tradeRow
                 liveSection
+                orderbookSection
                 stats
-                holdersSection
+                portfolioSection
+                socialStripSection
             }
             .padding(.horizontal, DSLayout.margin)
             .padding(.top, DSLayout.spacing)
         }
         .background(DSColor.background)
-        .navigationTitle(market.question)
         #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         #endif
+        .sheet(item: $tradeContext) { context in
+            TradeSheet(viewModel: TradeSheetViewModel(market: context.market, side: context.side, submitter: tradeSubmitter))
+        }
+    }
+
+    /// Yes/No entry into the mock trade sheet — Task 8's hook next to the order book.
+    @ViewBuilder
+    private var tradeRow: some View {
+        if let yes = market.yesOutcome, let no = market.noOutcome {
+            HStack(spacing: DSLayout.spacingSmall) {
+                PriceButton(title: yes.title, price: cents(yes.price), style: .yes) {
+                    tradeContext = TradeSheetContext(market: market, side: .yes)
+                }
+                PriceButton(title: no.title, price: cents(no.price), style: .no) {
+                    tradeContext = TradeSheetContext(market: market, side: .no)
+                }
+            }
+        }
+    }
+
+    private func cents(_ price: Decimal) -> String {
+        MarketFormatting.percent(price).replacingOccurrences(of: "%", with: "¢")
+    }
+
+    @ViewBuilder
+    private var chanceHeader: some View {
+        if let yes = market.yesOutcome {
+            ChanceHeader(chanceFraction: yes.price, deltaPoints: nil,
+                         leadingColor: DSColor.positive)
+        } else {
+            Text("Outcomes unavailable")
+                .font(DSFont.subheadline)
+                .foregroundStyle(DSColor.textSecondary)
+        }
     }
 
     /// Live orderbook + price chart, driven by the Yes token id. Rendered only
@@ -49,44 +114,63 @@ public struct MarketDetailView: View {
         }
     }
 
-    /// Top holders, loaded via the injected factory when the market has a condition id.
+    /// Expandable live order book, driven by the Yes token id. Rendered below the
+    /// price chart, independently of `MarketLiveView`'s own view model.
     @ViewBuilder
-    private var holdersSection: some View {
-        if let factory = marketHoldersFactory, !market.conditionId.isEmpty {
-            HoldersSection(viewModel: factory(market.conditionId))
+    private var orderbookSection: some View {
+        if !market.isResolved,
+           let factory = orderbookFactory,
+           let assetID = market.yesOutcome?.id, !assetID.isEmpty {
+            OrderbookView(viewModel: factory(assetID))
         }
     }
 
-    @ViewBuilder
-    private var priceHeader: some View {
-        if let yes = market.yesOutcome {
-            DSCard(highlighted: true) {
-                VStack(alignment: .leading, spacing: DSLayout.spacing) {
-                    HStack(spacing: DSLayout.spacingLarge) {
-                        priceColumn("Yes", MarketFormatting.percent(yes.price), DSColor.positive)
-                        priceColumn("No", MarketFormatting.percent(yes.complement), DSColor.negative)
-                        Spacer()
-                    }
-                    ProbabilityBar(yesFraction: MarketFormatting.fraction(yes.price))
-                }
-            }
-        } else {
-            DSCard {
-                Text("Outcomes unavailable")
-                    .font(DSFont.subheadline)
-                    .foregroundStyle(DSColor.textSecondary)
+    /// Positions / Open Orders / History — static empty states until sub-project D
+    /// wires real portfolio data into Market Detail.
+    private var portfolioSection: some View {
+        DSCard {
+            VStack(alignment: .leading, spacing: DSLayout.spacing) {
+                SegmentToggle(
+                    segments: [
+                        .init(title: "Positions"),
+                        .init(title: "Open Orders"),
+                        .init(title: "History")
+                    ],
+                    selection: $portfolioSegment
+                )
+                portfolioEmptyState
             }
         }
     }
 
-    private func priceColumn(_ title: String, _ value: String, _ color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
+    private var portfolioEmptyState: some View {
+        VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
+            Text(portfolioEmptyTitle)
+                .font(DSFont.subheadline.bold())
+                .foregroundStyle(DSColor.textPrimary)
+            Text("Your \(portfolioEmptyTitle.lowercased()) appear here once funding arrives")
                 .font(DSFont.caption)
                 .foregroundStyle(DSColor.textSecondary)
-            Text(value)
-                .font(DSFont.price)
-                .foregroundStyle(color)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, DSLayout.spacingLarge)
+    }
+
+    private var portfolioEmptyTitle: String {
+        switch portfolioSegment {
+        case 1: return "Open orders"
+        case 2: return "History"
+        default: return "Positions"
+        }
+    }
+
+    /// Comments · Top holders strip, reused from Task 5's Event Detail. Requires the real
+    /// parent event id (Gamma scopes `/comments` per-event); hidden entirely when this
+    /// screen has no event in scope rather than fetching comments under the wrong id.
+    @ViewBuilder
+    private var socialStripSection: some View {
+        if let factory = socialStripFactory, let eventID {
+            SocialStripView(viewModel: factory(eventID: eventID, conditionId: market.conditionId))
         }
     }
 
