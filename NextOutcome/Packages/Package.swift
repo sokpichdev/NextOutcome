@@ -20,6 +20,9 @@ let package = Package(
         // Trading — isolated, quarantined. The read-only app never links these.
         .library(name: "TradingDomain",          targets: ["TradingDomain"]),
         .library(name: "TradingData",            targets: ["TradingData"]),
+        .library(name: "LiveStatsDomain",        targets: ["LiveStatsDomain"]),
+        .library(name: "LiveStatsData",          targets: ["LiveStatsData"]),
+        .library(name: "LiveStatsPresentation",  targets: ["LiveStatsPresentation"]),
     ],
     targets: [
         // Core
@@ -93,6 +96,23 @@ let package = Package(
             path: "Features/Trading/TradingData/Sources"
         ),
 
+        // LiveStats feature (sports live stats; undocumented feed, isolated slice)
+        .target(
+            name: "LiveStatsDomain",
+            dependencies: [],
+            path: "Features/LiveStats/LiveStatsDomain/Sources"
+        ),
+        .target(
+            name: "LiveStatsData",
+            dependencies: ["LiveStatsDomain", "Networking"],
+            path: "Features/LiveStats/LiveStatsData/Sources"
+        ),
+        .target(
+            name: "LiveStatsPresentation",
+            dependencies: ["LiveStatsDomain", "DesignSystem", "SharedDomain"],
+            path: "Features/LiveStats/LiveStatsPresentation/Sources"
+        ),
+
         // Tests
         .testTarget(name: "DesignSystemTests",
                     dependencies: ["DesignSystem"],
@@ -125,6 +145,11 @@ let package = Package(
         .testTarget(
             name: "TradingDataTests",
             dependencies: ["TradingData", "TradingDomain", "Networking"]
+        ),
+        .testTarget(name: "LiveStatsDomainTests", dependencies: ["LiveStatsDomain"]),
+        .testTarget(
+            name: "LiveStatsDataTests",
+            dependencies: ["LiveStatsData", "LiveStatsDomain", "Networking"]
         ),
     ]
 )
