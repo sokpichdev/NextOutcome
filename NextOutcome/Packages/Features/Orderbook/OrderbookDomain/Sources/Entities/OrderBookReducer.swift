@@ -47,6 +47,10 @@ public enum OrderBookReducer {
                 assetID: book.assetID, bids: book.bids, asks: book.asks,
                 lastTradePrice: book.lastTradePrice, tickSize: size
             )
+
+        case .connectionState:
+            // No book data — connection lifecycle is observed separately.
+            return book
         }
     }
 

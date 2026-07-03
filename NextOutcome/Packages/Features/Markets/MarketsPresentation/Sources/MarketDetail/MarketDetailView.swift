@@ -12,8 +12,10 @@ import OrderbookPresentation
 
 public struct MarketDetailView: View {
     @Environment(\.marketLiveFactory) private var marketLiveFactory
-    @Environment(\.marketHoldersFactory) private var marketHoldersFactory
+    @Environment(\.orderbookFactory) private var orderbookFactory
+    @Environment(\.socialStripFactory) private var socialStripFactory
     @Environment(\.dismiss) private var dismiss
+    @State private var portfolioSegment = 0
     private let market: Market
 
     public init(market: Market) {
@@ -30,8 +32,10 @@ public struct MarketDetailView: View {
                 )
                 chanceHeader
                 liveSection
+                orderbookSection
                 stats
-                holdersSection
+                portfolioSection
+                socialStripSection
             }
             .padding(.horizontal, DSLayout.margin)
             .padding(.top, DSLayout.spacing)
@@ -66,11 +70,64 @@ public struct MarketDetailView: View {
         }
     }
 
-    /// Top holders, loaded via the injected factory when the market has a condition id.
+    /// Expandable live order book, driven by the Yes token id. Rendered below the
+    /// price chart, independently of `MarketLiveView`'s own view model.
     @ViewBuilder
-    private var holdersSection: some View {
-        if let factory = marketHoldersFactory, !market.conditionId.isEmpty {
-            HoldersSection(viewModel: factory(market.conditionId))
+    private var orderbookSection: some View {
+        if !market.isResolved,
+           let factory = orderbookFactory,
+           let assetID = market.yesOutcome?.id, !assetID.isEmpty {
+            OrderbookView(viewModel: factory(assetID))
+        }
+    }
+
+    /// Positions / Open Orders / History — static empty states until sub-project D
+    /// wires real portfolio data into Market Detail.
+    private var portfolioSection: some View {
+        DSCard {
+            VStack(alignment: .leading, spacing: DSLayout.spacing) {
+                SegmentToggle(
+                    segments: [
+                        .init(title: "Positions"),
+                        .init(title: "Open Orders"),
+                        .init(title: "History")
+                    ],
+                    selection: $portfolioSegment
+                )
+                portfolioEmptyState
+            }
+        }
+    }
+
+    private var portfolioEmptyState: some View {
+        VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
+            Text(portfolioEmptyTitle)
+                .font(DSFont.subheadline.bold())
+                .foregroundStyle(DSColor.textPrimary)
+            Text("Your \(portfolioEmptyTitle.lowercased()) appear here once funding arrives")
+                .font(DSFont.caption)
+                .foregroundStyle(DSColor.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, DSLayout.spacingLarge)
+    }
+
+    private var portfolioEmptyTitle: String {
+        switch portfolioSegment {
+        case 1: return "Open orders"
+        case 2: return "History"
+        default: return "Positions"
+        }
+    }
+
+    /// Comments · Top holders strip, reused from Task 5's Event Detail. Market Detail
+    /// has no parent event id of its own, so the market's own id stands in as the
+    /// comments-thread key (Gamma scopes comments per-event; single-market screens
+    /// have no separate event id to pass).
+    @ViewBuilder
+    private var socialStripSection: some View {
+        if let factory = socialStripFactory {
+            SocialStripView(viewModel: factory(eventID: market.id, conditionId: market.conditionId))
         }
     }
 
