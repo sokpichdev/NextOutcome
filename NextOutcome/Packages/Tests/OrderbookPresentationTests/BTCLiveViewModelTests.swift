@@ -76,9 +76,14 @@ final class BTCLiveViewModelTests: XCTestCase {
     }
 
     /// Regression test for the sliding-window bug: `priceToBeat` must be pinned to the
-    /// window's fixed open time (`windowEnd - windowInterval`), not to `now`. Feeds a
-    /// fixed point set and advances the simulated server clock across several ticks
-    /// within the same window; the selected price must never change.
+    /// window's fixed open time (`windowEnd - windowInterval`), not to the server-time
+    /// anchor (`now`). We drive the VM's notion of "now" via the fake repository's
+    /// `serverTime()` seam — first close to window open, then re-anchored far later
+    /// (well past every sample-point boundary, crossing the 30s/90s spacing). Under the
+    /// old buggy implementation (`now.addingTimeInterval(-windowInterval)`), advancing
+    /// `now` by 90s+ would slide the window forward and pick a later sample; the fix
+    /// derives `windowStart` from the fixed `windowEnd` alone, so `priceToBeat` must be
+    /// bit-for-bit identical across both anchors.
     @MainActor
     func test_priceToBeat_staysConstant_asServerTimeAdvancesWithinWindow() async {
         let windowEnd = Date(timeIntervalSince1970: 1_000_000)
@@ -99,12 +104,24 @@ final class BTCLiveViewModelTests: XCTestCase {
         let first = vm.priceToBeat
         XCTAssertEqual(first, 0.42)
 
-        // Simulate the server clock (and hence `now`) advancing within the same window
-        // by refreshing the countdown repeatedly; `priceToBeat` must not move.
-        for _ in 0..<5 {
-            await Task.yield()
-            XCTAssertEqual(vm.priceToBeat, 0.42, "priceToBeat must stay pinned to the window open, not drift with now")
-        }
+        // Re-anchor the server-time seam far forward within the window (past the 30s and
+        // 90s sample points) and re-load. A sliding window would now pick 0.55 or 0.61;
+        // the fixed-anchor implementation must still pick 0.42.
+        repository.serverNow = windowOpen.addingTimeInterval(180)
+        await vm.retry()
+        XCTAssertEqual(
+            vm.priceToBeat, 0.42,
+            "priceToBeat must stay pinned to the window open even after the server-time anchor advances 180s"
+        )
+
+        // Push the anchor all the way to windowEnd itself — the most aggressive case for
+        // a sliding window (it would pick the very last sample, 0.61).
+        repository.serverNow = windowEnd
+        await vm.retry()
+        XCTAssertEqual(
+            vm.priceToBeat, 0.42,
+            "priceToBeat must stay pinned to the window open even when the server-time anchor reaches windowEnd"
+        )
         XCTAssertEqual(vm.priceToBeat, first)
     }
 
