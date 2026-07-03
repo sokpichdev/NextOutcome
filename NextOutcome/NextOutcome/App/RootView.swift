@@ -23,6 +23,7 @@ struct RootView: View {
     private let marketHoldersFactory: MarketHoldersViewModelFactory
     private let socialStripFactory: SocialStripViewModelFactory
     private let priceHistoryProvider: PriceHistoryProvider
+    private let btcLiveFactory: BTCLiveViewModelFactory
 
     @State private var selectedCategory: ShellCategory = .trending
     @State private var isDrawerOpen = false
@@ -41,6 +42,7 @@ struct RootView: View {
         marketHoldersFactory = container.makeMarketHoldersFactory()
         socialStripFactory = container.makeSocialStripFactory()
         priceHistoryProvider = container.makePriceHistoryProvider()
+        btcLiveFactory = container.makeBTCLiveFactory()
     }
 
     var body: some View {
@@ -55,6 +57,7 @@ struct RootView: View {
         .environment(\.marketHoldersFactory, marketHoldersFactory)
         .environment(\.socialStripFactory, socialStripFactory)
         .environment(\.priceHistoryProvider, priceHistoryProvider)
+        .environment(\.btcLiveFactory, btcLiveFactory)
     }
 
     private var tabs: some View {

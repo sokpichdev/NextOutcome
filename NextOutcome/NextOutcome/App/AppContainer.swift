@@ -97,6 +97,23 @@ final class AppContainer {
         }
     }
 
+    /// Factory injected into the environment so the home feed's BTC card can open the
+    /// BTC 5-minute live screen (candles, server-clock countdown, quick-bet).
+    func makeBTCLiveFactory() -> BTCLiveViewModelFactory {
+        BTCLiveViewModelFactory { [orderbookRepository, marketStream] context, onQuickBet in
+            BTCLiveViewModel(
+                assetID: context.assetID,
+                eventID: context.eventID,
+                windowEnd: context.windowEnd,
+                fetchHistory: FetchPriceHistoryUseCase(repository: orderbookRepository),
+                fetchServerTime: FetchServerTimeUseCase(repository: orderbookRepository),
+                fetchRecentTrades: FetchRecentTradesUseCase(repository: orderbookRepository),
+                observeBook: ObserveOrderBookUseCase(repository: orderbookRepository, stream: marketStream),
+                onQuickBet: onQuickBet
+            )
+        }
+    }
+
     /// Provider injected into the environment so feature screens can build price-history
     /// charts without importing the Data layer.
     func makePriceHistoryProvider() -> PriceHistoryProvider {

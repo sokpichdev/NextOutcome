@@ -32,6 +32,17 @@ struct PriceHistoryDTO: Decodable {
     let history: [Point]
 }
 
+/// data `GET /trades` → array of executed trades.
+struct TradeDTO: Decodable {
+    let proxyWallet: String?
+    let side: String?
+    let size: Double?
+    let price: Double?
+    let timestamp: Double?
+    let outcome: String?
+    let transactionHash: String?
+}
+
 // MARK: - WebSocket (market channel)
 
 struct WSLevelDTO: Decodable {
