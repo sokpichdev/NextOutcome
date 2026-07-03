@@ -46,6 +46,10 @@ public final class BTCLiveViewModel {
     private var tickTask: Task<Void, Never>?
     private var bookTask: Task<Void, Never>?
     private var tradesTask: Task<Void, Never>?
+    private var loadTask: Task<Void, Never>?
+    /// Set once `stop()` runs; guards against a late-completing `load()` resurrecting
+    /// the countdown ticker (or spawning other work) after teardown.
+    private(set) var isStopped = false
 
     private let monoClock = ContinuousClock()
     private var serverAnchor: Date?
@@ -79,11 +83,12 @@ public final class BTCLiveViewModel {
         return CandleAggregator.candles(from: points, interval: candleInterval)
     }
 
-    /// Price to beat = the first sample inside the current window.
+    /// Price to beat = the first sample at or after the window's fixed open time
+    /// (`windowEnd - windowInterval`). Anchored to the window open — not to `now` —
+    /// so the selected point never drifts as the countdown advances.
     public var priceToBeat: Decimal? {
         guard case let .loaded(points) = state else { return nil }
-        guard let now = currentServerTime else { return points.first?.price }
-        let windowStart = now.addingTimeInterval(-windowInterval)
+        let windowStart = windowEnd.addingTimeInterval(-windowInterval)
         return points.first(where: { $0.date >= windowStart })?.price ?? points.first?.price
     }
 
@@ -113,12 +118,15 @@ public final class BTCLiveViewModel {
 
     public func start() {
         guard tickTask == nil, bookTask == nil else { return }
-        Task { await load() }
+        isStopped = false
+        loadTask = Task { await load() }
         bookTask = Task { [weak self] in await self?.streamBook() }
         tradesTask = Task { [weak self] in await self?.pollTrades() }
     }
 
     public func stop() {
+        isStopped = true
+        loadTask?.cancel(); loadTask = nil
         tickTask?.cancel(); tickTask = nil
         bookTask?.cancel(); bookTask = nil
         tradesTask?.cancel(); tradesTask = nil
@@ -142,6 +150,7 @@ public final class BTCLiveViewModel {
             async let historyCall = fetchHistory.execute(assetID: assetID, interval: .oneHour)
             async let timeCall = fetchServerTime.execute()
             let (points, serverNow) = try await (historyCall, timeCall)
+            guard !isStopped else { return }
             serverAnchor = serverNow
             monoAnchor = monoClock.now
             refreshCountdown()
@@ -157,10 +166,11 @@ public final class BTCLiveViewModel {
     }
 
     private func startTicking() {
-        guard tickTask == nil else { return }
+        guard tickTask == nil, !isStopped else { return }
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
-                self?.refreshCountdown()
+                guard let self, !self.isStopped else { return }
+                self.refreshCountdown()
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
         }

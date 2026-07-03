@@ -108,6 +108,11 @@ let package = Package(
             name: "OrderbookDataTests",
             dependencies: ["OrderbookData", "OrderbookDomain", "Networking"]
         ),
+        .testTarget(
+            name: "OrderbookPresentationTests",
+            dependencies: ["OrderbookPresentation", "OrderbookDomain", "DesignSystem", "SharedDomain"],
+            path: "Tests/OrderbookPresentationTests"
+        ),
         .testTarget(name: "PortfolioDomainTests", dependencies: ["PortfolioDomain"]),
         .testTarget(
             name: "PortfolioDataTests",
