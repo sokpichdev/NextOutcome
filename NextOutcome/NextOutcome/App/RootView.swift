@@ -9,7 +9,10 @@ import SwiftUI
 import DesignSystem
 import MarketsPresentation
 import OrderbookPresentation
+import LiveStatsDomain
+import LiveStatsPresentation
 import PortfolioPresentation
+import TradingDomain
 
 struct RootView: View {
     @State private var eventListViewModel: EventListViewModel
@@ -19,7 +22,13 @@ struct RootView: View {
     @State private var shellViewModel: ShellViewModel
     private let leaderboardViewModel: LeaderboardViewModel
     private let marketLiveFactory: MarketLiveViewModelFactory
+    private let orderbookFactory: OrderbookViewModelFactory
     private let marketHoldersFactory: MarketHoldersViewModelFactory
+    private let socialStripFactory: SocialStripViewModelFactory
+    private let priceHistoryProvider: PriceHistoryProvider
+    private let btcLiveFactory: BTCLiveViewModelFactory
+    private let tradeSubmitter: TradeSubmitting
+    private let sportsStreamer: any SportsStateStreaming
 
     @State private var selectedCategory: ShellCategory = .trending
     @State private var isDrawerOpen = false
@@ -34,7 +43,13 @@ struct RootView: View {
         _shellViewModel = State(initialValue: ShellViewModel(portfolio: portfolio))
         leaderboardViewModel = container.makeLeaderboardViewModel()
         marketLiveFactory = container.makeMarketLiveFactory()
+        orderbookFactory = container.makeOrderbookFactory()
         marketHoldersFactory = container.makeMarketHoldersFactory()
+        socialStripFactory = container.makeSocialStripFactory()
+        priceHistoryProvider = container.makePriceHistoryProvider()
+        btcLiveFactory = container.makeBTCLiveFactory()
+        tradeSubmitter = container.makeTradeSubmitter()
+        sportsStreamer = container.makeSportsStreamer()
     }
 
     var body: some View {
@@ -45,7 +60,13 @@ struct RootView: View {
         .tint(DSColor.accent)
         .animation(.easeInOut(duration: 0.3), value: isDrawerOpen)
         .environment(\.marketLiveFactory, marketLiveFactory)
+        .environment(\.orderbookFactory, orderbookFactory)
         .environment(\.marketHoldersFactory, marketHoldersFactory)
+        .environment(\.socialStripFactory, socialStripFactory)
+        .environment(\.priceHistoryProvider, priceHistoryProvider)
+        .environment(\.btcLiveFactory, btcLiveFactory)
+        .environment(\.tradeSubmitter, tradeSubmitter)
+        .environment(\.sportsStreamer, sportsStreamer)
     }
 
     private var tabs: some View {

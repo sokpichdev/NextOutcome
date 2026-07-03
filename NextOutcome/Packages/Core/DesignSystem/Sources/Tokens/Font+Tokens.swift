@@ -10,6 +10,7 @@ import SwiftUI
 public enum DSFont {
     public static let largeTitle = Font.largeTitle.bold()
     public static let title = Font.title2.bold()
+    public static let title3 = Font.title3
     public static let headline = Font.headline
     public static let body = Font.body
     public static let subheadline = Font.subheadline

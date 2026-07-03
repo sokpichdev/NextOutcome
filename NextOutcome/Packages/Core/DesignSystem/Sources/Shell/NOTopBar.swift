@@ -17,8 +17,8 @@ public struct NOTopBar: View {
     }
 
     public var body: some View {
-        HStack(spacing: 16) {
-            HStack(spacing: 8) {
+        HStack(spacing: DSLayout.margin) {
+            HStack(spacing: DSLayout.spacingSmall) {
                 Image(systemName: "chart.bar.doc.horizontal")
                     .foregroundStyle(DSColor.textPrimary)
                 Text("NextOutcome")
@@ -43,8 +43,8 @@ public struct NOTopBar: View {
             .accessibilityLabel("Account menu")
         }
         .buttonStyle(.plain)
-        .font(.title3)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .font(DSFont.title3)
+        .padding(.horizontal, DSLayout.margin)
+        .padding(.vertical, DSLayout.spacingSmall)
     }
 }

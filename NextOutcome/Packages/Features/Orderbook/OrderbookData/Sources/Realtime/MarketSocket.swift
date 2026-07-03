@@ -44,10 +44,12 @@ public struct MarketSocket: MarketStreaming {
             do {
                 try await subscribe(socket, assetID: assetID)
                 attempt = 0  // connected — reset back-off
+                continuation.yield(.connectionState(.live))
                 try await receiveLoop(socket, continuation: continuation)
             } catch {
                 if Task.isCancelled { break }
                 logger.error("socket \(assetID, privacy: .public) dropped: \(String(describing: error), privacy: .public)")
+                continuation.yield(.connectionState(.reconnecting))
             }
             socket.cancel(with: .goingAway, reason: nil)
 

@@ -27,3 +27,5 @@ NextOutcome/NextOutcome.xcodeproj/project.xcworkspace/xcuserdata/ctrcomputer.xcu
 # Local build output from run.sh
 build/
 *.sh
+/.superpowers
+NextOutcome/NextOutcome.xcodeproj/xcuserdata/ctrcomputer.xcuserdatad/xcschemes/xcschememanagement.plist

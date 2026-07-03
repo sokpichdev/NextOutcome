@@ -20,6 +20,9 @@ let package = Package(
         // Trading — isolated, quarantined. The read-only app never links these.
         .library(name: "TradingDomain",          targets: ["TradingDomain"]),
         .library(name: "TradingData",            targets: ["TradingData"]),
+        .library(name: "LiveStatsDomain",        targets: ["LiveStatsDomain"]),
+        .library(name: "LiveStatsData",          targets: ["LiveStatsData"]),
+        .library(name: "LiveStatsPresentation",  targets: ["LiveStatsPresentation"]),
     ],
     targets: [
         // Core
@@ -40,7 +43,10 @@ let package = Package(
         ),
         .target(
             name: "MarketsPresentation",
-            dependencies: ["MarketsDomain", "DesignSystem", "OrderbookPresentation"],
+            // TradingDomain (mock trade sheet + simulated submitter only) is the one
+            // Trading target the read-only app links; TradingData's real wallet-signing
+            // and proxy gateway stay quarantined until Task D.
+            dependencies: ["MarketsDomain", "DesignSystem", "OrderbookPresentation", "OrderbookDomain", "SharedDomain", "TradingDomain", "LiveStatsPresentation", "LiveStatsDomain"],
             path: "Features/Markets/MarketsPresentation/Sources"
         ),
 
@@ -57,7 +63,7 @@ let package = Package(
         ),
         .target(
             name: "OrderbookPresentation",
-            dependencies: ["OrderbookDomain", "DesignSystem"],
+            dependencies: ["OrderbookDomain", "DesignSystem", "SharedDomain"],
             path: "Features/Orderbook/OrderbookPresentation/Sources"
         ),
 
@@ -90,6 +96,23 @@ let package = Package(
             path: "Features/Trading/TradingData/Sources"
         ),
 
+        // LiveStats feature (sports live stats; undocumented feed, isolated slice)
+        .target(
+            name: "LiveStatsDomain",
+            dependencies: [],
+            path: "Features/LiveStats/LiveStatsDomain/Sources"
+        ),
+        .target(
+            name: "LiveStatsData",
+            dependencies: ["LiveStatsDomain", "Networking"],
+            path: "Features/LiveStats/LiveStatsData/Sources"
+        ),
+        .target(
+            name: "LiveStatsPresentation",
+            dependencies: ["LiveStatsDomain", "DesignSystem", "SharedDomain"],
+            path: "Features/LiveStats/LiveStatsPresentation/Sources"
+        ),
+
         // Tests
         .testTarget(name: "DesignSystemTests",
                     dependencies: ["DesignSystem"],
@@ -101,12 +124,17 @@ let package = Package(
             dependencies: ["MarketsData", "MarketsDomain", "Networking"]
         ),
         .testTarget(name: "MarketsPresentationTests",
-                    dependencies: ["MarketsPresentation"],
+                    dependencies: ["MarketsPresentation", "OrderbookDomain", "OrderbookPresentation", "SharedDomain"],
                     path: "Tests/MarketsPresentationTests"),
         .testTarget(name: "OrderbookDomainTests", dependencies: ["OrderbookDomain"]),
         .testTarget(
             name: "OrderbookDataTests",
             dependencies: ["OrderbookData", "OrderbookDomain", "Networking"]
+        ),
+        .testTarget(
+            name: "OrderbookPresentationTests",
+            dependencies: ["OrderbookPresentation", "OrderbookDomain", "DesignSystem", "SharedDomain"],
+            path: "Tests/OrderbookPresentationTests"
         ),
         .testTarget(name: "PortfolioDomainTests", dependencies: ["PortfolioDomain"]),
         .testTarget(
@@ -117,6 +145,16 @@ let package = Package(
         .testTarget(
             name: "TradingDataTests",
             dependencies: ["TradingData", "TradingDomain", "Networking"]
+        ),
+        .testTarget(name: "LiveStatsDomainTests", dependencies: ["LiveStatsDomain"]),
+        .testTarget(
+            name: "LiveStatsDataTests",
+            dependencies: ["LiveStatsData", "LiveStatsDomain", "Networking"]
+        ),
+        .testTarget(
+            name: "LiveStatsPresentationTests",
+            dependencies: ["LiveStatsPresentation", "LiveStatsDomain", "DesignSystem", "SharedDomain"],
+            path: "Tests/LiveStatsPresentationTests"
         ),
     ]
 )
