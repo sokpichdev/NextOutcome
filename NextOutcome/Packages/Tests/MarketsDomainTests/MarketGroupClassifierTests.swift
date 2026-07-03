@@ -47,6 +47,17 @@ final class MarketGroupClassifierTests: XCTestCase {
         XCTAssertEqual(MarketGroupClassifier.groups(for: ms).map(\.group), [.moneyline, .totals])
     }
 
+    func testMarketsSortedByYesProbabilityDescending() {
+        // Real contenders lead; unpriced placeholder markets ("Team A" at 0) sink.
+        let ms = [
+            Market.fixture(id: "placeholder", groupItemTitle: "Team AO"),          // no price → 0
+            Market.fixture(id: "france", groupItemTitle: "France", yesPrice: 0.34),
+            Market.fixture(id: "argentina", groupItemTitle: "Argentina", yesPrice: 0.19),
+        ]
+        let markets = MarketGroupClassifier.groups(for: ms).first?.markets ?? []
+        XCTAssertEqual(markets.map(\.id), ["france", "argentina", "placeholder"])
+    }
+
     func testEmptyGroupsOmitted() {
         let ms = [Market.fixture(sportsMarketType: "moneyline")]
         let groups = MarketGroupClassifier.groups(for: ms)
