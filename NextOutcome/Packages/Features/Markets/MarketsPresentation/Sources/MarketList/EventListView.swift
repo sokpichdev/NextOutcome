@@ -46,8 +46,11 @@ public struct EventListView: View {
         ScrollView {
             LazyVStack(spacing: DSLayout.spacing) {
                 ForEach(viewModel.visibleEvents) { event in
-                    HomeCard(event: event, kindOverride: heroID == event.id ? .hero : nil)
-                        .onAppear { Task { if event.id == viewModel.visibleEvents.last?.id { await viewModel.loadMore() } } }
+                    NavigationLink(value: event) {
+                        HomeCard(event: event, kindOverride: heroID == event.id ? .hero : nil)
+                    }
+                    .buttonStyle(.plain)
+                    .onAppear { Task { if event.id == viewModel.visibleEvents.last?.id { await viewModel.loadMore() } } }
                 }
             }
             .padding(.horizontal, DSLayout.margin)

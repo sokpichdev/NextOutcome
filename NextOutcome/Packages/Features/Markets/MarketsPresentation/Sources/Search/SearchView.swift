@@ -56,7 +56,7 @@ public struct SearchView: View {
             Image(systemName: "magnifyingglass")
                 .font(.largeTitle)
                 .foregroundStyle(DSColor.textSecondary)
-            Text("Search Polymarket markets")
+            Text("Search NextOutcome markets")
                 .font(DSFont.subheadline)
                 .foregroundStyle(DSColor.textSecondary)
         }
