@@ -47,11 +47,14 @@ public struct EventDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.priceHistoryProvider) private var priceHistoryProvider
     @Environment(\.socialStripFactory) private var socialStripFactory
+    @Environment(\.tradeSubmitter) private var tradeSubmitter
     @State private var chart: EventChartViewModel?
     @State private var socialStrip: SocialStripViewModel?
     @State private var timeframe: ChartTimeframe = .max
     @State private var segmentSelection = 0
     @State private var showsStickyHeader = false
+    /// Task 8's mock trade sheet, opened from `onSelect`/the sticky-header Trade button.
+    @State private var tradeContext: TradeSheetContext?
 
     /// `onSelect` is the trade-sheet hook Task 8 wires up; no-op until then.
     public init(event: Event, onSelect: @escaping (Market, Side) -> Void = { _, _ in }) {
@@ -139,12 +142,23 @@ public struct EventDetailView: View {
             if showsStickyHeader {
                 StickyEventHeader(leftAbbrev: stickyLeftAbbrev, rightAbbrev: stickyRightAbbrev,
                                    chanceText: stickyChanceText) {
-                    if let topMarket { onSelect(topMarket, .yes) }
+                    if let topMarket { presentTrade(topMarket, .yes) }
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .animation(.easeInOut(duration: 0.15), value: showsStickyHeader)
+        .sheet(item: $tradeContext) { context in
+            TradeSheet(viewModel: TradeSheetViewModel(market: context.market, side: context.side, submitter: tradeSubmitter))
+        }
+    }
+
+    /// Opens the mock trade sheet for `market`/`side` and still forwards to the
+    /// caller-supplied `onSelect` hook, so any host that overrides it (e.g. tests) keeps
+    /// seeing selection events.
+    private func presentTrade(_ market: Market, _ side: Side) {
+        tradeContext = TradeSheetContext(market: market, side: side)
+        onSelect(market, side)
     }
 
     /// Invisible marker at the bottom of the chart block; once it scrolls above the
@@ -198,7 +212,7 @@ public struct EventDetailView: View {
     @ViewBuilder
     private var marketGroupSections: some View {
         ForEach(groups, id: \.group) { entry in
-            MarketGroupSection(group: entry.group, markets: entry.markets, eventID: event.id, onSelect: onSelect)
+            MarketGroupSection(group: entry.group, markets: entry.markets, eventID: event.id, onSelect: presentTrade)
         }
     }
 
