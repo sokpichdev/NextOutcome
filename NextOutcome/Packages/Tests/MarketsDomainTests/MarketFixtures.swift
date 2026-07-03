@@ -7,13 +7,18 @@ extension Market {
         id: String = "m1",
         question: String = "Test market",
         sportsMarketType: String? = nil,
-        groupItemTitle: String? = nil
+        groupItemTitle: String? = nil,
+        yesPrice: Double? = nil
     ) -> Market {
-        Market(
+        let outcomes: [Outcome] = yesPrice.map {
+            [Outcome(id: "\(id)-yes", title: "Yes", price: Decimal($0)),
+             Outcome(id: "\(id)-no", title: "No", price: Decimal(1 - $0))]
+        } ?? []
+        return Market(
             id: id,
             question: question,
             slug: id,
-            outcomes: [],
+            outcomes: outcomes,
             volume: 0,
             liquidity: 0,
             endDate: nil,

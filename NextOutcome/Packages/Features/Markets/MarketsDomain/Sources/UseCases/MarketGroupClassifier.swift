@@ -31,7 +31,10 @@ public enum MarketGroup: String, CaseIterable, Sendable {
 /// (Moneyline, Spreads, Totals, …), mirroring the ordering shown on the live site.
 public enum MarketGroupClassifier {
     /// Pure. Groups an event's markets in live-site section order.
-    /// Empty groups are omitted; markets keep their relative order within a group.
+    /// Empty groups are omitted; within a group markets are sorted by Yes-probability
+    /// descending (matching the live site), so real contenders lead and unpriced
+    /// placeholder markets — e.g. not-yet-qualified "Team A" slots priced at 0 — sink to
+    /// the bottom instead of cluttering the top.
     public static func groups(for markets: [Market]) -> [(group: MarketGroup, markets: [Market])] {
         var buckets: [MarketGroup: [Market]] = [:]
         for market in markets {
@@ -39,7 +42,8 @@ public enum MarketGroupClassifier {
         }
         return MarketGroup.allCases.compactMap { group in
             guard let bucket = buckets[group], !bucket.isEmpty else { return nil }
-            return (group: group, markets: bucket)
+            let sorted = bucket.sorted { ($0.yesOutcome?.price ?? 0) > ($1.yesOutcome?.price ?? 0) }
+            return (group: group, markets: sorted)
         }
     }
 
