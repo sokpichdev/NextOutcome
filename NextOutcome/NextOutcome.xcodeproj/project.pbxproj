@@ -19,6 +19,9 @@
 		6913AC012FF3B253007A6162 /* PortfolioDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AC002FF3B253007A6162 /* PortfolioDomain */; };
 		6913AC032FF3B253007A6162 /* PortfolioData in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AC022FF3B253007A6162 /* PortfolioData */; };
 		6913AC052FF3B253007A6162 /* PortfolioPresentation in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AC042FF3B253007A6162 /* PortfolioPresentation */; };
+		6913AD012FF3B253007A6162 /* LiveStatsDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AD002FF3B253007A6162 /* LiveStatsDomain */; };
+		6913AD032FF3B253007A6162 /* LiveStatsData in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AD022FF3B253007A6162 /* LiveStatsData */; };
+		6913AD052FF3B253007A6162 /* LiveStatsPresentation in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AD042FF3B253007A6162 /* LiveStatsPresentation */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -92,6 +95,9 @@
 				6913AC012FF3B253007A6162 /* PortfolioDomain in Frameworks */,
 				6913AC032FF3B253007A6162 /* PortfolioData in Frameworks */,
 				6913AC052FF3B253007A6162 /* PortfolioPresentation in Frameworks */,
+				6913AD012FF3B253007A6162 /* LiveStatsDomain in Frameworks */,
+				6913AD032FF3B253007A6162 /* LiveStatsData in Frameworks */,
+				6913AD052FF3B253007A6162 /* LiveStatsPresentation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -164,6 +170,9 @@
 				6913AC002FF3B253007A6162 /* PortfolioDomain */,
 				6913AC022FF3B253007A6162 /* PortfolioData */,
 				6913AC042FF3B253007A6162 /* PortfolioPresentation */,
+				6913AD002FF3B253007A6162 /* LiveStatsDomain */,
+				6913AD022FF3B253007A6162 /* LiveStatsData */,
+				6913AD042FF3B253007A6162 /* LiveStatsPresentation */,
 			);
 			productName = NextOutcome;
 			productReference = 6999852F2FF188A80055E4BF /* NextOutcome.app */;
@@ -728,6 +737,18 @@
 		6913AC042FF3B253007A6162 /* PortfolioPresentation */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = PortfolioPresentation;
+		};
+		6913AD002FF3B253007A6162 /* LiveStatsDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = LiveStatsDomain;
+		};
+		6913AD022FF3B253007A6162 /* LiveStatsData */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = LiveStatsData;
+		};
+		6913AD042FF3B253007A6162 /* LiveStatsPresentation */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = LiveStatsPresentation;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
