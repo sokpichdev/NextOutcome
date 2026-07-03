@@ -70,7 +70,10 @@ public final class TradeSheetViewModel {
     }
 
     public var amountDisplay: String {
-        "$\(amountCents / 100)"
+        let dollars = amountCents / 100
+        let cents = amountCents % 100
+        let dollarsFormatted = NumberFormatter.localizedString(from: NSNumber(value: dollars), number: .decimal)
+        return String(format: "$%@.%02d", dollarsFormatted, cents)
     }
 
     public var potential: (shares: Decimal, payoutUSD: Decimal) {
@@ -84,7 +87,7 @@ public final class TradeSheetViewModel {
     public func appendDigit(_ digit: Int) {
         guard phase == .entering else { return }
         // Cap at a reasonable mock ceiling so the keypad can't scroll amounts off-screen.
-        let next = amountCents * 10 + digit * 100
+        let next = amountCents * 10 + digit
         guard next <= 100_000_00 else { return }
         amountCents = amountCents * 10 + digit
     }
