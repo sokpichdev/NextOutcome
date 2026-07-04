@@ -9,9 +9,13 @@ import SwiftUI
 import PortfolioDomain
 import DesignSystem
 
+/// The leaderboard screen: a metric picker and window chips above a ranked list of traders.
 public struct LeaderboardView: View {
+    /// The view model driving the screen.
     @State private var viewModel: LeaderboardViewModel
 
+    /// Creates the view.
+    /// - Parameter viewModel: The leaderboard view model.
     public init(viewModel: LeaderboardViewModel) {
         self._viewModel = State(initialValue: viewModel)
     }
@@ -26,6 +30,7 @@ public struct LeaderboardView: View {
         .task { if case .loading = viewModel.state { await viewModel.load() } }
     }
 
+    /// The metric segmented picker (Volume/Profit) and the time-window chips.
     private var controls: some View {
         HStack {
             Picker("Metric", selection: $viewModel.metric) {
@@ -45,6 +50,8 @@ public struct LeaderboardView: View {
         .padding(.vertical, DSLayout.spacing)
     }
 
+    /// Switches on the view model's state to show loading/empty/error states or the ranked
+    /// list of `LeaderboardRow`s.
     @ViewBuilder
     private var content: some View {
         switch viewModel.state {

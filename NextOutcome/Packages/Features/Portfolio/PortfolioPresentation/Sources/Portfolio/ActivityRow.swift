@@ -9,7 +9,10 @@ import SwiftUI
 import PortfolioDomain
 import DesignSystem
 
+/// A card row for one activity entry: icon, title, a kind badge (colour-coded), the USD
+/// amount, and a relative timestamp.
 struct ActivityRow: View {
+    /// The activity entry to render.
     let activity: Activity
 
     var body: some View {
@@ -43,6 +46,7 @@ struct ActivityRow: View {
         }
     }
 
+    /// The badge colour for the activity kind (green buy, red sell/redeem, accent otherwise).
     private var kindColor: Color {
         switch activity.kind {
         case .buy: return DSColor.positive
@@ -51,10 +55,13 @@ struct ActivityRow: View {
         }
     }
 
+    /// The timestamp rendered as a relative string (e.g. "2 hr ago").
     private var relativeTime: String {
         activity.timestamp.formatted(.relative(presentation: .numeric))
     }
 
+    /// The market icon, loaded async with a placeholder, or a plain rounded rectangle when
+    /// there's no icon URL.
     @ViewBuilder
     private var icon: some View {
         if let url = activity.iconURL {

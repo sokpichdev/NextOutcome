@@ -9,9 +9,14 @@ import SwiftUI
 import PortfolioDomain
 import DesignSystem
 
+/// The Portfolio tab: prompts for a wallet to watch, then shows its value header, open
+/// positions, and closed positions. Read-only (watch-only) throughout.
 public struct PortfolioView: View {
+    /// The view model driving the screen.
     @State private var viewModel: PortfolioViewModel
 
+    /// Creates the view.
+    /// - Parameter viewModel: The portfolio view model.
     public init(viewModel: PortfolioViewModel) {
         self._viewModel = State(initialValue: viewModel)
     }
@@ -27,6 +32,8 @@ public struct PortfolioView: View {
             .task { await viewModel.start() }
     }
 
+    /// Switches on the view model's state to show the address prompt, a loading/empty/error
+    /// state, or the loaded dashboard.
     @ViewBuilder
     private var content: some View {
         switch viewModel.state {
@@ -45,6 +52,8 @@ public struct PortfolioView: View {
 
     // MARK: Address entry
 
+    /// The onboarding screen prompting the user to enter a wallet address to watch,
+    /// including the input field, validation error, and submit button.
     private var addressEntry: some View {
         VStack(spacing: DSLayout.spacingLarge) {
             Image(systemName: "wallet.pass")
@@ -89,6 +98,9 @@ public struct PortfolioView: View {
 
     // MARK: Dashboard
 
+    /// The loaded dashboard: value/PnL header, open positions, and (if any) closed
+    /// positions, with pull-to-refresh.
+    /// - Parameter portfolio: The loaded portfolio to display.
     private func dashboard(_ portfolio: Portfolio) -> some View {
         ScrollView {
             VStack(spacing: DSLayout.spacing) {
@@ -120,6 +132,8 @@ public struct PortfolioView: View {
         .refreshable { await viewModel.refresh() }
     }
 
+    /// A small muted section header (e.g. "Open positions").
+    /// - Parameter title: The header text.
     private func sectionHeader(_ title: String) -> some View {
         HStack {
             Text(title)
