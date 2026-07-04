@@ -12,7 +12,9 @@ import LiveStatsDomain
 /// Pinned header for the Live sub-tab: clock/period, score, and the minute timeline.
 /// Shows a "reconnecting" pill while the socket is re-establishing.
 struct ScoreHero: View {
+    /// The latest match snapshot, or `nil` before any has arrived.
     let match: MatchState?
+    /// Whether the feed is live or reconnecting (drives the pill).
     let connection: MatchConnection
 
     var body: some View {
@@ -36,11 +38,13 @@ struct ScoreHero: View {
         .clipShape(RoundedRectangle(cornerRadius: DSLayout.cardRadius))
     }
 
+    /// The "home  away" score string, or an em-dash placeholder before data loads.
     private var scoreText: String {
         guard let match else { return "–  –" }
         return "\(match.home.goals)  \(match.away.goals)"
     }
 
+    /// The leading label showing the period (with a red live dot) or "Live" as a fallback.
     @ViewBuilder
     private var periodLabel: some View {
         if let period = match?.period {
@@ -55,6 +59,7 @@ struct ScoreHero: View {
         }
     }
 
+    /// The small "Reconnecting…" capsule shown while the socket is re-establishing.
     private var reconnectingPill: some View {
         Text("Reconnecting…")
             .font(DSFont.caption2)
