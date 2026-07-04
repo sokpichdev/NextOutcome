@@ -14,8 +14,11 @@ import DesignSystem
 /// plus a draw, labelled via `groupItemTitle`, priced by their Yes side. Team names/logos
 /// come from `/events/results` when available, falling back to the market labels.
 struct GameCard: View {
+    /// The game event.
     let event: Event
+    /// The live/final result, if loaded.
     let result: GameResult?
+    /// The game's moneyline markets (one per team plus a draw).
     let moneylines: [Market]
 
     var body: some View {
@@ -36,10 +39,12 @@ struct GameCard: View {
 
     // MARK: moneyline structure
 
+    /// Whether a moneyline market is the "Draw" outcome.
     private func isDraw(_ market: Market) -> Bool {
         market.groupItemTitle?.lowercased().hasPrefix("draw") == true
     }
 
+    /// The draw market, if present.
     private var drawMarket: Market? { moneylines.first(where: isDraw) }
 
     /// Team markets ordered home-first when results tell us the ordering.
@@ -56,6 +61,7 @@ struct GameCard: View {
 
     // MARK: status
 
+    /// The top row: live/final/kickoff status on the left, volume on the right.
     private var statusRow: some View {
         HStack(spacing: DSLayout.spacingSmall) {
             if result?.live == true {
@@ -79,6 +85,7 @@ struct GameCard: View {
         }
     }
 
+    /// The live status text, combining period and elapsed time when available.
     private var liveStatusText: String {
         let period = result?.period ?? "Live"
         if let elapsed = result?.elapsed, !elapsed.isEmpty {
@@ -89,8 +96,11 @@ struct GameCard: View {
 
     // MARK: teams
 
+    /// Which side of the game a team row represents.
     private enum Side { case home, away }
 
+    /// Builds a team row: optional score, logo, and name for one side.
+    /// - Parameter side: Home or away.
     private func teamRow(side: Side) -> some View {
         let index = side == .home ? 0 : 1
         let team = side == .home ? result?.homeTeam : result?.awayTeam
@@ -117,6 +127,10 @@ struct GameCard: View {
         }
     }
 
+    /// The team logo, or a rounded placeholder showing the name's first letter.
+    /// - Parameters:
+    ///   - url: The logo URL, if any.
+    ///   - name: The team name (for the placeholder initial).
     private func teamLogo(url: URL?, name: String) -> some View {
         AsyncImage(url: url) { image in
             image.resizable().scaledToFill()
@@ -135,6 +149,7 @@ struct GameCard: View {
 
     // MARK: prices
 
+    /// The moneyline price buttons, ordered home · draw · away.
     private var priceRow: some View {
         let ordered: [Market?] = teamMarkets.count >= 2
             ? [teamMarkets[0], drawMarket, teamMarkets[1]]
@@ -169,6 +184,7 @@ struct GameCard: View {
         return String((market.groupItemTitle ?? market.question).prefix(3)).uppercased()
     }
 
+    /// Finds the result team matching a market's team label, if any.
     private func team(for market: Market) -> GameTeam? {
         let label = market.groupItemTitle ?? market.question
         return result?.teams.first { $0.name.caseInsensitiveCompare(label) == .orderedSame }

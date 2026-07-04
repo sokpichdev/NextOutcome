@@ -11,7 +11,9 @@ import DesignSystem
 
 /// The hub's Games tab: match cards grouped under "Sat, July 4"-style day headers.
 struct GamesScheduleView: View {
+    /// The games grouped by calendar day, days ascending.
     let gamesByDay: [(day: Date, games: [Event])]
+    /// Live/final results keyed by event id.
     let results: [String: GameResult]
 
     var body: some View {
