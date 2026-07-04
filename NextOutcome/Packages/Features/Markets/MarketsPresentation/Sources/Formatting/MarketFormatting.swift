@@ -24,6 +24,13 @@ public enum MarketFormatting {
         return String(format: "%.1f¢", value)
     }
 
+    /// 0…1 price → whole-cent string, matching the sports card buttons. 0.334 → "33¢".
+    public static func centsWhole(_ price: Decimal) -> String {
+        let clamped = min(max(price, 0), 1)
+        let value = NSDecimalNumber(decimal: clamped * 100).doubleValue
+        return "\(Int(value.rounded()))¢"
+    }
+
     /// 0…1 price → Double fraction for `ProbabilityBar`.
     public static func fraction(_ price: Decimal) -> Double {
         let clamped = min(max(price, 0), 1)
