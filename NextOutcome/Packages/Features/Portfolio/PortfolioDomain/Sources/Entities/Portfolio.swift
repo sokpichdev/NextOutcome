@@ -9,10 +9,18 @@ import Foundation
 
 /// Aggregate snapshot for a watched wallet: total value + open positions.
 public struct Portfolio: Hashable, Sendable {
+    /// The wallet address this snapshot belongs to.
     public let address: String
+    /// The total portfolio value in dollars.
     public let value: Decimal
+    /// The open positions making up the portfolio.
     public let positions: [Position]
 
+    /// Creates a portfolio snapshot.
+    /// - Parameters:
+    ///   - address: The wallet address.
+    ///   - value: Total value in dollars.
+    ///   - positions: The open positions.
     public init(address: String, value: Decimal, positions: [Position]) {
         self.address = address
         self.value = value
@@ -31,5 +39,6 @@ public struct Portfolio: Hashable, Sendable {
         return (totalCashPnl / basis) * 100
     }
 
+    /// Whether the portfolio holds no open positions.
     public var isEmpty: Bool { positions.isEmpty }
 }
