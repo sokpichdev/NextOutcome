@@ -24,6 +24,19 @@ public final class EventListViewModel {
     public private(set) var tags: [Tag] = []
     public private(set) var selectedTagID: String?
 
+    /// Trending sub-filter chips, derived from the tags of the unfiltered trending feed.
+    /// `selectedTrendingTagID == nil` means "All". Orthogonal to `selectedTagID`: the chip
+    /// only exists while the rail is on Trending (which itself applies no tag filter).
+    public private(set) var trendingChips: [Tag] = []
+    public private(set) var selectedTrendingTagID: String?
+    private var currentCategory: ShellCategory = .trending
+
+    public var showsTrendingChips: Bool { currentCategory == .trending && !trendingChips.isEmpty }
+
+    /// The tag actually sent to the API: the trending chip when one is active, else the
+    /// category tag. Pagination reads the same value, so `loadMore` follows the chip filter.
+    private var effectiveTagID: String? { selectedTrendingTagID ?? selectedTagID }
+
     public enum MarketSort: String, CaseIterable {
         case volume24h, liquidity, newest, endingSoon, competitive
         public var title: String {
@@ -84,8 +97,30 @@ public final class EventListViewModel {
         return tags.first { wanted.contains($0.slug.lowercased()) || wanted.contains($0.label.lowercased()) }?.id
     }
 
+    /// Apply a category rail selection. Idempotent: re-applying the current category (e.g.
+    /// when the list view remounts after the World Cup hub was shown) does not refetch
+    /// unless the VM has never loaded.
     public func apply(category: ShellCategory) async {
-        await select(tagID: Self.tagID(for: category))
+        let isInitial: Bool = { if case .idle = state { return true } else { return false } }()
+        guard category != currentCategory || isInitial else { return }
+        currentCategory = category
+
+        let previousEffective = effectiveTagID
+        if category != .trending { selectedTrendingTagID = nil }
+        selectedTagID = Self.tagID(for: category)
+
+        if isInitial || effectiveTagID != previousEffective {
+            nextCursor = nil
+            await load()
+        }
+    }
+
+    /// Select a trending sub-filter chip (nil = "All") and reload from the top.
+    public func selectTrendingChip(tagID: String?) async {
+        guard currentCategory == .trending, tagID != selectedTrendingTagID else { return }
+        selectedTrendingTagID = tagID
+        nextCursor = nil
+        await load()
     }
 
     public func setSort(_ newSort: MarketSort) async {
@@ -131,9 +166,14 @@ public final class EventListViewModel {
         state = .loading
         if tags.isEmpty { await loadTags() }
         do {
-            let page = try await fetchEvents.execute(tagID: selectedTagID, sort: domainSort, status: domainStatus)
+            let page = try await fetchEvents.execute(tagID: effectiveTagID, sort: domainSort, status: domainStatus)
             nextCursor = page.nextCursor
             state = page.items.isEmpty ? .empty : .loaded(page.items)
+            // Chips come only from the *unfiltered* trending feed so the row doesn't
+            // reshuffle while the user filters with it.
+            if currentCategory == .trending && selectedTrendingTagID == nil && !page.items.isEmpty {
+                trendingChips = TrendingChipDeriver.chips(from: page.items)
+            }
         } catch {
             state = .failed("Couldn't load markets. pull to refresh.")
         }
@@ -160,7 +200,7 @@ public final class EventListViewModel {
         isLoadingMore = true
         defer { isLoadingMore = false }
         do {
-            let page = try await fetchEvents.execute(cursor: cursor, tagID: selectedTagID, sort: domainSort, status: domainStatus)
+            let page = try await fetchEvents.execute(cursor: cursor, tagID: effectiveTagID, sort: domainSort, status: domainStatus)
             nextCursor = page.nextCursor
             state = .loaded(current + page.items)
 
@@ -171,7 +211,7 @@ public final class EventListViewModel {
                 var extra = 0
                 while nextCursor != nil && visibleEvents.count == before && extra < 5 {
                     guard case .loaded(let all) = state, let nc = nextCursor else { break }
-                    let next = try await fetchEvents.execute(cursor: nc, tagID: selectedTagID, sort: domainSort, status: domainStatus)
+                    let next = try await fetchEvents.execute(cursor: nc, tagID: effectiveTagID, sort: domainSort, status: domainStatus)
                     nextCursor = next.nextCursor
                     state = .loaded(all + next.items)
                     extra += 1
