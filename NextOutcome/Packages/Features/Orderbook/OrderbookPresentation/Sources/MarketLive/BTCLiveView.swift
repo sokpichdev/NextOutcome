@@ -12,8 +12,11 @@ import DesignSystem
 /// server-clock countdown (red under a minute), live Up/Down quick-bet buttons, and a
 /// recent-trades ticker.
 public struct BTCLiveView: View {
+    /// The view model driving the whole screen.
     @State private var viewModel: BTCLiveViewModel
 
+    /// Creates the view.
+    /// - Parameter viewModel: The BTC-live view model (usually from `btcLiveFactory`).
     public init(viewModel: BTCLiveViewModel) {
         self._viewModel = State(initialValue: viewModel)
     }
@@ -35,6 +38,8 @@ public struct BTCLiveView: View {
 
     // MARK: Header (countdown + price to beat)
 
+    /// The header: the countdown on the left (red when urgent) and the price-to-beat on
+    /// the right.
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: DSLayout.spacingXSmall) {
@@ -61,6 +66,7 @@ public struct BTCLiveView: View {
 
     // MARK: Chart
 
+    /// The chart card: title, the candle/line mode toggle, and the chart body.
     private var chartCard: some View {
         DSCard {
             VStack(alignment: .leading, spacing: DSLayout.spacing) {
@@ -77,6 +83,7 @@ public struct BTCLiveView: View {
         }
     }
 
+    /// The two chips that switch between candle and line chart modes.
     private var modeToggle: some View {
         HStack(spacing: DSLayout.spacingSmall) {
             DSChip("Candles", isActive: viewModel.chartMode == .candles) {
@@ -88,6 +95,8 @@ public struct BTCLiveView: View {
         }
     }
 
+    /// The chart contents, switching on load state (spinner / empty / error / the selected
+    /// candle or line chart).
     @ViewBuilder
     private var chartBody: some View {
         switch viewModel.state {
@@ -107,6 +116,8 @@ public struct BTCLiveView: View {
         }
     }
 
+    /// The candlestick chart: a wick (high–low) and body (open–close) per candle, plus a
+    /// dashed price-to-beat line. Green when the candle closed up, red when down.
     private var candleChart: some View {
         Chart {
             ForEach(Array(viewModel.candles.enumerated()), id: \.offset) { _, candle in
@@ -135,12 +146,14 @@ public struct BTCLiveView: View {
         .chartYScale(domain: 0...1)
     }
 
+    /// Green if the candle closed at or above its open, red otherwise.
     private func candleColor(_ candle: Candle) -> Color {
         candle.close >= candle.open ? DSColor.positive : DSColor.negative
     }
 
     // MARK: Quick bet
 
+    /// The Up/Down quick-bet buttons showing the current live cents for each side.
     private var quickBet: some View {
         HStack(spacing: DSLayout.spacing) {
             PriceButton(
@@ -158,6 +171,7 @@ public struct BTCLiveView: View {
 
     // MARK: Recent trades ticker
 
+    /// The recent-trades list (up to 8 rows), hidden entirely when there are no trades.
     @ViewBuilder
     private var tradesTicker: some View {
         if !viewModel.recentTrades.isEmpty {
@@ -185,6 +199,10 @@ public struct BTCLiveView: View {
         }
     }
 
+    /// A centered message, optionally with a retry button, for the empty and error states.
+    /// - Parameters:
+    ///   - message: The text to show.
+    ///   - showRetry: Whether to include a "Retry" button.
     private func emptyOrError(_ message: String, showRetry: Bool) -> some View {
         VStack(spacing: DSLayout.spacingSmall) {
             Text(message)
@@ -201,14 +219,17 @@ public struct BTCLiveView: View {
 
     // MARK: Formatting (Decimal stays domain-side; Double/labels only here)
 
+    /// Clamps a domain `Decimal` price into a 0…1 `Double` for the chart's y-axis.
     private func fractionValue(_ value: Decimal) -> Double {
         min(1, max(0, NSDecimalNumber(decimal: value).doubleValue))
     }
 
+    /// Formats a 0…1 price as a whole-cent label (e.g. "62¢").
     private func centsLabel(_ value: Decimal) -> String {
         "\(Int((fractionValue(value) * 100).rounded()))¢"
     }
 
+    /// Formats an optional cents value for a quick-bet button, showing "--" when unknown.
     private func centsButtonLabel(_ cents: Int?) -> String {
         cents.map { "\($0)¢" } ?? "--"
     }
