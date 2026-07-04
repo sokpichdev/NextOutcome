@@ -46,6 +46,34 @@ final class MapGlobeBuilderTests: XCTestCase {
         XCTAssertEqual(countries.first?.caption, "<1%")
     }
 
+    func test_spaced_pushesOverlappingPillsApart() {
+        // Three countries piled on nearly the same spot must end up separated.
+        let piled = (0..<3).map {
+            GlobeCountry(id: "\($0)", name: "C\($0)", abbreviation: "C\($0)",
+                         lat: 0.1 * Double($0), lon: 0.1 * Double($0), percent: 0.1, colorHex: nil)
+        }
+        let spaced = MapGlobeBuilder.spaced(piled, minSep: 15, maxDrift: 20)
+        for i in 0..<spaced.count {
+            for j in (i + 1)..<spaced.count {
+                let d = ((spaced[i].lat - spaced[j].lat) * (spaced[i].lat - spaced[j].lat)
+                       + (spaced[i].lon - spaced[j].lon) * (spaced[i].lon - spaced[j].lon)).squareRoot()
+                XCTAssertGreaterThan(d, 8, "pills \(i),\(j) still overlap")
+            }
+        }
+    }
+
+    func test_spaced_keepsPillsNearTrueLocation() {
+        let piled = (0..<6).map {
+            GlobeCountry(id: "\($0)", name: "C\($0)", abbreviation: "C\($0)",
+                         lat: 0, lon: 0, percent: 0.1, colorHex: nil)
+        }
+        let spaced = MapGlobeBuilder.spaced(piled, minSep: 15, maxDrift: 13)
+        for c in spaced {
+            XCTAssertLessThanOrEqual(abs(c.lat), 13.001)
+            XCTAssertLessThanOrEqual(abs(c.lon), 13.001)
+        }
+    }
+
     func test_inactiveMarkets_dropped() {
         let countries = MapGlobeBuilder.countries(from: winner([
             market("m", country: "Spain", yes: 0.0, active: false)

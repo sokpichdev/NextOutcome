@@ -157,7 +157,7 @@ struct GlobeSceneView: UIViewRepresentable {
     private func pillPlane(for country: GlobeCountry) -> SCNPlane {
         let image = Self.pillImage(for: country)
         let aspect = image.size.width / max(image.size.height, 1)
-        let height: CGFloat = 0.16
+        let height: CGFloat = 0.13
         let plane = SCNPlane(width: height * aspect, height: height)
         let material = SCNMaterial()
         material.diffuse.contents = image
