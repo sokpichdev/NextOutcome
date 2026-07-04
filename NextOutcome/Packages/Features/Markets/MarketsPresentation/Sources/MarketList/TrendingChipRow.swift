@@ -17,15 +17,10 @@ struct TrendingChipRow: View {
     let onSelect: (String?) -> Void
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                DSChip("All", isActive: selectedTagID == nil) { onSelect(nil) }
-                ForEach(chips) { tag in
-                    DSChip(tag.label, isActive: selectedTagID == tag.id) { onSelect(tag.id) }
-                }
-            }
-            .padding(.horizontal, DSLayout.margin)
-            .padding(.vertical, 6)
-        }
+        FilterChipRow<String?>(
+            items: [.init(id: nil, label: "All")] + chips.map { .init(id: $0.id, label: $0.label) },
+            selectedID: selectedTagID,
+            onSelect: onSelect
+        )
     }
 }
