@@ -6,6 +6,7 @@ import SharedDomain
 public enum SocialTab: String, CaseIterable, Sendable {
     case comments, holders, positions, activity
 
+    /// The tab's display title.
     public var title: String {
         switch self {
         case .comments: return "Comments"
@@ -22,17 +23,33 @@ public enum SocialTab: String, CaseIterable, Sendable {
 @MainActor
 @Observable
 public final class SocialStripViewModel {
+    /// The currently-selected inner tab.
     public var selectedTab: SocialTab = .comments
+    /// The comments tab's load state.
     public private(set) var commentsState: LoadState<[Comment]> = .idle
+    /// The holders tab's load state.
     public private(set) var holdersState: LoadState<[Holder]> = .idle
+    /// The activity tab's load state.
     public private(set) var activityState: LoadState<[ActivityTrade]> = .idle
 
+    /// The event whose comments are fetched.
     private let eventID: String
+    /// The top market's condition id (for holders/activity); may be `nil`.
     private let conditionId: String?
+    /// Use case that fetches comments.
     private let fetchComments: FetchCommentsUseCase
+    /// Use case that fetches holders.
     private let fetchHolders: FetchHoldersUseCase
+    /// Use case that fetches activity trades.
     private let fetchActivity: FetchActivityTradesUseCase
 
+    /// Creates the view model.
+    /// - Parameters:
+    ///   - eventID: The event whose comments to fetch.
+    ///   - conditionId: The market condition for holders/activity, if any.
+    ///   - fetchComments: Comments use case.
+    ///   - fetchHolders: Holders use case.
+    ///   - fetchActivity: Activity-trades use case.
     public init(
         eventID: String,
         conditionId: String?,
