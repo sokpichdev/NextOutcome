@@ -10,9 +10,14 @@ import SwiftUI
 import MarketsDomain
 import DesignSystem
 
+/// The market search screen: a search field over a results list, with prompt/empty/error
+/// states. Results are flat markets (no parent event).
 public struct SearchView: View {
+    /// The view model driving search.
     @State private var viewModel: SearchViewModel
 
+    /// Creates the view.
+    /// - Parameter viewModel: The search view model.
     public init(viewModel: SearchViewModel) {
         self._viewModel = State(initialValue: viewModel)
     }
@@ -35,6 +40,8 @@ public struct SearchView: View {
             )
     }
 
+    /// Switches on the view model's state to show the prompt, loading/empty/error states, or
+    /// the results list.
     @ViewBuilder
     private var content: some View {
         switch viewModel.state {
@@ -51,6 +58,7 @@ public struct SearchView: View {
         }
     }
 
+    /// The idle-state prompt shown before the user types a query.
     private var prompt: some View {
         VStack(spacing: DSLayout.spacing) {
             Image(systemName: "magnifyingglass")
@@ -64,6 +72,8 @@ public struct SearchView: View {
         .background(DSColor.background)
     }
 
+    /// The scrolling list of matching market cards.
+    /// - Parameter markets: The search results to show.
     private func results(_ markets: [Market]) -> some View {
         ScrollView {
             LazyVStack(spacing: DSLayout.spacing) {
