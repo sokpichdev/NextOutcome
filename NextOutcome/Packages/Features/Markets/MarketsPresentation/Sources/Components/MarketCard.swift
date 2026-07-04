@@ -9,9 +9,14 @@ import SwiftUI
 import MarketsDomain
 import DesignSystem
 
+/// A card summarizing one market: icon, question, Yes/No price pills, and a volume +
+/// countdown footer. Used in feed lists.
 public struct MarketCard: View {
+    /// The market to render.
     private let market: Market
 
+    /// Creates the card.
+    /// - Parameter market: The market to display.
     public init(market: Market) {
         self.market = market
     }
@@ -51,6 +56,8 @@ public struct MarketCard: View {
         }
     }
 
+    /// The market icon, loaded async with a placeholder, or a plain rounded rectangle when
+    /// there's no image URL.
     @ViewBuilder
     private var icon: some View {
         if let url = market.imageURL {
