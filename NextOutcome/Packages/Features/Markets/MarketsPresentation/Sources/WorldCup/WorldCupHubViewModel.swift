@@ -16,15 +16,20 @@ public final class WorldCupHubViewModel {
         case idle, loading, loaded, failed(String)
     }
 
-    /// 2026 FIFA World Cup Gamma series (`/sports` → sport "fifwc"). The tag id below is
-    /// the safety net when the series lookup returns nothing.
+    /// 2026 FIFA World Cup Gamma series (`/sports` → sport "fifwc"): games + player props.
+    /// The tag feed adds what the series omits — tournament futures (winner, awards,
+    /// groups) — and doubles as the fallback when the series lookup returns nothing.
     static let seriesID = "11433"
-    static let fallbackTagID = "519"
+    static let futuresTagID = "519"
+    /// The tournament-winner futures event backing the flag marquee, fetched directly —
+    /// it is neither in the series nor reliably in the futures tag's top page.
+    static let winnerSlug = "world-cup-winner"
 
     public private(set) var state: State = .idle
     public private(set) var games: [Event] = []
     public private(set) var props: [Event] = []
     public private(set) var results: [String: GameResult] = [:]
+    public private(set) var winnerEvent: Event?
     public private(set) var lastUpdated: Date?
     public var selectedTab: WorldCupTab = .games
     public var selectedPropsFilter: PropsFilter = .all
@@ -32,17 +37,20 @@ public final class WorldCupHubViewModel {
     private let fetchSeriesEvents: FetchSeriesEventsUseCase
     private let fetchGameResults: FetchGameResultsUseCase
     private let fetchEvents: FetchEventsUseCase
+    private let fetchEvent: FetchEventUseCase
     private let now: @Sendable () -> Date
 
     public init(
         fetchSeriesEvents: FetchSeriesEventsUseCase,
         fetchGameResults: FetchGameResultsUseCase,
         fetchEvents: FetchEventsUseCase,
+        fetchEvent: FetchEventUseCase,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.fetchSeriesEvents = fetchSeriesEvents
         self.fetchGameResults = fetchGameResults
         self.fetchEvents = fetchEvents
+        self.fetchEvent = fetchEvent
         self.now = now
     }
 
@@ -50,9 +58,9 @@ public final class WorldCupHubViewModel {
         WorldCupEventSplitter.gamesByDay(games)
     }
 
-    /// The tournament-winner futures event backing the flag marquee. Excludes award
-    /// ("Golden Boot Winner") and group ("Group A Winner") events that also say "winner".
-    public var winnerEvent: Event? {
+    /// Fallback winner lookup in the loaded props. Excludes award ("Golden Boot Winner")
+    /// and group ("Group A Winner") events that also say "winner".
+    static func heuristicWinner(in props: [Event]) -> Event? {
         props
             .filter {
                 let t = $0.title.lowercased()
@@ -67,20 +75,27 @@ public final class WorldCupHubViewModel {
 
     public func load() async {
         state = .loading
-        do {
-            var events = try await fetchSeriesEvents.execute(seriesID: Self.seriesID)
-            if events.isEmpty {
-                events = try await fetchEvents.execute(tagID: Self.fallbackTagID, sort: .volume24h, status: .active).items
-            }
-            let split = WorldCupEventSplitter.split(events)
-            games = split.games
-            props = split.props
-            state = .loaded
-            lastUpdated = now()
-            await refreshResults(for: initialResultIDs())
-        } catch {
+        async let seriesFetch = fetchSeriesEvents.execute(seriesID: Self.seriesID)
+        async let futuresFetch = fetchEvents.execute(tagID: Self.futuresTagID, sort: .volume24h, status: .active)
+        async let winnerFetch = fetchEvent.execute(slug: Self.winnerSlug)
+
+        let series = (try? await seriesFetch) ?? []
+        let futures = (try? await futuresFetch)?.items ?? []
+        let winner = try? await winnerFetch
+        guard !(series.isEmpty && futures.isEmpty) else {
             state = .failed("Couldn't load World Cup markets. Pull to refresh.")
+            return
         }
+
+        let seriesIDs = Set(series.map(\.id))
+        let events = series + futures.filter { !seriesIDs.contains($0.id) }
+        let split = WorldCupEventSplitter.split(events)
+        games = split.games
+        props = split.props
+        winnerEvent = winner ?? Self.heuristicWinner(in: split.props)
+        state = .loaded
+        lastUpdated = now()
+        await refreshResults(for: initialResultIDs())
     }
 
     public func refresh() async {

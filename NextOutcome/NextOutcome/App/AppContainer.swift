@@ -46,7 +46,8 @@ final class AppContainer {
         WorldCupHubViewModel(
             fetchSeriesEvents: FetchSeriesEventsUseCase(repository: repository),
             fetchGameResults: FetchGameResultsUseCase(repository: repository),
-            fetchEvents: FetchEventsUseCase(repository: repository)
+            fetchEvents: FetchEventsUseCase(repository: repository),
+            fetchEvent: FetchEventUseCase(repository: repository)
         )
     }
 
