@@ -8,7 +8,12 @@
 import Foundation
 import PortfolioDomain
 
+/// Converts a `PositionDTO` (network shape) into the domain `Position`, filling in
+/// fallbacks for missing titles/slugs and parsing the icon URL.
 enum PositionMapper {
+    /// Maps one position DTO to a domain `Position`.
+    /// - Parameter dto: The decoded position row.
+    /// - Returns: The domain position.
     static func position(from dto: PositionDTO) -> Position {
         Position(
             id: dto.asset,
