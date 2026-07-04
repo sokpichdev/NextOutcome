@@ -28,6 +28,7 @@ enum StickyHeaderAbbreviations {
         return (left: abbreviate(leftTitle), right: abbreviate(rightTitle))
     }
 
+    /// Shortens a name to a 3-letter uppercase abbreviation (e.g. "Argentina" → "ARG").
     static func abbreviate(_ s: String) -> String {
         String(s.prefix(3)).uppercased()
     }
@@ -36,23 +37,39 @@ enum StickyHeaderAbbreviations {
 /// Tracks how far the hero region (breadcrumb → header → chart) has scrolled past the top
 /// of the scroll view, so `EventDetailView` can decide when to overlay `StickyEventHeader`.
 private struct HeroScrollOffsetKey: PreferenceKey {
+    /// The default (nothing measured yet).
     static var defaultValue: CGFloat = .greatestFiniteMagnitude
+    /// Combines child values by taking the minimum offset seen.
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = min(value, nextValue())
     }
 }
 
+/// The event detail screen: header, an optional Market/Live segment toggle, a multi-series
+/// price chart, grouped market sections, a rules expander, and the social strip. Overlays a
+/// compact sticky header once the hero region scrolls off-screen.
 public struct EventDetailView: View {
+    /// The event being displayed.
     private let event: Event
+    /// Callback fired when a price button is tapped (also opens the trade sheet).
     private let onSelect: (Market, Side) -> Void
+    /// Dismisses this screen.
     @Environment(\.dismiss) private var dismiss
+    /// Supplies chart price-history data.
     @Environment(\.priceHistoryProvider) private var priceHistoryProvider
+    /// Factory for the social strip view model.
     @Environment(\.socialStripFactory) private var socialStripFactory
+    /// The (simulated) trade submitter for the trade sheet.
     @Environment(\.tradeSubmitter) private var tradeSubmitter
+    /// The chart view model, created once a provider is available.
     @State private var chart: EventChartViewModel?
+    /// The social strip view model, created once its factory is available.
     @State private var socialStrip: SocialStripViewModel?
+    /// The selected chart timeframe.
     @State private var timeframe: ChartTimeframe = .max
+    /// The Market/Live segment selection (0 = Market, 1 = Live).
     @State private var segmentSelection = 0
+    /// Whether the compact sticky header is currently overlaid.
     @State private var showsStickyHeader = false
     /// Task 8's mock trade sheet, opened from `onSelect`/the sticky-header Trade button.
     @State private var tradeContext: TradeSheetContext?
@@ -63,14 +80,18 @@ public struct EventDetailView: View {
         self.onSelect = onSelect
     }
 
+    /// The breadcrumb label above the title: the first tag, or the title as a fallback.
     private var breadcrumb: String {
         event.tags.first.map(\.label) ?? event.title
     }
 
+    /// The event's markets grouped into live-site sections via `MarketGroupClassifier`.
     private var groups: [(group: MarketGroup, markets: [Market])] {
         MarketGroupClassifier.groups(for: event.markets)
     }
 
+    /// The per-market resolution rules to feed the `RulesExpander` (markets without rules
+    /// are skipped).
     private var marketRules: [RulesExpander.MarketRule] {
         event.markets.compactMap { market in
             guard let rules = market.rules, !rules.isEmpty else { return nil }
@@ -78,11 +99,13 @@ public struct EventDetailView: View {
         }
     }
 
+    /// Whether the Live segment should be offered (see `LiveTabGate`).
     private var showsLive: Bool {
         LiveTabGate.showsLive(gameStartTime: event.gameStartTime, hasTeams: event.hasTeams,
                                isResolved: event.isResolved, now: Date())
     }
 
+    /// The event's primary market (used for the sticky header and trade shortcut).
     private var topMarket: Market? { event.markets.first }
 
     public var body: some View {
@@ -172,6 +195,7 @@ public struct EventDetailView: View {
 
     /// Invisible marker at the bottom of the chart block; once it scrolls above the
     /// scroll view's top edge, the sticky header takes over.
+    /// The invisible marker below the chart whose position drives `showsStickyHeader`.
     private var heroOffsetReader: some View {
         GeometryReader { geo in
             Color.clear.preference(
@@ -181,6 +205,7 @@ public struct EventDetailView: View {
         }
     }
 
+    /// The event title plus an optional kickoff countdown.
     @ViewBuilder
     private var header: some View {
         VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
@@ -196,6 +221,9 @@ public struct EventDetailView: View {
         }
     }
 
+    /// The price chart area, switching on the chart view model's state (loaded/error/loading/
+    /// empty). A cleared 200pt block is reserved during load so the sticky-header marker
+    /// doesn't jump.
     @ViewBuilder
     private var chartBlock: some View {
         if let chart {
@@ -218,6 +246,7 @@ public struct EventDetailView: View {
         }
     }
 
+    /// One `MarketGroupSection` per classified group.
     @ViewBuilder
     private var marketGroupSections: some View {
         ForEach(groups, id: \.group) { entry in
@@ -225,6 +254,7 @@ public struct EventDetailView: View {
         }
     }
 
+    /// The comments/holders social strip, shown once its view model is built.
     @ViewBuilder
     private var socialStripSection: some View {
         if let socialStrip {
@@ -232,15 +262,19 @@ public struct EventDetailView: View {
         }
     }
 
+    /// The chance percentage shown in the sticky header (from the top market's Yes price).
     private var stickyChanceText: String {
         guard let yes = topMarket?.yesOutcome else { return "" }
         return MarketFormatting.percent(yes.price)
     }
 
+    /// The paired team abbreviations from the moneyline group, if derivable.
     private var stickyMoneylineAbbrevs: (left: String, right: String)? {
         StickyHeaderAbbreviations.stickyAbbreviations(for: event.markets)
     }
 
+    /// The left abbreviation for the sticky header, with a fallback chain when there's no
+    /// moneyline pairing.
     private var stickyLeftAbbrev: String {
         if let pair = stickyMoneylineAbbrevs { return pair.left }
         let groupTitle = topMarket?.groupItemTitle.flatMap { $0.isEmpty ? nil : $0 }
@@ -250,6 +284,8 @@ public struct EventDetailView: View {
         return abbreviate(fallback)
     }
 
+    /// The right abbreviation for the sticky header, with a fallback chain when there's no
+    /// moneyline pairing.
     private var stickyRightAbbrev: String {
         if let pair = stickyMoneylineAbbrevs { return pair.right }
         if event.hasTeams,
@@ -262,6 +298,7 @@ public struct EventDetailView: View {
         return abbreviate(fallback)
     }
 
+    /// Local shorthand for `StickyHeaderAbbreviations.abbreviate`.
     private func abbreviate(_ s: String) -> String {
         StickyHeaderAbbreviations.abbreviate(s)
     }
