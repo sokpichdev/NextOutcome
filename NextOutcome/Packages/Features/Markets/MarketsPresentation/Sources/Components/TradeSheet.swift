@@ -13,9 +13,13 @@ import TradingDomain
 /// succeeds — this is a **simulated** trade. No order is sent and nothing persists;
 /// Confirm plays a short success animation with `successCaption`, then auto-dismisses.
 public struct TradeSheet: View {
+    /// Dismisses the sheet (used after the success animation).
     @Environment(\.dismiss) private var dismiss
+    /// The view model driving amount entry, side, payout, and submission.
     @State private var viewModel: TradeSheetViewModel
 
+    /// Creates the sheet.
+    /// - Parameter viewModel: The trade-sheet view model.
     public init(viewModel: TradeSheetViewModel) {
         self._viewModel = State(initialValue: viewModel)
     }
@@ -45,6 +49,7 @@ public struct TradeSheet: View {
         }
     }
 
+    /// The sheet header: market icon plus the market title and selected-outcome subtitle.
     private var header: some View {
         HStack(spacing: DSLayout.spacingSmall) {
             CardIcon(url: viewModel.market.imageURL)
@@ -73,6 +78,12 @@ public struct TradeSheet: View {
         .clipShape(RoundedRectangle(cornerRadius: DSLayout.chipRadius))
     }
 
+    /// Builds one Yes/No segment button, tinted when it's the selected side.
+    /// - Parameters:
+    ///   - side: The side this segment selects.
+    ///   - title: The button label.
+    ///   - tint: The text/foreground colour when selected.
+    ///   - fill: The background fill when selected.
     private func sideSegment(_ side: Side, title: String, tint: Color, fill: Color) -> some View {
         let selected = viewModel.side == side
         return Button {
@@ -89,6 +100,7 @@ public struct TradeSheet: View {
         .buttonStyle(.plain)
     }
 
+    /// The +$1/+$5/+$10/+$100 quick-add chips.
     private var quickAmountRow: some View {
         HStack(spacing: DSLayout.spacingSmall) {
             ForEach([1, 5, 10, 100], id: \.self) { amount in
@@ -108,6 +120,7 @@ public struct TradeSheet: View {
         }
     }
 
+    /// The large monospaced amount display.
     private var amountBlock: some View {
         Text(viewModel.amountDisplay)
             .font(.system(size: 44, weight: .bold, design: .monospaced))
@@ -116,6 +129,7 @@ public struct TradeSheet: View {
             .padding(.vertical, DSLayout.spacing)
     }
 
+    /// The "To win $X" payout row derived from the entered amount.
     private var toWinRow: some View {
         HStack {
             Text("To win")
@@ -129,6 +143,7 @@ public struct TradeSheet: View {
         .padding(.horizontal, DSLayout.spacingSmall)
     }
 
+    /// The Trade/Confirm button, showing a spinner while submitting.
     private var confirmButton: some View {
         Button {
             Task { await viewModel.confirm() }
@@ -151,6 +166,7 @@ public struct TradeSheet: View {
         .disabled(!viewModel.isConfirmEnabled)
     }
 
+    /// The custom digit keypad (1–9, 0, and backspace) driving amount entry.
     private var keypad: some View {
         let rows: [[String]] = [
             ["1", "2", "3"],
@@ -169,6 +185,9 @@ public struct TradeSheet: View {
         }
     }
 
+    /// Builds one keypad key. An empty string renders a blank spacer; "⌫" deletes; a digit
+    /// appends.
+    /// - Parameter key: The key label.
     @ViewBuilder
     private func keypadButton(_ key: String) -> some View {
         if key.isEmpty {
@@ -190,6 +209,7 @@ public struct TradeSheet: View {
         }
     }
 
+    /// The success state: an animated checkmark and the "simulated" caption.
     private var successView: some View {
         VStack(spacing: DSLayout.spacing) {
             Image(systemName: "checkmark.circle.fill")
