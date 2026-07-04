@@ -51,4 +51,10 @@ public enum WorldCupEventSplitter {
     public static func moneyline(for event: Event) -> Market? {
         event.markets.first { $0.sportsMarketType?.lowercased() == "moneyline" }
     }
+
+    /// All moneyline markets of a game. Soccer moneylines are sibling binary markets —
+    /// one per team plus a draw — labelled via `groupItemTitle`, priced by their Yes side.
+    public static func moneylineMarkets(for event: Event) -> [Market] {
+        event.markets.filter { $0.sportsMarketType?.lowercased() == "moneyline" }
+    }
 }

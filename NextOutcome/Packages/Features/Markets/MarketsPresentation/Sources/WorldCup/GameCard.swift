@@ -10,12 +10,13 @@ import MarketsDomain
 import DesignSystem
 
 /// Schedule card for one game: status/volume row, two team rows (score when live/final),
-/// and the moneyline prices. Team names/logos come from `/events/results` when available,
-/// falling back to the moneyline outcome titles before scores load.
+/// and the moneyline prices. Soccer moneylines are sibling binary markets — one per team
+/// plus a draw, labelled via `groupItemTitle`, priced by their Yes side. Team names/logos
+/// come from `/events/results` when available, falling back to the market labels.
 struct GameCard: View {
     let event: Event
     let result: GameResult?
-    let moneyline: Market?
+    let moneylines: [Market]
 
     var body: some View {
         VStack(alignment: .leading, spacing: DSLayout.spacing) {
@@ -31,6 +32,26 @@ struct GameCard: View {
             RoundedRectangle(cornerRadius: DSLayout.cardRadius)
                 .strokeBorder(DSColor.surfaceElevated, lineWidth: 1)
         )
+    }
+
+    // MARK: moneyline structure
+
+    private func isDraw(_ market: Market) -> Bool {
+        market.groupItemTitle?.lowercased().hasPrefix("draw") == true
+    }
+
+    private var drawMarket: Market? { moneylines.first(where: isDraw) }
+
+    /// Team markets ordered home-first when results tell us the ordering.
+    private var teamMarkets: [Market] {
+        let teams = moneylines.filter { !isDraw($0) }
+        guard let homeName = result?.homeTeam?.name,
+              let homeIndex = teams.firstIndex(where: { $0.groupItemTitle?.caseInsensitiveCompare(homeName) == .orderedSame }),
+              homeIndex != 0
+        else { return teams }
+        var reordered = teams
+        reordered.swapAt(0, homeIndex)
+        return reordered
     }
 
     // MARK: status
@@ -71,8 +92,11 @@ struct GameCard: View {
     private enum Side { case home, away }
 
     private func teamRow(side: Side) -> some View {
+        let index = side == .home ? 0 : 1
         let team = side == .home ? result?.homeTeam : result?.awayTeam
-        let name = team?.name ?? fallbackTeamNames[side == .home ? 0 : 1, default: "TBD"]
+        let name = team?.name
+            ?? (teamMarkets.indices.contains(index) ? teamMarkets[index].groupItemTitle : nil)
+            ?? "TBD"
         let score = side == .home ? result?.homeScore : result?.awayScore
 
         return HStack(spacing: DSLayout.spacingMedium) {
@@ -109,37 +133,71 @@ struct GameCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
-    /// Moneyline outcome titles minus "Draw" — the pre-results stand-in for team names.
-    private var fallbackTeamNames: [Int: String] {
-        let names = (moneyline?.outcomes ?? [])
-            .map(\.title)
-            .filter { $0.caseInsensitiveCompare("Draw") != .orderedSame }
-        return Dictionary(uniqueKeysWithValues: names.prefix(2).enumerated().map { ($0, $1) })
-    }
-
     // MARK: prices
 
     private var priceRow: some View {
-        HStack(spacing: DSLayout.spacingSmall) {
-            ForEach((moneyline?.outcomes ?? []).prefix(3)) { outcome in
+        let ordered: [Market?] = teamMarkets.count >= 2
+            ? [teamMarkets[0], drawMarket, teamMarkets[1]]
+            : teamMarkets + [drawMarket]
+
+        return HStack(spacing: DSLayout.spacingSmall) {
+            ForEach(ordered.compactMap { $0 }) { market in
                 PriceButton(
-                    title: shortLabel(for: outcome.title),
-                    price: MarketFormatting.cents(outcome.price),
+                    title: shortLabel(for: market),
+                    price: MarketFormatting.cents(market.yesOutcome?.price ?? 0),
                     style: .team,
                     action: {}
                 )
+                .frame(maxWidth: .infinity) // equal thirds so no button wraps its price
             }
         }
     }
 
     /// "COL 87¢"-style label: team abbreviation from results when the name matches,
-    /// otherwise the first three letters. "Draw" stays as-is.
-    private func shortLabel(for outcomeTitle: String) -> String {
-        if outcomeTitle.caseInsensitiveCompare("Draw") == .orderedSame { return "Draw" }
-        if let team = result?.teams.first(where: { $0.name.caseInsensitiveCompare(outcomeTitle) == .orderedSame }),
+    /// otherwise the first three letters of the market's team label.
+    private func shortLabel(for market: Market) -> String {
+        if isDraw(market) { return "Draw" }
+        let label = market.groupItemTitle ?? market.question
+        if let team = result?.teams.first(where: { $0.name.caseInsensitiveCompare(label) == .orderedSame }),
            let abbreviation = team.abbreviation {
             return abbreviation
         }
-        return String(outcomeTitle.prefix(3)).uppercased()
+        return String(label.prefix(3)).uppercased()
     }
 }
+
+#if DEBUG
+#Preview("Scheduled · Live") {
+    func moneyline(_ id: String, team: String, yes: Decimal) -> Market {
+        Market(
+            id: id, question: team, slug: id,
+            outcomes: [Outcome(id: "\(id)-y", title: "Yes", price: yes),
+                       Outcome(id: "\(id)-n", title: "No", price: 1 - yes)],
+            volume: 0, liquidity: 0, endDate: nil, isResolved: false,
+            imageURL: nil, sportsMarketType: "moneyline", groupItemTitle: team
+        )
+    }
+    let markets = [
+        moneyline("m1", team: "Colombia", yes: 0.87),
+        moneyline("m2", team: "Draw (Colombia vs. Ghana)", yes: 0.12),
+        moneyline("m3", team: "Ghana", yes: 0.025),
+    ]
+    let event = Event(
+        id: "e1", title: "Colombia vs. Ghana", slug: "col-gha", markets: markets,
+        volume: 23_430_000, imageURL: nil, gameStartTime: .now.addingTimeInterval(7200)
+    )
+    let live = GameResult(
+        eventID: "e1", score: "1-0", elapsed: "66", period: "2H", live: true, ended: false,
+        teams: [
+            GameTeam(name: "Colombia", abbreviation: "COL", logoURL: nil, colorHex: nil, ordering: "home"),
+            GameTeam(name: "Ghana", abbreviation: "GHA", logoURL: nil, colorHex: nil, ordering: "away"),
+        ]
+    )
+    return VStack(spacing: 12) {
+        GameCard(event: event, result: nil, moneylines: markets)
+        GameCard(event: event, result: live, moneylines: markets)
+    }
+    .padding()
+    .background(DSColor.background)
+}
+#endif

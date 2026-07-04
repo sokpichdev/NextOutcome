@@ -31,7 +31,7 @@ struct GamesScheduleView: View {
                             GameCard(
                                 event: game,
                                 result: results[game.id],
-                                moneyline: WorldCupEventSplitter.moneyline(for: game)
+                                moneylines: WorldCupEventSplitter.moneylineMarkets(for: game)
                             )
                         }
                         .buttonStyle(.plain)
