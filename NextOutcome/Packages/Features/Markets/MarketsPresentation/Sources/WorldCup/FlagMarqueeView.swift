@@ -10,7 +10,7 @@ import MarketsDomain
 import DesignSystem
 
 /// Decorative strip of tilted flag tiles with win percentages, fed by the tournament-winner
-/// market's outcomes. Static in this phase; the looping animation lands with the polish pass.
+/// market's outcomes. Loops slowly right-to-left; static under Reduce Motion.
 struct FlagMarqueeView: View {
     struct Tile: Identifiable {
         let id: String
@@ -34,19 +34,57 @@ struct FlagMarqueeView: View {
             }
     }
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var rowWidth: CGFloat = 0
+
+    private static let pointsPerSecond: Double = 18
+    private static let stripHeight: CGFloat = 84
+
     var body: some View {
         if !tiles.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: DSLayout.spacingXLarge) {
-                    ForEach(Array(tiles.enumerated()), id: \.element.id) { index, tile in
-                        tileView(tile, index: index)
+            // The tile row is much wider than the screen, so it lives in an overlay on a
+            // fixed-size strip — its width must never reach the surrounding layout.
+            Color.clear
+                .frame(height: Self.stripHeight)
+                .frame(maxWidth: .infinity)
+                .overlay(alignment: .leading) {
+                    if reduceMotion {
+                        tileRow
+                    } else {
+                        marquee
                     }
                 }
-                .padding(.horizontal, DSLayout.spacingXLarge)
-                .padding(.vertical, DSLayout.spacingLarge)
-            }
-            .disabled(true) // decorative
+                .clipped()
+                .padding(.vertical, DSLayout.spacingSmall)
+                .accessibilityHidden(true) // decorative
         }
+    }
+
+    /// Two copies of the row slide left; when the first copy has fully passed, the offset
+    /// wraps (modulo row width) and the loop is seamless.
+    private var marquee: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+            let elapsed = context.date.timeIntervalSinceReferenceDate
+            let offset = rowWidth > 0
+                ? CGFloat(elapsed * Self.pointsPerSecond).truncatingRemainder(dividingBy: rowWidth)
+                : 0
+
+            HStack(spacing: 0) {
+                tileRow
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { rowWidth = $0 }
+                tileRow
+            }
+            .offset(x: -offset)
+        }
+    }
+
+    private var tileRow: some View {
+        HStack(spacing: DSLayout.spacingXLarge) {
+            ForEach(Array(tiles.enumerated()), id: \.element.id) { index, tile in
+                tileView(tile, index: index)
+            }
+        }
+        .padding(.horizontal, DSLayout.spacingLarge)
     }
 
     private func tileView(_ tile: Tile, index: Int) -> some View {
@@ -68,3 +106,16 @@ struct FlagMarqueeView: View {
         .offset(y: index.isMultiple(of: 2) ? 0 : 10)
     }
 }
+
+#if DEBUG
+#Preview {
+    FlagMarqueeView(tiles: [
+        .init(id: "1", caption: "35%", imageURL: nil),
+        .init(id: "2", caption: "17%", imageURL: nil),
+        .init(id: "3", caption: "13%", imageURL: nil),
+        .init(id: "4", caption: "7%", imageURL: nil),
+        .init(id: "5", caption: "<1%", imageURL: nil),
+    ])
+    .background(DSColor.background)
+}
+#endif
