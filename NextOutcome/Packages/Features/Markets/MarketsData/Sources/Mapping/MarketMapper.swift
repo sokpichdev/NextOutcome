@@ -8,7 +8,15 @@
 import Foundation
 import MarketsDomain
 
+/// Translates the Gamma DTOs into clean domain types (markets, events, tags, holders,
+/// comments, trades), zipping the parallel outcome/price/token arrays together and building
+/// friendly display names. Keeping all this in one place means the domain never sees the
+/// API's quirky wire shape.
 enum MarketMapper {
+    /// Maps a `MarketDTO` to a domain `Market`, zipping outcome labels with their prices and
+    /// token ids (falling back to a synthesized id when the token array is short).
+    /// - Parameter dto: The decoded market.
+    /// - Returns: The domain market.
     static func market(from dto: MarketDTO) -> Market {
         let outcomes = dto.outcomes.enumerated().map { index, name in
             Outcome(
@@ -35,10 +43,15 @@ enum MarketMapper {
             rules: dto.description)
     }
     
+    /// Maps a `TagDTO` to a domain `Tag`.
     static func tag(from dto: TagDTO) -> Tag {
         Tag(id: dto.id, label: dto.label, slug: dto.slug)
     }
 
+    /// Flattens the grouped holder DTOs into a single list of domain `Holder`s, sorted by
+    /// shares held (largest first).
+    /// - Parameter groups: The per-outcome holder groups.
+    /// - Returns: The domain holders, highest shares first.
     static func holders(from groups: [HolderGroupDTO]) -> [Holder] {
         groups.flatMap(\.holders).enumerated().map { index, dto in
             Holder(
@@ -52,6 +65,7 @@ enum MarketMapper {
         .sorted { $0.shares > $1.shares }
     }
 
+    /// Maps a numeric outcome index to a "Yes"/"No" label (empty for anything else).
     private static func outcomeLabel(_ index: Int?) -> String {
         switch index {
         case 0: return "Yes"
@@ -60,6 +74,7 @@ enum MarketMapper {
         }
     }
 
+    /// Picks a holder display name: real name, then pseudonym, then a shortened wallet.
     private static func holderName(_ dto: HolderDTO) -> String {
         if let name = dto.name, !name.isEmpty { return name }
         if let pseudonym = dto.pseudonym, !pseudonym.isEmpty { return pseudonym }
@@ -67,6 +82,9 @@ enum MarketMapper {
         return "\(wallet.prefix(6))…\(wallet.suffix(4))"
     }
 
+    /// Maps comment DTOs to domain `Comment`s, resolving author names and avatars.
+    /// - Parameter dtos: The decoded comments.
+    /// - Returns: The domain comments.
     static func comments(from dtos: [CommentDTO]) -> [Comment] {
         dtos.map { dto in
             Comment(
@@ -79,12 +97,16 @@ enum MarketMapper {
         }
     }
 
+    /// Picks a comment author name: real name, then pseudonym, then "Anonymous".
     private static func commentAuthorName(_ profile: CommentProfileDTO?) -> String {
         if let name = profile?.name, !name.isEmpty { return name }
         if let pseudonym = profile?.pseudonym, !pseudonym.isEmpty { return pseudonym }
         return "Anonymous"
     }
 
+    /// Maps trade DTOs to domain `ActivityTrade`s, resolving side, actor name, and avatar.
+    /// - Parameter dtos: The decoded trades.
+    /// - Returns: The domain trades.
     static func trades(from dtos: [ActivityTradeDTO]) -> [ActivityTrade] {
         dtos.enumerated().map { index, dto in
             ActivityTrade(
@@ -100,6 +122,7 @@ enum MarketMapper {
         }
     }
 
+    /// Picks a trade actor name: real name, then pseudonym, then a shortened wallet.
     private static func tradeActorName(_ dto: ActivityTradeDTO) -> String {
         if let name = dto.name, !name.isEmpty { return name }
         if let pseudonym = dto.pseudonym, !pseudonym.isEmpty { return pseudonym }
@@ -107,6 +130,9 @@ enum MarketMapper {
         return "\(wallet.prefix(6))…\(wallet.suffix(4))"
     }
 
+    /// Maps an `EventDTO` to a domain `Event`, recursively mapping its markets and tags.
+    /// - Parameter dto: The decoded event.
+    /// - Returns: The domain event.
     static func event(from dto: EventDTO) -> Event {
         Event(
             id: dto.id,
