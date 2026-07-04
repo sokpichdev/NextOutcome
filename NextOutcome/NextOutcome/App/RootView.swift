@@ -16,6 +16,7 @@ import TradingDomain
 
 struct RootView: View {
     @State private var eventListViewModel: EventListViewModel
+    @State private var worldCupViewModel: WorldCupHubViewModel
     @State private var searchViewModel: SearchViewModel
     @State private var portfolioViewModel: PortfolioViewModel
     @State private var activityViewModel: ActivityViewModel
@@ -37,6 +38,7 @@ struct RootView: View {
     init(container: AppContainer = AppContainer()) {
         let portfolio = container.makePortfolioViewModel()
         _eventListViewModel = State(initialValue: container.makeEventListViewModel())
+        _worldCupViewModel = State(initialValue: container.makeWorldCupHubViewModel())
         _searchViewModel = State(initialValue: container.makeSearchViewModel())
         _portfolioViewModel = State(initialValue: portfolio)
         _activityViewModel = State(initialValue: container.makeActivityViewModel())
@@ -72,7 +74,16 @@ struct RootView: View {
     private var tabs: some View {
         TabView {
             NavigationStack {
-                chrome { EventListView(viewModel: eventListViewModel, selectedCategory: selectedCategory) }
+                chrome {
+                    // World Cup swaps the generic feed for its dedicated hub; the rail
+                    // (ShellChrome) stays, and both view models live here so each keeps
+                    // its state across switches.
+                    if selectedCategory == .worldCup {
+                        WorldCupHubView(viewModel: worldCupViewModel)
+                    } else {
+                        EventListView(viewModel: eventListViewModel, selectedCategory: selectedCategory)
+                    }
+                }
             }
             .tabItem { Label("Home", systemImage: "house") }
 
