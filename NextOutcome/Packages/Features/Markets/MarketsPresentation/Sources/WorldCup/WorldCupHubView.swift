@@ -74,7 +74,10 @@ public struct WorldCupHubView: View {
                 GamesScheduleView(gamesByDay: viewModel.gamesByDay, results: viewModel.results)
             case .props:
                 PropsListView(props: viewModel.props, filter: $viewModel.selectedPropsFilter)
-            case .bracket, .map:
+            case .bracket:
+                BracketView(games: viewModel.games, results: viewModel.results,
+                            props: viewModel.props, teams: viewModel.teamsByName)
+            case .map:
                 WorldCupPlaceholderView(tab: viewModel.selectedTab)
             }
         }
