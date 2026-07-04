@@ -73,8 +73,7 @@ public struct WorldCupHubView: View {
             case .games:
                 GamesScheduleView(gamesByDay: viewModel.gamesByDay, results: viewModel.results)
             case .props:
-                // Placeholder until the Props tab lands in the next phase.
-                WorldCupPlaceholderView(tab: .props)
+                PropsListView(props: viewModel.props, filter: $viewModel.selectedPropsFilter)
             case .bracket, .map:
                 WorldCupPlaceholderView(tab: viewModel.selectedTab)
             }
