@@ -87,6 +87,47 @@ public struct GammaMarketRepository: MarketRepository {
         return MarketMapper.trades(from: dtos)
     }
 
+    public func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] {
+        // A series (tournament) is bounded but can exceed one page; walk a few pages.
+        var all: [EventDTO] = []
+        for page in 0..<3 {
+            let query = GammaEventQuery.seriesParams(seriesID: seriesID, offset: page * 100, status: status)
+            let dtos: [EventDTO] = try await client.fetch(Endpoint(host: .gamma, path: "/events", query: query))
+            all += dtos
+            if dtos.count < 100 { break }
+        }
+        return all.map(MarketMapper.event(from:))
+    }
+
+    public func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] {
+        // Multi-id support on /events/results is undocumented, so fetch per id with bounded
+        // concurrency; a failed or empty id is skipped rather than failing the batch.
+        try await withThrowingTaskGroup(of: (String, GameResult?).self) { group in
+            var results: [String: GameResult] = [:]
+            var pending = eventIDs.makeIterator()
+            var inFlight = 0
+
+            func addNext() {
+                guard let id = pending.next() else { return }
+                inFlight += 1
+                group.addTask {
+                    let endpoint = Endpoint(host: .gamma, path: "/events/results", query: ["id": id])
+                    let dtos: [GameResultDTO]? = try? await client.fetch(endpoint)
+                    return (id, dtos?.first?.toDomain(fallbackEventID: id))
+                }
+            }
+
+            for _ in 0..<8 { addNext() }
+            while inFlight > 0 {
+                guard let (id, result) = try await group.next() else { break }
+                inFlight -= 1
+                if let result { results[id] = result }
+                addNext()
+            }
+            return results
+        }
+    }
+
     public func fetchTags() async throws -> [Tag] {
         let endpoint = Endpoint(
             host: .gamma,
@@ -115,6 +156,19 @@ public enum GammaEventQuery {
             query["closed"] = "false"
         }
         if let tagID { query["tag_id"] = tagID }
+        return query
+    }
+
+    /// Params for fetching a whole series (tournament) in bounded 100-item pages.
+    public static func seriesParams(seriesID: String, offset: Int, status: EventStatus) -> [String: String] {
+        var query: [String: String] = [
+            "series_id": seriesID,
+            "limit": "100",
+            "offset": "\(offset)",
+        ]
+        if status == .active {
+            query["closed"] = "false"
+        }
         return query
     }
 

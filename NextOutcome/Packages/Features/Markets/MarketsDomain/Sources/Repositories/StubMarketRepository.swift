@@ -17,6 +17,8 @@ struct StubMarketRepository: MarketRepository {
     func fetchMarkets(cursor: String?) async throws -> Page<Market> {
         Page(items: [], nextCursor: nil)
     }
+    func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] { [] }
+    func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] { [:] }
     func fetchEvent(slug: String) async throws -> Event {
         throw URLError(.unknown)
     }
