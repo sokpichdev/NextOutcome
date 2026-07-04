@@ -62,4 +62,17 @@ final class WorldCupEventSplitterTests: XCTestCase {
         XCTAssertEqual(WorldCupEventSplitter.moneyline(for: event)?.id, "ml")
         XCTAssertNil(WorldCupEventSplitter.moneyline(for: prop("p")))
     }
+
+    func test_moneylineMarkets_returnsWholeSiblingGroup() {
+        // Soccer moneylines are three binary markets: home / draw / away.
+        let event = Event(
+            id: "e", title: "A vs. B", slug: "e",
+            markets: [.fixture(id: "home", sportsMarketType: "moneyline"),
+                      .fixture(id: "draw", sportsMarketType: "moneyline"),
+                      .fixture(id: "away", sportsMarketType: "moneyline"),
+                      .fixture(id: "sp", sportsMarketType: "spreads")],
+            volume: 0, imageURL: nil
+        )
+        XCTAssertEqual(WorldCupEventSplitter.moneylineMarkets(for: event).map(\.id), ["home", "draw", "away"])
+    }
 }
