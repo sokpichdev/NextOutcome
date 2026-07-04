@@ -17,6 +17,13 @@ public enum MarketFormatting {
         return "\(Int(value.rounded()))%"
     }
 
+    /// 0…1 price → one-decimal cents string. 0.334 → "33.4¢".
+    public static func cents(_ price: Decimal) -> String {
+        let clamped = min(max(price, 0), 1)
+        let value = NSDecimalNumber(decimal: clamped * 100).doubleValue
+        return String(format: "%.1f¢", value)
+    }
+
     /// 0…1 price → Double fraction for `ProbabilityBar`.
     public static func fraction(_ price: Decimal) -> Double {
         let clamped = min(max(price, 0), 1)

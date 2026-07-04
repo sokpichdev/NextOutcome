@@ -15,6 +15,7 @@ import PortfolioPresentation
 import TradingDomain
 
 struct RootView: View {
+    // View models kept here so their state persists across tab switches
     @State private var eventListViewModel: EventListViewModel
     @State private var worldCupViewModel: WorldCupHubViewModel
     @State private var searchViewModel: SearchViewModel
@@ -32,10 +33,12 @@ struct RootView: View {
     private let sportsStreamer: any SportsStateStreaming
 
     @State private var selectedCategory: ShellCategory = .trending
+    // UI state
     @State private var isDrawerOpen = false
 
     @MainActor
     init(container: AppContainer = AppContainer()) {
+        // Dependency injection: create view models and factories from the app container
         let portfolio = container.makePortfolioViewModel()
         _eventListViewModel = State(initialValue: container.makeEventListViewModel())
         _worldCupViewModel = State(initialValue: container.makeWorldCupHubViewModel())
@@ -55,6 +58,7 @@ struct RootView: View {
     }
 
     var body: some View {
+        // Root layout: main tabs with an optional drawer overlay
         ZStack(alignment: .leading) {
             tabs
             if isDrawerOpen { drawerOverlay.transition(.move(edge: .leading)) }
@@ -72,6 +76,7 @@ struct RootView: View {
     }
 
     private var tabs: some View {
+        // Tab bar with separate navigation stacks per tab
         TabView {
             NavigationStack {
                 chrome {
@@ -106,6 +111,7 @@ struct RootView: View {
 
     @ViewBuilder
     private func chrome<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        // Common chrome wrapper that provides the shell rail and avatar action
         ShellChrome(
             selectedCategory: $selectedCategory,
             onAvatar: { isDrawerOpen = true }
@@ -114,6 +120,7 @@ struct RootView: View {
     }
 
     private var drawerOverlay: some View {
+        // Semi-transparent overlay + side menu drawer
         ZStack(alignment: .leading) {
             Color.black.opacity(0.5).ignoresSafeArea()
                 .onTapGesture { isDrawerOpen = false }
