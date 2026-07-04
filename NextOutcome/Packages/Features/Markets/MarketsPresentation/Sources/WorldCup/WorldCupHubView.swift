@@ -75,8 +75,9 @@ public struct WorldCupHubView: View {
             case .props:
                 PropsListView(props: viewModel.props, filter: $viewModel.selectedPropsFilter)
             case .bracket:
-                BracketView(games: viewModel.games, results: viewModel.results,
-                            props: viewModel.props, teams: viewModel.teamsByName)
+                BracketView(games: viewModel.games, completedGames: viewModel.completedGames,
+                            results: viewModel.results, props: viewModel.props,
+                            groupEvents: viewModel.groupEvents, teams: viewModel.teamsByName)
             case .map:
                 MapView(countries: MapGlobeBuilder.countries(
                     from: viewModel.winnerEvent, teams: viewModel.teamsByName))

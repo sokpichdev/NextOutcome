@@ -48,7 +48,8 @@ final class AppContainer {
             fetchGameResults: FetchGameResultsUseCase(repository: repository),
             fetchEvents: FetchEventsUseCase(repository: repository),
             fetchEvent: FetchEventUseCase(repository: repository),
-            fetchTeams: FetchTeamsUseCase(repository: repository)
+            fetchTeams: FetchTeamsUseCase(repository: repository),
+            fetchCompleted: FetchCompletedEventsUseCase(repository: repository)
         )
     }
 
