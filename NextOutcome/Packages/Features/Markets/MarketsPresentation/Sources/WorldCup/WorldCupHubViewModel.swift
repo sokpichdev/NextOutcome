@@ -27,6 +27,7 @@ public final class WorldCupHubViewModel {
     public private(set) var results: [String: GameResult] = [:]
     public private(set) var lastUpdated: Date?
     public var selectedTab: WorldCupTab = .games
+    public var selectedPropsFilter: PropsFilter = .all
 
     private let fetchSeriesEvents: FetchSeriesEventsUseCase
     private let fetchGameResults: FetchGameResultsUseCase
