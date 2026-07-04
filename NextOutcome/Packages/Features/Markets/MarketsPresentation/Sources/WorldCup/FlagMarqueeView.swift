@@ -65,20 +65,21 @@ struct FlagMarqueeView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private static let stripHeight: CGFloat = 150
-    private static let radius: CGFloat = 330
-    private static let windowDegrees: Double = 42    // half-span of the visible arc
-    private static let degreesPerSecond: Double = 5
+    private static let stripHeight: CGFloat = 140
+    private static let apexY: CGFloat = 42      // y of the centre (highest) flag
+    private static let arcDepth: CGFloat = 30   // how much lower the edge flags sit
+    private static let tiltDegrees: Double = 15
+    private static let pointsPerSecond: Double = 16
 
     var body: some View {
         if !tiles.isEmpty {
             GeometryReader { geo in
                 if reduceMotion {
-                    arc(width: geo.size.width, phase: 0)
+                    conveyor(width: geo.size.width, offset: 0)
                 } else {
                     TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-                        let phase = context.date.timeIntervalSinceReferenceDate * Self.degreesPerSecond
-                        arc(width: geo.size.width, phase: phase)
+                        let offset = context.date.timeIntervalSinceReferenceDate * Self.pointsPerSecond
+                        conveyor(width: geo.size.width, offset: offset)
                     }
                 }
             }
@@ -88,42 +89,27 @@ struct FlagMarqueeView: View {
         }
     }
 
-    /// Places every tile on the ring at its current angle. All tiles are always rendered
-    /// (opacity gates visibility) so their flag images keep identity and never reload as
-    /// they rotate through the window.
-    private func arc(width: CGFloat, phase: Double) -> some View {
-        let spacing = 360.0 / Double(tiles.count)
-        let centerX = width / 2
-        let centerY = Self.radius + 14 // apex ~14pt below the top edge
+    /// A horizontal conveyor of two tile copies scrolling left (seamless via modulo), with a
+    /// parabolic dome applied by screen x — the centre flag rides highest and edges dip, so a
+    /// flag is always crossing the top-centre (no apex gap) and each tile tilts with the arc.
+    private func conveyor(width: CGFloat, offset: Double) -> some View {
+        let spacing = width / 4.2
+        let contentWidth = spacing * CGFloat(tiles.count)
+        let scroll = CGFloat(offset.truncatingRemainder(dividingBy: Double(contentWidth)))
 
         return ZStack {
-            ForEach(Array(tiles.enumerated()), id: \.element.id) { index, tile in
-                let angle = normalize(Double(index) * spacing + phase) // 0 = top of the ring
-                let radians = angle * .pi / 180
-                tileView(tile)
-                    .rotationEffect(.degrees(angle))
-                    .position(
-                        x: centerX + Self.radius * sin(radians),
-                        y: centerY - Self.radius * cos(radians)
-                    )
-                    .opacity(opacity(for: angle))
+            ForEach(0..<2, id: \.self) { copy in
+                ForEach(Array(tiles.enumerated()), id: \.element.id) { index, tile in
+                    let x = CGFloat(copy) * contentWidth
+                        + CGFloat(index) * spacing + spacing / 2 - scroll
+                    let t = (x - width / 2) / (width / 2)          // -1 … 1 across the screen
+                    tileView(tile)
+                        .rotationEffect(.degrees(Self.tiltDegrees * Double(t)))
+                        .position(x: x, y: Self.apexY + Self.arcDepth * t * t)
+                        .opacity(x >= -spacing && x <= width + spacing ? 1 : 0)
+                }
             }
         }
-    }
-
-    /// Normalise degrees to -180…180 so 0 is the top of the ring.
-    private func normalize(_ degrees: Double) -> Double {
-        var d = degrees.truncatingRemainder(dividingBy: 360)
-        if d > 180 { d -= 360 }
-        if d < -180 { d += 360 }
-        return d
-    }
-
-    /// Fade tiles out as they reach the clipped edges of the visible arc.
-    private func opacity(for angle: Double) -> Double {
-        let t = abs(angle) / Self.windowDegrees
-        guard t <= 1 else { return 0 }
-        return t > 0.8 ? (1 - t) / 0.2 : 1
     }
 
     private func tileView(_ tile: Tile) -> some View {
