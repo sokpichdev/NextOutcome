@@ -17,16 +17,22 @@ import DesignSystem
 @MainActor
 @Observable
 public final class BTCLiveViewModel {
+    /// Which chart representation to show.
     public enum ChartMode: Sendable { case line, candles }
+    /// Which side a quick-bet tap represents.
     public enum BetSide: Sendable { case up, down }
 
     /// The price series backing both chart modes and the price-to-beat line.
     public private(set) var state: LoadState<[PriceHistoryPoint]> = .idle
+    /// The chart mode the user has selected.
     public var chartMode: ChartMode = .candles
+    /// The formatted countdown string (e.g. "3:47") shown in the header.
     public private(set) var countdown: String = "--:--"
     /// Seconds left until the window closes, per the server-anchored clock.
     public private(set) var remainingSeconds: Int = 0
+    /// The recent-trades ticker contents, refreshed by polling.
     public private(set) var recentTrades: [RecentTrade] = []
+    /// The latest order book, used for the live Up/Down cents.
     public private(set) var book: OrderBook?
 
     /// Candle interval within the window (seconds).
@@ -34,27 +40,53 @@ public final class BTCLiveViewModel {
     /// The rolling window used to pick the price-to-beat (5 minutes).
     public let windowInterval: TimeInterval = 300
 
+    /// The "Up" outcome token being charted/traded.
     private let assetID: String
+    /// The event id used by the recent-trades poll.
     private let eventID: String
+    /// When the current 5-minute window closes.
     private let windowEnd: Date
+    /// Use case that loads the price series.
     private let fetchHistory: FetchPriceHistoryUseCase
+    /// Use case that fetches authoritative server time (fetched once).
     private let fetchServerTime: FetchServerTimeUseCase
+    /// Use case that polls recent trades.
     private let fetchRecentTrades: FetchRecentTradesUseCase
+    /// Use case that streams the live book.
     private let observeBook: ObserveOrderBookUseCase
+    /// Callback invoked when the user taps Up/Down (host opens the trade flow).
     private let onQuickBet: @MainActor (BetSide) -> Void
 
+    /// Drives the once-per-second countdown refresh.
     private var tickTask: Task<Void, Never>?
+    /// Consumes the live book stream.
     private var bookTask: Task<Void, Never>?
+    /// Polls recent trades on a timer.
     private var tradesTask: Task<Void, Never>?
+    /// Runs the initial history + server-time load.
     private var loadTask: Task<Void, Never>?
     /// Set once `stop()` runs; guards against a late-completing `load()` resurrecting
     /// the countdown ticker (or spawning other work) after teardown.
     private(set) var isStopped = false
 
+    /// A monotonic clock that never jumps (unlike wall-clock `Date`), used to advance the
+    /// countdown from the server anchor.
     private let monoClock = ContinuousClock()
+    /// The server time captured at load, the anchor the countdown counts from.
     private var serverAnchor: Date?
+    /// The monotonic instant captured at the same moment as `serverAnchor`.
     private var monoAnchor: ContinuousClock.Instant?
 
+    /// Creates the view model. Usually built via `BTCLiveViewModelFactory`, not directly.
+    /// - Parameters:
+    ///   - assetID: The "Up" outcome token.
+    ///   - eventID: The event id for the trades ticker.
+    ///   - windowEnd: When the 5-minute window closes.
+    ///   - fetchHistory: Loads the price series.
+    ///   - fetchServerTime: Fetches authoritative server time (once).
+    ///   - fetchRecentTrades: Polls recent trades.
+    ///   - observeBook: Streams the live book.
+    ///   - onQuickBet: Called when the user taps Up/Down.
     public init(
         assetID: String,
         eventID: String,
@@ -108,6 +140,8 @@ public final class BTCLiveViewModel {
     /// applied in the view via a DS token — this flag only carries the intent.
     public var isCountdownUrgent: Bool { remainingSeconds > 0 && remainingSeconds < 60 }
 
+    /// The current server time, computed as `serverAnchor + elapsed monotonic time`.
+    /// `nil` until the anchors are set by the initial load.
     private var currentServerTime: Date? {
         guard let serverAnchor, let monoAnchor else { return nil }
         let elapsed = monoAnchor.duration(to: monoClock.now)
@@ -116,6 +150,8 @@ public final class BTCLiveViewModel {
 
     // MARK: Lifecycle
 
+    /// Starts all the screen's concurrent work: the initial load, the book stream, and the
+    /// trades poll. No-op if already running.
     public func start() {
         guard tickTask == nil, bookTask == nil else { return }
         isStopped = false
@@ -124,6 +160,7 @@ public final class BTCLiveViewModel {
         tradesTask = Task { [weak self] in await self?.pollTrades() }
     }
 
+    /// Cancels every running task and marks the model stopped. Call from the view's teardown.
     public func stop() {
         isStopped = true
         loadTask?.cancel(); loadTask = nil
@@ -138,12 +175,17 @@ public final class BTCLiveViewModel {
         await load()
     }
 
+    /// Forwards an Up/Down tap to the host via the `onQuickBet` callback.
+    /// - Parameter side: Which side the user tapped.
     public func quickBet(_ side: BetSide) {
         onQuickBet(side)
     }
 
     // MARK: Loading
 
+    /// Loads the price series and server time in parallel, sets the countdown anchors, and
+    /// starts the ticking clock. Distinguishes a cancelled load (→ `.idle`) from a real
+    /// failure (→ `.failed`).
     private func load() async {
         if case .loaded = state {} else { state = .loading }
         do {
@@ -165,6 +207,7 @@ public final class BTCLiveViewModel {
         }
     }
 
+    /// Starts a task that refreshes the countdown once per second until cancelled/stopped.
     private func startTicking() {
         guard tickTask == nil, !isStopped else { return }
         tickTask = Task { [weak self] in
@@ -176,18 +219,21 @@ public final class BTCLiveViewModel {
         }
     }
 
+    /// Recomputes `remainingSeconds` and `countdown` from the server-anchored clock.
     private func refreshCountdown() {
         guard let now = currentServerTime else { return }
         remainingSeconds = max(0, Int(windowEnd.timeIntervalSince(now)))
         countdown = CountdownFormatter.string(until: windowEnd, now: now)
     }
 
+    /// Consumes the live book stream, updating `book` on each new snapshot.
     private func streamBook() async {
         for await book in observeBook.execute(assetID: assetID) {
             self.book = book
         }
     }
 
+    /// Polls recent trades every ~5 seconds, keeping the last good list on transient errors.
     private func pollTrades() async {
         while !Task.isCancelled {
             do {
@@ -203,11 +249,14 @@ public final class BTCLiveViewModel {
 
     // MARK: Helpers
 
+    /// Converts a 0…1 probability into a whole-cent price (0…100), clamping out-of-range
+    /// inputs first.
     private func cents(_ fraction: Decimal) -> Int {
         let clamped = min(1, max(0, fraction))
         return Int((NSDecimalNumber(decimal: clamped).doubleValue * 100).rounded())
     }
 
+    /// Converts a `Duration` into a fractional number of seconds.
     private func seconds(from duration: Duration) -> Double {
         let c = duration.components
         return Double(c.seconds) + Double(c.attoseconds) / 1e18
