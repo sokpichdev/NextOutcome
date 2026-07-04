@@ -31,6 +31,7 @@ final class WorldCupHubViewModelTests: XCTestCase {
             fetchSeriesEvents: FetchSeriesEventsUseCase(repository: repo),
             fetchGameResults: FetchGameResultsUseCase(repository: repo),
             fetchEvents: FetchEventsUseCase(repository: repo),
+            fetchEvent: FetchEventUseCase(repository: repo),
             now: { [now] in now }
         )
     }
@@ -55,6 +56,19 @@ final class WorldCupHubViewModelTests: XCTestCase {
         XCTAssertNotNil(vm.lastUpdated)
     }
 
+    func test_load_mergesFuturesTag_dedupingSeriesEvents() async {
+        let repo = WorldCupFakeRepository()
+        repo.seriesEvents = [game("g1", kickoffOffset: 3600), prop("dup", title: "Shared prop")]
+        repo.taggedEvents = [prop("dup", title: "Shared prop"), prop("winner", title: "World Cup Winner")]
+        let vm = makeVM(repo: repo)
+
+        await vm.load()
+
+        XCTAssertEqual(repo.fetchedTagIDs, ["519"]) // futures fetched alongside the series
+        XCTAssertEqual(vm.props.map(\.id), ["dup", "winner"]) // deduped by event id
+        XCTAssertEqual(vm.winnerEvent?.id, "winner")
+    }
+
     func test_load_fallsBackToTag_whenSeriesEmpty() async {
         let repo = WorldCupFakeRepository()
         repo.seriesEvents = []
@@ -67,14 +81,24 @@ final class WorldCupHubViewModelTests: XCTestCase {
         XCTAssertEqual(vm.games.map(\.id), ["g1"])
     }
 
-    func test_winnerEvent_prefersTournamentWinner_overAwardsAndGroups() async {
+    func test_winnerEvent_prefersSlugFetch() async {
+        let repo = WorldCupFakeRepository()
+        repo.seriesEvents = [prop("cup", title: "World Cup Winner")]
+        repo.slugEvent = prop("slug-winner", title: "World Cup Winner")
+        let vm = makeVM(repo: repo)
+        await vm.load()
+        XCTAssertEqual(repo.fetchedSlugs, ["world-cup-winner"])
+        XCTAssertEqual(vm.winnerEvent?.id, "slug-winner")
+    }
+
+    func test_winnerEvent_heuristicFallback_prefersTournamentWinner_overAwardsAndGroups() async {
         let repo = WorldCupFakeRepository()
         repo.seriesEvents = [
             prop("boot", title: "World Cup: Golden Boot Winner", volume: 999),
             prop("group", title: "Group A Winner", volume: 999),
             prop("cup", title: "World Cup Winner", volume: 10),
         ]
-        let vm = makeVM(repo: repo)
+        let vm = makeVM(repo: repo) // slugEvent nil → slug fetch throws → heuristic
         await vm.load()
         XCTAssertEqual(vm.winnerEvent?.id, "cup")
     }
@@ -121,9 +145,11 @@ private extension GameResult {
 private final class WorldCupFakeRepository: MarketRepository, @unchecked Sendable {
     var seriesEvents: [Event] = []
     var taggedEvents: [Event] = []
+    var slugEvent: Event?
     var results: [String: GameResult] = [:]
     private(set) var requestedResultIDs: [[String]] = []
     private(set) var fetchedTagIDs: [String?] = []
+    private(set) var fetchedSlugs: [String] = []
 
     func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] { seriesEvents }
     func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] {
@@ -135,7 +161,11 @@ private final class WorldCupFakeRepository: MarketRepository, @unchecked Sendabl
         return Page(items: taggedEvents, nextCursor: nil)
     }
     func fetchMarkets(cursor: String?) async throws -> Page<Market> { Page(items: [], nextCursor: nil) }
-    func fetchEvent(slug: String) async throws -> Event { fatalError("unused") }
+    func fetchEvent(slug: String) async throws -> Event {
+        fetchedSlugs.append(slug)
+        guard let slugEvent else { throw URLError(.resourceUnavailable) }
+        return slugEvent
+    }
     func searchMarkets(query: String) async throws -> [Market] { [] }
     func fetchTags() async throws -> [Tag] { [] }
     func holders(conditionId: String) async throws -> [Holder] { [] }
