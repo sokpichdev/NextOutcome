@@ -128,6 +128,12 @@ public struct GammaMarketRepository: MarketRepository {
         }
     }
 
+    public func fetchTeams(league: String) async throws -> [GameTeam] {
+        let endpoint = Endpoint(host: .gamma, path: "/teams", query: ["league": league, "limit": "500"])
+        let dtos: [GameTeamDTO] = try await client.fetch(endpoint)
+        return dtos.compactMap { $0.toDomain() }
+    }
+
     public func fetchTags() async throws -> [Tag] {
         let endpoint = Endpoint(
             host: .gamma,

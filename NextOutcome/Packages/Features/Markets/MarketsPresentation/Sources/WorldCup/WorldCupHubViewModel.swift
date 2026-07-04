@@ -29,6 +29,9 @@ public final class WorldCupHubViewModel {
     public private(set) var games: [Event] = []
     public private(set) var props: [Event] = []
     public private(set) var results: [String: GameResult] = [:]
+    /// League team reference (logo, colour) keyed by lowercased name — fills flags/colours
+    /// where a game result hasn't loaded (e.g. the bracket's advance board).
+    public private(set) var teamsByName: [String: GameTeam] = [:]
     public private(set) var winnerEvent: Event?
     public private(set) var lastUpdated: Date?
     public var selectedTab: WorldCupTab = .games
@@ -38,6 +41,7 @@ public final class WorldCupHubViewModel {
     private let fetchGameResults: FetchGameResultsUseCase
     private let fetchEvents: FetchEventsUseCase
     private let fetchEvent: FetchEventUseCase
+    private let fetchTeams: FetchTeamsUseCase
     private let now: @Sendable () -> Date
 
     public init(
@@ -45,14 +49,18 @@ public final class WorldCupHubViewModel {
         fetchGameResults: FetchGameResultsUseCase,
         fetchEvents: FetchEventsUseCase,
         fetchEvent: FetchEventUseCase,
+        fetchTeams: FetchTeamsUseCase,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.fetchSeriesEvents = fetchSeriesEvents
         self.fetchGameResults = fetchGameResults
         self.fetchEvents = fetchEvents
         self.fetchEvent = fetchEvent
+        self.fetchTeams = fetchTeams
         self.now = now
     }
+
+    static let league = "fifwc"
 
     public var gamesByDay: [(day: Date, games: [Event])] {
         WorldCupEventSplitter.gamesByDay(games)
@@ -78,10 +86,14 @@ public final class WorldCupHubViewModel {
         async let seriesFetch = fetchSeriesEvents.execute(seriesID: Self.seriesID)
         async let futuresFetch = fetchEvents.execute(tagID: Self.futuresTagID, sort: .volume24h, status: .active)
         async let winnerFetch = fetchEvent.execute(slug: Self.winnerSlug)
+        async let teamsFetch = fetchTeams.execute(league: Self.league)
 
         let series = (try? await seriesFetch) ?? []
         let futures = (try? await futuresFetch)?.items ?? []
         let winner = try? await winnerFetch
+        if let teams = try? await teamsFetch {
+            teamsByName = Dictionary(teams.map { ($0.name.lowercased(), $0) }, uniquingKeysWith: { a, _ in a })
+        }
         guard !(series.isEmpty && futures.isEmpty) else {
             state = .failed("Couldn't load World Cup markets. Pull to refresh.")
             return
