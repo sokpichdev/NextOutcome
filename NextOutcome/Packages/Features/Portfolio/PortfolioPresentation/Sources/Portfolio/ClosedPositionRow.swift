@@ -9,7 +9,10 @@ import SwiftUI
 import PortfolioDomain
 import DesignSystem
 
+/// A card row for one closed position: icon, title, outcome, and the realized PnL in
+/// dollars and percent (coloured green or red).
 struct ClosedPositionRow: View {
+    /// The closed position to render.
     let position: ClosedPosition
 
     var body: some View {
@@ -38,6 +41,8 @@ struct ClosedPositionRow: View {
         }
     }
 
+    /// The market icon, loaded async with a placeholder, or a plain rounded rectangle when
+    /// there's no icon URL.
     @ViewBuilder
     private var icon: some View {
         if let url = position.iconURL {

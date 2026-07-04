@@ -9,7 +9,10 @@ import SwiftUI
 import PortfolioDomain
 import DesignSystem
 
+/// A card row for one open position: icon, title, outcome badge, and a value/shares/PnL
+/// summary (PnL coloured green or red).
 struct PositionRow: View {
+    /// The position to render.
     let position: Position
 
     var body: some View {
@@ -46,6 +49,10 @@ struct PositionRow: View {
         }
     }
 
+    /// A small labelled value column (e.g. "Value" over "$12.34").
+    /// - Parameters:
+    ///   - label: The caption above the value.
+    ///   - value: The formatted value string.
     private func stat(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
@@ -57,6 +64,8 @@ struct PositionRow: View {
         }
     }
 
+    /// The market icon, loaded async with a placeholder, or a plain rounded rectangle when
+    /// there's no icon URL.
     @ViewBuilder
     private var icon: some View {
         if let url = position.iconURL {
