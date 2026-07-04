@@ -32,6 +32,7 @@ final class WorldCupHubViewModelTests: XCTestCase {
             fetchGameResults: FetchGameResultsUseCase(repository: repo),
             fetchEvents: FetchEventsUseCase(repository: repo),
             fetchEvent: FetchEventUseCase(repository: repo),
+            fetchTeams: FetchTeamsUseCase(repository: repo),
             now: { [now] in now }
         )
     }

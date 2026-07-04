@@ -13,6 +13,8 @@ public protocol MarketRepository: Sendable {
     func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event]
     /// Live/final scores for game events, keyed by event id. Missing ids are simply absent.
     func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult]
+    /// Team reference data (name, logo, colour) for a sports league, e.g. "fifwc".
+    func fetchTeams(league: String) async throws -> [GameTeam]
     func fetchMarkets(cursor: String?) async throws -> Page<Market>
     func fetchEvent(slug: String) async throws -> Event
     func searchMarkets(query: String) async throws -> [Market]
@@ -20,4 +22,10 @@ public protocol MarketRepository: Sendable {
     func holders(conditionId: String) async throws -> [Holder]
     func comments(eventID: String) async throws -> [Comment]
     func trades(conditionId: String) async throws -> [ActivityTrade]
+}
+
+public extension MarketRepository {
+    /// Default so existing conformers (stubs, test fakes) need no change; the live Gamma
+    /// repository overrides this.
+    func fetchTeams(league: String) async throws -> [GameTeam] { [] }
 }
