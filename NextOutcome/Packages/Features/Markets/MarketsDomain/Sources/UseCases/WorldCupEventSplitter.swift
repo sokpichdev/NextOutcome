@@ -10,10 +10,14 @@ import Foundation
 /// Splits a tournament series' events into schedulable games and everything else ("props":
 /// winner futures, awards, player props, group futures) and groups games by matchday.
 public enum WorldCupEventSplitter {
+    /// The result of splitting a series' events into games versus props.
     public struct Split {
+        /// Schedulable games (kickoff time + moneyline market).
         public let games: [Event]
+        /// Everything else: winner futures, awards, player props, group futures.
         public let props: [Event]
 
+        /// Creates a split result.
         public init(games: [Event], props: [Event]) {
             self.games = games
             self.props = props
