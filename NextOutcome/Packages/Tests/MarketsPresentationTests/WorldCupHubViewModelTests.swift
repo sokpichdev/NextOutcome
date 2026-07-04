@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import Foundation
 import SharedDomain
 @testable import MarketsPresentation
 import MarketsDomain
@@ -33,6 +34,7 @@ final class WorldCupHubViewModelTests: XCTestCase {
             fetchEvents: FetchEventsUseCase(repository: repo),
             fetchEvent: FetchEventUseCase(repository: repo),
             fetchTeams: FetchTeamsUseCase(repository: repo),
+            fetchCompleted: FetchCompletedEventsUseCase(repository: repo),
             now: { [now] in now }
         )
     }
@@ -88,7 +90,7 @@ final class WorldCupHubViewModelTests: XCTestCase {
         repo.slugEvent = prop("slug-winner", title: "World Cup Winner")
         let vm = makeVM(repo: repo)
         await vm.load()
-        XCTAssertEqual(repo.fetchedSlugs, ["world-cup-winner"])
+        XCTAssertTrue(repo.fetchedSlugs.contains("world-cup-winner"))
         XCTAssertEqual(vm.winnerEvent?.id, "slug-winner")
     }
 
@@ -150,7 +152,10 @@ private final class WorldCupFakeRepository: MarketRepository, @unchecked Sendabl
     var results: [String: GameResult] = [:]
     private(set) var requestedResultIDs: [[String]] = []
     private(set) var fetchedTagIDs: [String?] = []
-    private(set) var fetchedSlugs: [String] = []
+    // `fetchEvent` is called concurrently (winner + 12 group slugs), so guard the record.
+    private let slugsLock = NSLock()
+    private var _fetchedSlugs: [String] = []
+    var fetchedSlugs: [String] { slugsLock.withLock { _fetchedSlugs } }
 
     func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] { seriesEvents }
     func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] {
@@ -163,7 +168,7 @@ private final class WorldCupFakeRepository: MarketRepository, @unchecked Sendabl
     }
     func fetchMarkets(cursor: String?) async throws -> Page<Market> { Page(items: [], nextCursor: nil) }
     func fetchEvent(slug: String) async throws -> Event {
-        fetchedSlugs.append(slug)
+        slugsLock.withLock { _fetchedSlugs.append(slug) }
         guard let slugEvent else { throw URLError(.resourceUnavailable) }
         return slugEvent
     }

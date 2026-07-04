@@ -14,14 +14,17 @@ import DesignSystem
 /// win %, and later rounds are TBD until their fixtures are set.
 struct BracketView: View {
     let games: [Event]
+    let completedGames: [Event]
     let results: [String: GameResult]
     let props: [Event]
+    let groupEvents: [Event]
     let teams: [String: GameTeam]
 
     @State private var index = 0
 
     private var pages: [BracketPage] {
-        BracketBuilder.pages(games: games, results: results, props: props, teams: teams)
+        BracketBuilder.pages(games: games, completedGames: completedGames, results: results,
+                             props: props, groupEvents: groupEvents, teams: teams)
     }
 
     var body: some View {
@@ -65,8 +68,14 @@ struct BracketView: View {
     @ViewBuilder
     private func pageContent(_ page: BracketPage) -> some View {
         switch page {
-        case .groups(let rows):
-            AdvanceBoardCard(rows: rows)
+        case .groups(let data):
+            if data.standings.isEmpty {
+                AdvanceBoardCard(rows: data.advance)
+            } else {
+                VStack(spacing: DSLayout.spacing) {
+                    ForEach(data.standings) { GroupCard(standing: $0) }
+                }
+            }
         case .matches(_, let matches):
             VStack(spacing: DSLayout.spacing) {
                 ForEach(matches) { BracketMatchCard(match: $0) }
@@ -77,8 +86,60 @@ struct BracketView: View {
     }
 }
 
-/// "Advance to the Quarter-finals" odds board — the closest real-data stand-in for the web's
-/// group points table (the public feed carries no standings).
+/// One group's card: its teams (from the group-winner market) with each team's chance to
+/// reach the quarter-finals. The public feed has no group points table, so the advance % —
+/// not a points column — is the meaningful per-team number.
+private struct GroupCard: View {
+    let standing: GroupStanding
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DSLayout.spacing) {
+            Text(standing.name)
+                .font(DSFont.subheadline.bold())
+                .foregroundStyle(DSColor.textPrimary)
+
+            ForEach(standing.teams) { team in
+                HStack(spacing: DSLayout.spacingMedium) {
+                    FlagThumb(url: team.logoURL, name: team.name)
+                    Text(team.name)
+                        .font(DSFont.subheadline)
+                        .foregroundStyle(team.isOut ? DSColor.textSecondary : DSColor.textPrimary)
+                        .lineLimit(1)
+                    Spacer()
+                    advanceLabel(team)
+                }
+                if team.id != standing.teams.last?.id { Divider().overlay(DSColor.separator) }
+            }
+        }
+        .padding(DSLayout.margin)
+        .background(DSColor.surface.opacity(0.6))
+        .clipShape(RoundedRectangle(cornerRadius: DSLayout.cardRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: DSLayout.cardRadius)
+                .strokeBorder(DSColor.surfaceElevated, lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func advanceLabel(_ team: GroupTeam) -> some View {
+        if team.isOut {
+            Text("OUT")
+                .font(DSFont.caption.bold())
+                .foregroundStyle(DSColor.textSecondary)
+        } else if let pct = team.advancePercent {
+            let color = Color(hexString: team.colorHex) ?? DSColor.accent
+            Text(MarketFormatting.percent(Decimal(pct)))
+                .font(DSFont.caption.bold())
+                .foregroundStyle(.white)
+                .padding(.horizontal, DSLayout.spacingMedium)
+                .padding(.vertical, DSLayout.spacingXSmall)
+                .background(pct >= 0.999 ? DSColor.accent : color)
+                .clipShape(Capsule())
+        }
+    }
+}
+
+/// "Advance to the Quarter-finals" odds board — flat fallback when per-group markets are absent.
 private struct AdvanceBoardCard: View {
     let rows: [AdvanceRow]
 

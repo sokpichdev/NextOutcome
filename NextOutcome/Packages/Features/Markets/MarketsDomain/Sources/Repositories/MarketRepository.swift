@@ -15,6 +15,9 @@ public protocol MarketRepository: Sendable {
     func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult]
     /// Team reference data (name, logo, colour) for a sports league, e.g. "fifwc".
     func fetchTeams(league: String) async throws -> [GameTeam]
+    /// Most-recently-finished events of a series (closed, newest first) — e.g. the last
+    /// knockout round played.
+    func fetchCompletedEvents(seriesID: String, limit: Int) async throws -> [Event]
     func fetchMarkets(cursor: String?) async throws -> Page<Market>
     func fetchEvent(slug: String) async throws -> Event
     func searchMarkets(query: String) async throws -> [Market]
@@ -25,7 +28,8 @@ public protocol MarketRepository: Sendable {
 }
 
 public extension MarketRepository {
-    /// Default so existing conformers (stubs, test fakes) need no change; the live Gamma
-    /// repository overrides this.
+    /// Defaults so existing conformers (stubs, test fakes) need no change; the live Gamma
+    /// repository overrides these.
     func fetchTeams(league: String) async throws -> [GameTeam] { [] }
+    func fetchCompletedEvents(seriesID: String, limit: Int) async throws -> [Event] { [] }
 }

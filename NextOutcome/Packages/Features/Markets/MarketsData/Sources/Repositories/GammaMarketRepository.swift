@@ -128,6 +128,15 @@ public struct GammaMarketRepository: MarketRepository {
         }
     }
 
+    public func fetchCompletedEvents(seriesID: String, limit: Int) async throws -> [Event] {
+        let query: [String: String] = [
+            "series_id": seriesID, "closed": "true",
+            "order": "endDate", "ascending": "false", "limit": "\(limit)",
+        ]
+        let dtos: [SeriesEventDTO] = try await client.fetch(Endpoint(host: .gamma, path: "/events", query: query))
+        return dtos.map { $0.toDomain() }
+    }
+
     public func fetchTeams(league: String) async throws -> [GameTeam] {
         let endpoint = Endpoint(host: .gamma, path: "/teams", query: ["league": league, "limit": "500"])
         let dtos: [GameTeamDTO] = try await client.fetch(endpoint)

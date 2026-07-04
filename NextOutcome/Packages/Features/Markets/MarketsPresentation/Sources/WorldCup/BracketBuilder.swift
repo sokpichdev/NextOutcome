@@ -16,6 +16,29 @@ struct AdvanceRow: Identifiable, Equatable {
     let percent: Double // 0…1
 }
 
+/// A team within a group card.
+struct GroupTeam: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let logoURL: URL?
+    let colorHex: String?
+    let advancePercent: Double? // chance to reach the quarter-finals, nil if unknown
+    let isOut: Bool
+}
+
+/// A group's teams (e.g. "Group A"), from the per-group winner market.
+struct GroupStanding: Identifiable, Equatable {
+    let id: String   // "A"
+    let name: String // "Group A"
+    let teams: [GroupTeam]
+}
+
+/// The Groups page: real group cards when available, else the flat advance board.
+struct GroupsData: Equatable {
+    let standings: [GroupStanding]
+    let advance: [AdvanceRow]
+}
+
 /// One side of a knockout match.
 struct BracketTeam: Equatable {
     let name: String
@@ -39,7 +62,7 @@ struct BracketMatch: Identifiable, Equatable {
 
 /// A page of the bracket carousel.
 enum BracketPage: Identifiable, Equatable {
-    case groups([AdvanceRow])
+    case groups(GroupsData)
     case matches(title: String, [BracketMatch])
     case placeholder(title: String)
 
@@ -61,17 +84,25 @@ enum BracketPage: Identifiable, Equatable {
 enum BracketBuilder {
     static func pages(
         games: [Event],
+        completedGames: [Event] = [],
         results: [String: GameResult],
         props: [Event],
+        groupEvents: [Event] = [],
         teams: [String: GameTeam] = [:]
     ) -> [BracketPage] {
         var pages: [BracketPage] = []
 
-        let advance = advanceRows(
-            from: props.first { $0.title.lowercased().contains("reach quarterfinals") },
-            teams: teams
-        )
-        if !advance.isEmpty { pages.append(.groups(advance)) }
+        let advanceEvent = props.first { $0.title.lowercased().contains("reach quarterfinals") }
+        let advance = advanceRows(from: advanceEvent, teams: teams)
+        let standings = groupStandings(groupEvents: groupEvents, advanceEvent: advanceEvent, teams: teams)
+        if !advance.isEmpty || !standings.isEmpty {
+            pages.append(.groups(GroupsData(standings: standings, advance: advance)))
+        }
+
+        let previous = completedGames
+            .compactMap { match(from: $0, result: results[$0.id], teams: teams) }
+            .sorted { ($0.kickoff ?? .distantPast) > ($1.kickoff ?? .distantPast) }
+        if !previous.isEmpty { pages.append(.matches(title: "Round of 32", previous)) }
 
         let matches = games
             .compactMap { match(from: $0, result: results[$0.id], teams: teams) }
@@ -103,6 +134,68 @@ enum BracketBuilder {
             }
     }
 
+    /// Group cards from the per-group winner markets (which list each group's teams), with
+    /// each team's chance to reach the quarter-finals pulled from the advance market.
+    static func groupStandings(
+        groupEvents: [Event],
+        advanceEvent: Event?,
+        teams: [String: GameTeam] = [:]
+    ) -> [GroupStanding] {
+        let advance = advanceInfo(from: advanceEvent)
+
+        return groupEvents.compactMap { event -> GroupStanding? in
+            guard let letter = groupLetter(from: event) else { return nil }
+            let members = event.markets
+                .compactMap { $0.groupItemTitle ?? ($0.question.isEmpty ? nil : $0.question) }
+                .filter { !["other", "field"].contains($0.lowercased()) }
+
+            let groupTeams = members.enumerated().map { index, name -> GroupTeam in
+                let info = advance[name.lowercased()]
+                let team = teams[name.lowercased()]
+                return GroupTeam(
+                    id: "\(event.id)-\(index)",
+                    name: name,
+                    logoURL: team?.logoURL,
+                    colorHex: team?.colorHex,
+                    advancePercent: info?.percent,
+                    isOut: info?.isOut ?? false
+                )
+            }
+            .sorted { ($0.advancePercent ?? -1) > ($1.advancePercent ?? -1) }
+
+            guard !groupTeams.isEmpty else { return nil }
+            return GroupStanding(id: letter, name: "Group \(letter)", teams: groupTeams)
+        }
+        .sorted { $0.id < $1.id }
+    }
+
+    /// name → (advance %, eliminated) from the "Reach Quarterfinals" market.
+    private static func advanceInfo(from event: Event?) -> [String: (percent: Double, isOut: Bool)] {
+        guard let event else { return [:] }
+        var map: [String: (Double, Bool)] = [:]
+        for market in event.markets where market.yesOutcome != nil {
+            let name = (market.groupItemTitle ?? market.question).lowercased()
+            let price = NSDecimalNumber(decimal: market.yesOutcome?.price ?? 0).doubleValue
+            map[name] = (price, market.isResolved && price < 0.5)
+        }
+        return map
+    }
+
+    /// "World Cup Group C Winner" / slug "world-cup-group-c-winner" → "C".
+    private static func groupLetter(from event: Event) -> String? {
+        if let range = event.slug.range(of: "group-"),
+           let end = event.slug[range.upperBound...].firstIndex(of: "-") {
+            let letter = event.slug[range.upperBound..<end]
+            if letter.count == 1 { return letter.uppercased() }
+        }
+        let words = event.title.split(separator: " ")
+        if let i = words.firstIndex(where: { $0.lowercased() == "group" }), i + 1 < words.count {
+            let candidate = words[i + 1]
+            if candidate.count == 1 { return candidate.uppercased() }
+        }
+        return nil
+    }
+
     /// Builds a match from a game's moneyline markets (team + win %) hydrated with the live
     /// result (logos, colours, score), falling back to the team directory. Returns nil if the
     /// game has no two teams.
@@ -111,8 +204,9 @@ enum BracketBuilder {
             .filter { ($0.groupItemTitle?.lowercased().hasPrefix("draw") ?? false) == false }
         guard !teamMarkets.isEmpty else { return nil }
 
+        // A resolved game is final even before its score has been fetched.
         let status: BracketMatch.Status = result?.live == true ? .live
-            : (result?.ended == true ? .final : .scheduled)
+            : (result?.ended == true || game.isResolved ? .final : .scheduled)
 
         func side(index: Int, resultTeam: GameTeam?) -> BracketTeam? {
             let market = teamMarkets.indices.contains(index) ? teamMarkets[index] : nil
@@ -137,10 +231,19 @@ enum BracketBuilder {
         var home = side(index: 0, resultTeam: result?.homeTeam)
         var away = side(index: 1, resultTeam: result?.awayTeam)
 
-        // Mark the winner of a completed game by score.
-        if status == .final, let h = home?.score, let a = away?.score {
-            home = home.map { withWinner($0, isWinner: h > a) }
-            away = away.map { withWinner($0, isWinner: a > h) }
+        // Mark the winner of a completed game — by score when available, otherwise by which
+        // team's moneyline resolved higher (Yes ≈ 1 for the team that went through).
+        if status == .final {
+            let homeWon: Bool
+            if let h = home?.score, let a = away?.score {
+                homeWon = h > a
+            } else {
+                let hy = teamMarkets.first?.yesOutcome?.price ?? 0
+                let ay = teamMarkets.dropFirst().first?.yesOutcome?.price ?? 0
+                homeWon = hy >= ay
+            }
+            home = home.map { withWinner($0, isWinner: homeWon) }
+            away = away.map { withWinner($0, isWinner: !homeWon) }
         }
 
         return BracketMatch(id: game.id, title: game.title, kickoff: game.gameStartTime,
