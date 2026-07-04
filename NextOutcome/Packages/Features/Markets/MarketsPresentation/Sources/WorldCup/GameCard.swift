@@ -144,25 +144,34 @@ struct GameCard: View {
             ForEach(ordered.compactMap { $0 }) { market in
                 PriceButton(
                     title: shortLabel(for: market),
-                    price: MarketFormatting.cents(market.yesOutcome?.price ?? 0),
-                    style: .team,
+                    price: MarketFormatting.centsWhole(market.yesOutcome?.price ?? 0),
+                    style: style(for: market),
                     action: {}
                 )
-                .frame(maxWidth: .infinity) // equal thirds so no button wraps its price
+                .frame(maxWidth: .infinity) // equal thirds
             }
         }
     }
 
+    /// Draw → neutral slot; each team → its brand colour filled (falling back to the
+    /// app accent when the sports feed didn't send a colour).
+    private func style(for market: Market) -> PriceButton.Style {
+        if isDraw(market) { return .neutral }
+        let color = team(for: market).flatMap { Color(hexString: $0.colorHex) } ?? DSColor.accent
+        return .solid(color)
+    }
+
     /// "COL 87¢"-style label: team abbreviation from results when the name matches,
-    /// otherwise the first three letters of the market's team label.
+    /// otherwise the first three letters of the market's team label. "DRAW" for the draw.
     private func shortLabel(for market: Market) -> String {
-        if isDraw(market) { return "Draw" }
+        if isDraw(market) { return "DRAW" }
+        if let abbreviation = team(for: market)?.abbreviation { return abbreviation }
+        return String((market.groupItemTitle ?? market.question).prefix(3)).uppercased()
+    }
+
+    private func team(for market: Market) -> GameTeam? {
         let label = market.groupItemTitle ?? market.question
-        if let team = result?.teams.first(where: { $0.name.caseInsensitiveCompare(label) == .orderedSame }),
-           let abbreviation = team.abbreviation {
-            return abbreviation
-        }
-        return String(label.prefix(3)).uppercased()
+        return result?.teams.first { $0.name.caseInsensitiveCompare(label) == .orderedSame }
     }
 }
 
