@@ -4,9 +4,13 @@ import SwiftUI
 /// `.yes`/`.no` tint green/red for binary markets; `.team` tints blue for sports rows.
 /// `.solid` fills with a team's brand colour (white text); `.neutral` is the draw slot.
 public struct PriceButton: View {
+    /// Which visual treatment to apply, based on what kind of outcome this button represents.
     public enum Style {
+        /// The green-tinted "Yes" side of a binary market.
         case yes
+        /// The red-tinted "No" side of a binary market.
         case no
+        /// A blue-tinted generic team pick (used before a specific brand color is known).
         case team
         /// Solid fill in the given colour with white text — a sports moneyline pick.
         case solid(Color)
@@ -14,11 +18,21 @@ public struct PriceButton: View {
         case neutral
     }
 
+    /// The outcome label shown on the leading side (e.g. "Yes", a team name).
     private let title: String
+    /// The formatted price shown on the trailing (or centered) side, e.g. "62¢".
     private let price: String
+    /// Which visual style to render.
     private let style: Style
+    /// Called when the button is tapped.
     private let action: () -> Void
 
+    /// Creates a price button.
+    /// - Parameters:
+    ///   - title: The outcome label to display.
+    ///   - price: The formatted price to display.
+    ///   - style: The visual style to use.
+    ///   - action: Called when tapped.
     public init(title: String, price: String, style: Style, action: @escaping () -> Void) {
         self.title = title
         self.price = price
@@ -38,6 +52,9 @@ public struct PriceButton: View {
         .buttonStyle(.plain)
     }
 
+    /// The button's inner layout. `.solid`/`.neutral` styles (used for sports
+    /// moneyline rows with three equal-width buttons) center the title and price
+    /// together; other styles put the title leading and price trailing.
     @ViewBuilder
     private var content: some View {
         switch style {
@@ -59,6 +76,7 @@ public struct PriceButton: View {
         }
     }
 
+    /// The text/icon color to use for the current `style`.
     private var foregroundColor: Color {
         switch style {
         case .yes: DSColor.positive
@@ -69,6 +87,7 @@ public struct PriceButton: View {
         }
     }
 
+    /// The background fill color to use for the current `style`.
     private var backgroundColor: Color {
         switch style {
         case .yes: DSColor.positiveTint
