@@ -4,9 +4,13 @@ import DesignSystem
 
 /// Event with several sub-markets (e.g. "World Cup Winner"): top outcome rows + volume + actions.
 public struct MultiOutcomeCard: View {
+    /// The event with several sub-markets.
     private let event: Event
+    /// Creates the card.
+    /// - Parameter event: The event to display.
     public init(event: Event) { self.event = event }
 
+    /// The top 3 sub-markets shown as rows.
     private var topMarkets: [Market] { Array(event.markets.prefix(3)) }
 
     public var body: some View {
@@ -50,6 +54,7 @@ public struct MultiOutcomeCard: View {
 
 /// Shared rounded market/event icon used by the Home cards.
 struct CardIcon: View {
+    /// The image URL, or `nil` to show a plain placeholder.
     let url: URL?
     var body: some View {
         Group {
