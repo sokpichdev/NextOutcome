@@ -3,21 +3,36 @@ import MarketsDomain
 
 /// Which Home card variant an event should render as.
 public enum HomeCardKind: Equatable {
-    case liveUpDown, news, multiOutcome, hero, standard
+    /// A live crypto up/down card.
+    case liveUpDown
+    /// A breaking-news binary card.
+    case news
+    /// A multi-outcome card (2+ markets).
+    case multiOutcome
+    /// The large hero promo slot (feed-level only).
+    case hero
+    /// The default event card.
+    case standard
 
+    /// Tag slugs/labels that mark an event as crypto.
     private static let cryptoTags: Set<String> = ["crypto", "bitcoin", "btc", "ethereum"]
+    /// Tag slugs/labels that mark an event as breaking news.
     private static let newsTags: Set<String> = ["breaking", "news"]
+    /// Tag slugs/labels that mark an event as sports.
     private static let sportsTags: Set<String> = ["sports", "soccer", "football"]
 
+    /// The lowercased set of an event's tag slugs and labels, for category matching.
     private static func tagSlugs(_ event: Event) -> Set<String> {
         Set(event.tags.flatMap { [$0.slug.lowercased(), $0.label.lowercased()] })
     }
 
+    /// Whether a market has "Up"/"Down" outcomes (crypto up/down style).
     private static func isUpDown(_ market: Market) -> Bool {
         let titles = Set(market.outcomes.map { $0.title.lowercased() })
         return titles.contains("up") && titles.contains("down")
     }
 
+    /// Whether a market has "Yes"/"No" outcomes.
     private static func isBinaryYesNo(_ market: Market) -> Bool {
         let titles = Set(market.outcomes.map { $0.title.lowercased() })
         return titles.contains("yes") && titles.contains("no")

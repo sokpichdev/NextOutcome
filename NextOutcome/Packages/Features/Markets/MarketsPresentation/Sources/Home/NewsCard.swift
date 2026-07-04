@@ -4,7 +4,10 @@ import DesignSystem
 
 /// Single-binary news event: article image + headline + Yes/No.
 public struct NewsCard: View {
+    /// The event to render.
     private let event: Event
+    /// Creates the card.
+    /// - Parameter event: The event to display.
     public init(event: Event) { self.event = event }
 
     public var body: some View {
