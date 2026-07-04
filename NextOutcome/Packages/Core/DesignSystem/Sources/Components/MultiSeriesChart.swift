@@ -31,8 +31,33 @@ public struct MultiSeriesChart: View {
             }
             .chartForegroundStyleScale(domain: series.map(\.label), range: series.map(\.color))
             .chartLegend(.hidden)
-            .chartYScale(domain: 0...1)
+            .chartYScale(domain: yDomain)
+            .chartYAxis {
+                AxisMarks(values: .automatic(desiredCount: 4)) {
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                        .foregroundStyle(DSColor.separator)
+                    AxisValueLabel(format: FloatingPointFormatStyle<Double>.Percent())
+                        .foregroundStyle(DSColor.textSecondary)
+                        .font(DSFont.caption2)
+                }
+            }
         }
+    }
+
+    /// Y range scaled to the data (lowest→highest across every series) with ~10%
+    /// headroom, clamped to 0…1 — so lines fill the chart instead of hugging the
+    /// bottom of a fixed 0…1 axis.
+    private var yDomain: ClosedRange<Double> {
+        let prices = series.flatMap { $0.points.map(\.price) }
+        guard let minP = prices.min(), let maxP = prices.max() else { return 0...1 }
+        guard maxP > minP else {
+            // Flat data: center a small window around the single value.
+            let lower = Swift.max(0, minP - 0.05)
+            let upper = Swift.min(1, maxP + 0.05)
+            return lower...Swift.max(upper, lower + 0.01)
+        }
+        let pad = Swift.max((maxP - minP) * 0.1, 0.01)
+        return Swift.max(0, minP - pad)...Swift.min(1, maxP + pad)
     }
 
     private var legend: some View {
@@ -42,8 +67,8 @@ public struct MultiSeriesChart: View {
                     Circle().fill(s.color).frame(width: 8, height: 8)
                     Text(s.label).font(DSFont.caption).foregroundStyle(DSColor.textSecondary)
                     if let last = s.points.last {
-                        Text("\(Int((last.price * 100).rounded()))%")
-                            .font(DSFont.caption).foregroundStyle(DSColor.textPrimary)
+                        Text(String(format: "%.1f%%", last.price * 100))
+                            .font(DSFont.caption.bold()).foregroundStyle(DSColor.textPrimary)
                     }
                 }
             }

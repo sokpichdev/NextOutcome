@@ -50,6 +50,39 @@ final class TradeSheetViewModelTests: XCTestCase {
         XCTAssertEqual(vm.amountUSD, Decimal(string: "1.50"))
     }
 
+    func test_addAmount_accumulatesWholeDollars() {
+        let vm = makeVM()
+
+        vm.addAmount(1)
+        vm.addAmount(10)
+        vm.addAmount(100)
+
+        XCTAssertEqual(vm.amountCents, 111_00)
+        XCTAssertEqual(vm.amountDisplay, "$111.00")
+    }
+
+    func test_addAmount_respectsCeiling() {
+        let vm = makeVM()
+
+        // 100_000_00 cents = $100,000 ceiling. Two +$100k adds: the first lands exactly
+        // on the ceiling, the second must be rejected.
+        vm.addAmount(100_000)
+        XCTAssertEqual(vm.amountCents, 100_000_00)
+        vm.addAmount(100_000)
+        XCTAssertEqual(vm.amountCents, 100_000_00, "add that overflows the ceiling must be rejected")
+    }
+
+    func test_setSide_switchesOutcomeAndPrice() {
+        let vm = makeVM()
+
+        XCTAssertEqual(vm.side, .yes)
+        vm.setSide(.no)
+
+        XCTAssertEqual(vm.side, .no)
+        XCTAssertEqual(vm.outcomeTitle, "No")
+        XCTAssertEqual(vm.priceCents, 50) // No price 0.5 * 100
+    }
+
     func test_appendDigit_overflowGuard_usesRealFormula() {
         let vm = makeVM()
 

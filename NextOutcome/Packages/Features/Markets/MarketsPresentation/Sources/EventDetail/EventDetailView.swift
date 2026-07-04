@@ -130,6 +130,14 @@ public struct EventDetailView: View {
                 let vm = EventChartViewModel(event: event, provider: provider)
                 chart = vm
                 await vm.load()
+                // Keep the chart/legend percentages current while the screen is open.
+                // The `.task` is cancelled automatically on disappear or when `event.id`
+                // changes, which ends this loop.
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 30_000_000_000)
+                    guard !Task.isCancelled else { break }
+                    await vm.load()
+                }
             }
             .task(id: event.id) {
                 guard let factory = socialStripFactory else { return }
