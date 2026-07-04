@@ -78,7 +78,8 @@ public struct WorldCupHubView: View {
                 BracketView(games: viewModel.games, results: viewModel.results,
                             props: viewModel.props, teams: viewModel.teamsByName)
             case .map:
-                WorldCupPlaceholderView(tab: viewModel.selectedTab)
+                MapView(countries: MapGlobeBuilder.countries(
+                    from: viewModel.winnerEvent, teams: viewModel.teamsByName))
             }
         }
     }
