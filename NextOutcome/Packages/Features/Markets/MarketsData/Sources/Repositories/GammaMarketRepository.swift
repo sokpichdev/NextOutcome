@@ -89,14 +89,14 @@ public struct GammaMarketRepository: MarketRepository {
 
     public func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] {
         // A series (tournament) is bounded but can exceed one page; walk a few pages.
-        var all: [EventDTO] = []
+        var all: [SeriesEventDTO] = []
         for page in 0..<3 {
             let query = GammaEventQuery.seriesParams(seriesID: seriesID, offset: page * 100, status: status)
-            let dtos: [EventDTO] = try await client.fetch(Endpoint(host: .gamma, path: "/events", query: query))
+            let dtos: [SeriesEventDTO] = try await client.fetch(Endpoint(host: .gamma, path: "/events", query: query))
             all += dtos
             if dtos.count < 100 { break }
         }
-        return all.map(MarketMapper.event(from:))
+        return all.map { $0.toDomain() }
     }
 
     public func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] {
