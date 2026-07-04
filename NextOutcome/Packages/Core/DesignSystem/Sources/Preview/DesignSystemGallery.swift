@@ -7,6 +7,15 @@
 
 import SwiftUI
 
+/// This file contains only Xcode Preview canvases (`#Preview` blocks) — no
+/// production code. It exists purely so developers can visually browse every
+/// `DesignSystem` component in one place (Xcode's canvas/preview panel) without
+/// running the full app, which is especially useful while tweaking colors,
+/// fonts, or spacing tokens. Each `#Preview` below demonstrates a different
+/// group of components: core building blocks (pills, bars, chips, buttons,
+/// badges, the value/PnL header), the persistent shell chrome (top bar,
+/// category rail, side drawer), and a detail-page header + multi-series chart.
+
 #Preview("DesignSystem Gallery") {
     ScrollView {
         VStack(spacing: 20) {
@@ -109,6 +118,8 @@ import SwiftUI
 }
 
 private extension DesignSystemGallery_Previews {
+    /// Generates 30 hours of randomized-but-plausible price points (centered
+    /// around 55¢) purely for feeding the `ValuePnLHeader` sparkline preview above.
     static var sampleData: [PricePoint] {
         (0..<30).map { i in
             PricePoint(
@@ -120,4 +131,7 @@ private extension DesignSystemGallery_Previews {
 }
 
 // Required because #Preview can't reference static let inside itself
+/// An empty marker type — exists solely so `sampleData` above has a namespace
+/// to live in, since Swift's `#Preview` macro can't directly reference a
+/// standalone top-level `static let`.
 private enum DesignSystemGallery_Previews {}
