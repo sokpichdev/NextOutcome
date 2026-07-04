@@ -12,12 +12,18 @@ public typealias PricePoint = PriceHistoryPoint
 
 /// Open/High/Low/Close candle for one fixed time bucket.
 public struct Candle: Equatable, Sendable {
+    /// The first price in the bucket.
     public let open: Decimal
+    /// The highest price in the bucket.
     public let high: Decimal
+    /// The lowest price in the bucket.
     public let low: Decimal
+    /// The last price in the bucket.
     public let close: Decimal
+    /// The start time of the bucket.
     public let start: Date
 
+    /// Creates an OHLC candle.
     public init(open: Decimal, high: Decimal, low: Decimal, close: Decimal, start: Date) {
         self.open = open
         self.high = high
