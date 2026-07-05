@@ -4,8 +4,16 @@ import SharedDomain
 @testable import MarketsPresentation
 
 final class PoliticsHubViewModelTests: XCTestCase {
-    private func event(_ id: String, title: String, slug: String, volume: Decimal = 0) -> Event {
-        Event(id: id, title: title, slug: slug, markets: [], volume: volume, imageURL: nil)
+    private func event(_ id: String, title: String, slug: String, volume: Decimal = 0, markets: [Market] = []) -> Event {
+        Event(id: id, title: title, slug: slug, markets: markets, volume: volume, imageURL: nil)
+    }
+
+    private func partyMarket(_ title: String, yes: Double) -> Market {
+        Market(id: title, question: title, slug: title,
+               outcomes: [Outcome(id: "\(title)-yes", title: "Yes", price: Decimal(yes)),
+                          Outcome(id: "\(title)-no", title: "No", price: Decimal(1 - yes))],
+               volume: 0, liquidity: 0, endDate: nil, isResolved: false, imageURL: nil,
+               groupItemTitle: title)
     }
 
     @MainActor
@@ -119,6 +127,21 @@ final class PoliticsHubViewModelTests: XCTestCase {
         XCTAssertEqual(biggest.count, 10)
         XCTAssertEqual(biggest.first?.id, "14")   // highest volume (14) first
         XCTAssertEqual(biggest.last?.id, "5")     // 10th highest volume
+    }
+
+    @MainActor
+    func test_leanByState_keysByStateCode_scopedToChamber() async {
+        let vm = makeVM(midterms: [
+            event("1", title: "California Senate Election Winner", slug: "ca-senate",
+                  markets: [partyMarket("Democrat", yes: 0.7), partyMarket("Republican", yes: 0.3)]),
+            event("2", title: "California Governor Election Winner", slug: "ca-gov",
+                  markets: [partyMarket("Democrat", yes: 0.2), partyMarket("Republican", yes: 0.8)]),
+        ])
+        await vm.loadIfNeeded()
+
+        XCTAssertEqual(vm.leanByState(for: .senate)["ca"], .leanD)
+        XCTAssertEqual(vm.leanByState(for: .governor)["ca"], .leanR)
+        XCTAssertNil(vm.leanByState(for: .house)["ca"])
     }
 
     @MainActor

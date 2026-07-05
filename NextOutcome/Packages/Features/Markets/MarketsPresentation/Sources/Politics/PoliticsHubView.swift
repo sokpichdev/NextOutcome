@@ -60,9 +60,92 @@ public struct PoliticsHubView: View {
             controlCards
             searchBar
             chamberTabs
+            mapSection
             racesList
             referendumsSection
             biggestRacesSection
+            oddsBreakdownSection
+            aboutSection
+            faqSection
+        }
+    }
+
+    // MARK: - Map
+
+    /// The state-shaped lean map for the selected chamber. House races are single districts,
+    /// not whole states, so the map is only meaningful for Senate/Governor.
+    @ViewBuilder
+    private var mapSection: some View {
+        if viewModel.selectedChamber != .house {
+            VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
+                USStateMapView(colors: viewModel.leanByState(for: viewModel.selectedChamber).mapValues(\.color))
+                    .frame(maxWidth: .infinity)
+                mapLegend
+            }
+        }
+    }
+
+    private var mapLegend: some View {
+        let leans: [RaceLean] = [.safeD, .likelyD, .leanD, .tossUp, .leanR, .likelyR, .safeR]
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DSLayout.spacing) {
+                ForEach(leans, id: \.self) { lean in
+                    HStack(spacing: 4) {
+                        Circle().fill(lean.color).frame(width: 8, height: 8)
+                        Text(lean.title).font(DSFont.caption2).foregroundStyle(DSColor.textSecondary)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Odds breakdown
+
+    /// "Midterms 2026 odds": per-race candidate odds for the selected chamber's top races.
+    @ViewBuilder
+    private var oddsBreakdownSection: some View {
+        if !viewModel.filteredRaces.isEmpty {
+            VStack(alignment: .leading, spacing: DSLayout.spacing) {
+                Text("Midterms 2026 odds")
+                    .font(DSFont.title)
+                    .foregroundStyle(DSColor.textPrimary)
+                ForEach(viewModel.filteredRaces.prefix(5)) { race in
+                    RaceOddsCard(event: race)
+                }
+            }
+        }
+    }
+
+    // MARK: - About + FAQ
+
+    private var aboutSection: some View {
+        VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
+            Text("About the 2026 U.S. Midterm Elections")
+                .font(DSFont.title)
+                .foregroundStyle(DSColor.textPrimary)
+            Text("""
+            The 2026 U.S. midterm elections, held on November 3, 2026, will determine control \
+            of both chambers of Congress and dozens of governorships. Every House seat, roughly \
+            a third of the Senate, and many state governorships are up for election. These \
+            markets track the probability of each outcome based on real trading activity.
+            """)
+            .font(DSFont.subheadline)
+            .foregroundStyle(DSColor.textSecondary)
+        }
+    }
+
+    private static let faqs: [(String, String)] = [
+        ("How are these odds calculated?", "Each market's price reflects the probability traders assign to that outcome, based on real money bought and sold on that side."),
+        ("When do these markets resolve?", "Race markets resolve once a winner is officially called by major news outlets, typically on election night or shortly after."),
+        ("Can the odds change?", "Yes — prices move continuously as new information (polls, news, ads) shifts trader sentiment."),
+    ]
+
+    private var faqSection: some View {
+        VStack(alignment: .leading, spacing: DSLayout.spacing) {
+            Text("FAQ").font(DSFont.title).foregroundStyle(DSColor.textPrimary)
+            ForEach(Self.faqs, id: \.0) { question, answer in
+                FAQRow(question: question, answer: answer)
+            }
         }
     }
 
@@ -136,12 +219,12 @@ public struct PoliticsHubView: View {
     @ViewBuilder
     private var controlCards: some View {
         if let summary = PartyControlSummary.summary(for: viewModel.senateControlEvent) {
-            ControlCard(chamberTitle: "Senate", summary: summary) { side in
+            ControlCard(chamberTitle: "Senate", summary: summary, composition: .senate) { side in
                 tradeContext = TradeSheetContext(market: summary.market, side: side)
             }
         }
         if let summary = PartyControlSummary.summary(for: viewModel.houseControlEvent) {
-            ControlCard(chamberTitle: "House", summary: summary) { side in
+            ControlCard(chamberTitle: "House", summary: summary, composition: .house) { side in
                 tradeContext = TradeSheetContext(market: summary.market, side: side)
             }
         }
@@ -234,6 +317,7 @@ private struct CountdownRow: View {
 private struct ControlCard: View {
     let chamberTitle: String
     let summary: PartyControlSummary
+    let composition: ChamberComposition
     let onTrade: (Side) -> Void
 
     var body: some View {
@@ -254,7 +338,67 @@ private struct ControlCard: View {
                         .clipShape(RoundedRectangle(cornerRadius: DSLayout.chipRadius))
                 }
                 .buttonStyle(.plain)
+                SeatPictogram(composition: composition)
             }
+        }
+    }
+}
+
+/// One race's candidate odds breakdown, sorted highest chance first.
+private struct RaceOddsCard: View {
+    let event: Event
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DSLayout.spacingXSmall) {
+            Text(event.title.trimmingCharacters(in: .whitespaces))
+                .font(DSFont.subheadline.bold())
+                .foregroundStyle(DSColor.textPrimary)
+            ForEach(event.markets.sorted { ($0.yesOutcome?.price ?? 0) > ($1.yesOutcome?.price ?? 0) }.prefix(6)) { market in
+                HStack {
+                    Text(market.groupItemTitle ?? market.question)
+                        .font(DSFont.caption)
+                        .foregroundStyle(DSColor.textSecondary)
+                        .lineLimit(1)
+                    Spacer()
+                    Text(MarketFormatting.percent(market.yesOutcome?.price ?? 0))
+                        .font(DSFont.caption.bold())
+                        .foregroundStyle(DSColor.textPrimary)
+                }
+                Divider().overlay(DSColor.separator)
+            }
+        }
+        .padding(.vertical, DSLayout.spacingSmall)
+    }
+}
+
+/// One expandable FAQ row.
+private struct FAQRow: View {
+    let question: String
+    let answer: String
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+            } label: {
+                HStack {
+                    Text(question)
+                        .font(DSFont.subheadline.bold())
+                        .foregroundStyle(DSColor.textPrimary)
+                        .multilineTextAlignment(.leading)
+                    Spacer()
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .foregroundStyle(DSColor.textSecondary)
+                }
+            }
+            .buttonStyle(.plain)
+            if isExpanded {
+                Text(answer)
+                    .font(DSFont.subheadline)
+                    .foregroundStyle(DSColor.textSecondary)
+            }
+            Divider().overlay(DSColor.separator)
         }
     }
 }

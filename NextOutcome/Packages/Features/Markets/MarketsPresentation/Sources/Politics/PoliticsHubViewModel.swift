@@ -127,4 +127,15 @@ public final class PoliticsHubViewModel {
             if ChamberClassifier.classify(title: event.title).chamber == chamber { count += 1 }
         }
     }
+
+    /// State-code → lean for every race in a chamber, for coloring the state map. Only
+    /// meaningful for state-level chambers (Senate/Governor) — a House race is a single
+    /// district, not a whole state, so callers should only use this for `.senate`/`.governor`.
+    public func leanByState(for chamber: Chamber) -> [String: RaceLean] {
+        races.reduce(into: [String: RaceLean]()) { result, event in
+            let classification = ChamberClassifier.classify(title: event.title)
+            guard classification.chamber == chamber, let code = classification.stateCode else { return }
+            result[code] = RaceLeanClassifier.lean(forRaceMarkets: event.markets)
+        }
+    }
 }
