@@ -26,6 +26,11 @@ public struct DetailHeaderActions: OptionSet {
     public static let bookmark = DetailHeaderActions(rawValue: 1 << 1)
     /// Shows a share-link icon button.
     public static let link     = DetailHeaderActions(rawValue: 1 << 2)
+    /// Shows a "Rules" text button (opens the rules bottom sheet).
+    public static let rules    = DetailHeaderActions(rawValue: 1 << 3)
+    /// Shows a discussion/comment-bubble icon button (opens the Comments/Top
+    /// Holders/Positions/Activity bottom sheet).
+    public static let discuss  = DetailHeaderActions(rawValue: 1 << 4)
 }
 
 /// Custom back-button header for pushed detail screens (native nav bar hidden).
@@ -66,6 +71,13 @@ public struct DetailHeader: View {
             Spacer()
             titleView
             Spacer()
+            if actions.contains(.rules) {
+                Button { onAction(.rules) } label: {
+                    Text("Rules").font(DSFont.caption.bold())
+                }
+                .accessibilityLabel("Rules")
+            }
+            if actions.contains(.discuss) { actionButton("bubble.left", .discuss, "Comments and activity") }
             if actions.contains(.code) { actionButton("chevron.left.forwardslash.chevron.right", .code, "Embed") }
             if actions.contains(.bookmark) { actionButton("bookmark", .bookmark, "Bookmark") }
             if actions.contains(.link) { actionButton("link", .link, "Share link") }

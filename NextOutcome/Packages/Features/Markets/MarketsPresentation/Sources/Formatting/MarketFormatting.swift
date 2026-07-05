@@ -54,6 +54,16 @@ public enum MarketFormatting {
         }
     }
 
+    /// Compact share count. 2_465_264 → "2.5M", 911_600 → "911.6K", 42 → "42".
+    public static func compactShares(_ amount: Decimal) -> String {
+        let value = NSDecimalNumber(decimal: amount).doubleValue
+        switch value {
+        case 1_000_000...: return "\(trimmed(value / 1_000_000))M"
+        case 1_000...:     return "\(trimmed(value / 1_000))K"
+        default:           return "\(Int(value.rounded()))"
+        }
+    }
+
     /// Relative countdown. Future → "Ends in 20d" / "Ends in 4h"; past → "Ended"; nil → nil.
     public static func countdown(to date: Date?, now: Date = Date()) -> String? {
         guard let date else { return nil }

@@ -63,7 +63,8 @@ final class AppContainer {
     func makeEventListViewModel() -> EventListViewModel {
         EventListViewModel(
             fetchEvents: FetchEventsUseCase(repository: repository),
-            fetchTags: FetchTagsUseCase(repository: repository)
+            fetchTags: FetchTagsUseCase(repository: repository),
+            searchEvents: SearchEventsUseCase(repository: repository)
         )
     }
 
@@ -137,13 +138,15 @@ final class AppContainer {
     /// A factory for the event detail social strip (comments, holders, trades, etc.).
     /// It creates the social strip view model when the screen knows the event details.
     func makeSocialStripFactory() -> SocialStripViewModelFactory {
-        SocialStripViewModelFactory { [repository] eventID, conditionId in
+        SocialStripViewModelFactory { [repository] eventID, conditionId, markets in
             SocialStripViewModel(
                 eventID: eventID,
                 conditionId: conditionId,
+                markets: markets,
                 fetchComments: FetchCommentsUseCase(repository: repository),
                 fetchHolders: FetchHoldersUseCase(repository: repository),
-                fetchActivity: FetchActivityTradesUseCase(repository: repository)
+                fetchActivity: FetchActivityTradesUseCase(repository: repository),
+                fetchCommenterPositions: FetchCommenterPositionsUseCase(repository: repository)
             )
         }
     }

@@ -14,7 +14,7 @@ import SharedDomain
 /// without any real networking. DEBUG-only.
 #if DEBUG
 struct StubMarketRepository: MarketRepository {
-    func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus) async throws -> Page<Event> {
+    func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod) async throws -> Page<Event> {
         Page(items: [], nextCursor: nil)
     }
     func fetchMarkets(cursor: String?) async throws -> Page<Market> {
@@ -28,7 +28,7 @@ struct StubMarketRepository: MarketRepository {
     func searchMarkets(query: String) async throws -> [Market] { [] }
     func fetchTags() async throws -> [Tag] { [] }
     func holders(conditionId: String) async throws -> [Holder] { [] }
-    func comments(eventID: String) async throws -> [Comment] { [] }
+    func comments(eventID: String, sort: CommentSort, holdersOnly: Bool) async throws -> [Comment] { [] }
     func trades(conditionId: String) async throws -> [ActivityTrade] { [] }
 }
 #endif

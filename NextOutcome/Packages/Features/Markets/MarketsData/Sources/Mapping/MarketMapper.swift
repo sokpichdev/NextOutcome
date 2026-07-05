@@ -92,8 +92,20 @@ enum MarketMapper {
                 authorName: commentAuthorName(dto.profile),
                 avatarURL: dto.profile?.profileImage.flatMap { $0.isEmpty ? nil : URL(string: $0) },
                 createdAt: DateParsing.parse(dto.createdAt),
-                body: dto.body
+                body: dto.body,
+                likeCount: dto.reactionCount,
+                proxyWallet: dto.profile?.proxyWallet.flatMap { $0.isEmpty ? nil : $0 }
             )
+        }
+    }
+
+    /// Maps comment-holding DTOs to domain `CommentHolding`s, dropping rows with no
+    /// resolvable condition id (malformed/partial data).
+    /// - Parameter dtos: The decoded positions.
+    /// - Returns: The domain holdings.
+    static func commentHoldings(from dtos: [CommentHoldingDTO]) -> [CommentHolding] {
+        dtos.filter { !$0.conditionId.isEmpty }.map {
+            CommentHolding(conditionId: $0.conditionId, outcome: $0.outcome, size: $0.size)
         }
     }
 
