@@ -146,35 +146,37 @@ struct RootView: View {
             .tabItem { Label("Home", systemImage: "house") }
 
             NavigationStack {
-                chrome { SearchView(viewModel: searchViewModel) }
+                chrome(showsCategoryRail: false) { SearchView(viewModel: searchViewModel) }
             }
             .tabItem { Label("Search", systemImage: "magnifyingglass") }
 
             NavigationStack {
-                chrome { BreakingView(viewModel: breakingViewModel) }
-                    .onAppear { selectedCategory = .breaking }
+                chrome(showsCategoryRail: false) { BreakingView(viewModel: breakingViewModel) }
             }
             .tabItem { Label("Breaking", systemImage: "bolt.fill") }
 
             NavigationStack {
-                chrome { PortfolioView(viewModel: portfolioViewModel) }
+                chrome(showsCategoryRail: false) { PortfolioView(viewModel: portfolioViewModel) }
             }
             .tabItem { Label(shellViewModel.balanceLabel, systemImage: "chart.line.uptrend.xyaxis") }
         }
     }
 
-    /// Wraps a screen in the shared chrome (category rail + avatar button).
-    ///
-    /// Using one helper for every tab keeps the top bar and drawer trigger identical
-    /// across the app.
-    /// - Parameter content: The tab's screen content to embed inside the chrome.
+    /// Wraps a screen in the shared chrome (top bar + avatar button, optionally the category
+    /// rail). Only the Home tab's content responds to the category rail, so every other tab
+    /// hides it by passing `showsCategoryRail: false`.
+    /// - Parameters:
+    ///   - showsCategoryRail: Whether to show the Trending/World Cup/Breaking/… rail below the
+    ///     top bar. Defaults to `true` (the Home tab).
+    ///   - content: The tab's screen content to embed inside the chrome.
     /// - Returns: The content wrapped in `ShellChrome` with the navigation bar hidden.
     @ViewBuilder
-    private func chrome<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+    private func chrome<C: View>(showsCategoryRail: Bool = true, @ViewBuilder _ content: () -> C) -> some View {
         // Wrap each screen in the shared chrome UI used across tabs.
-        // This adds the category rail and the avatar button that opens the drawer.
+        // This adds the top bar (+ category rail, for Home) and the avatar button that opens the drawer.
         ShellChrome(
             selectedCategory: $selectedCategory,
+            showsCategoryRail: showsCategoryRail,
             onAvatar: { isDrawerOpen = true }
         ) { content() }
         .toolbar(.hidden, for: .navigationBar)

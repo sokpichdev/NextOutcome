@@ -12,6 +12,9 @@ public struct ShellChrome<Content: View>: View {
     /// The currently selected top-level category, shown highlighted in the
     /// category rail and shared with the parent to filter content.
     @Binding private var selectedCategory: ShellCategory
+    /// Whether the category rail (Trending/World Cup/Breaking/…) is shown below the top bar.
+    /// Only the Home tab has content that responds to it — other tabs hide it.
+    private let showsCategoryRail: Bool
     /// Forwarded to `NOTopBar`'s gift icon action.
     private let onGift: () -> Void
     /// Forwarded to `NOTopBar`'s bell/notifications icon action.
@@ -24,18 +27,22 @@ public struct ShellChrome<Content: View>: View {
     /// Creates the shell chrome wrapper around a tab's content.
     /// - Parameters:
     ///   - selectedCategory: Binding to the active top-level category.
+    ///   - showsCategoryRail: Whether to show the category rail below the top bar. Defaults
+    ///     to `true`; pass `false` for tabs whose content doesn't filter by category.
     ///   - onGift: Action for the gift icon. Defaults to a no-op.
     ///   - onBell: Action for the bell icon. Defaults to a no-op.
     ///   - onAvatar: Action for the avatar icon (required — typically opens the account menu/drawer).
     ///   - content: A view builder producing the tab's main content.
     public init(
         selectedCategory: Binding<ShellCategory>,
+        showsCategoryRail: Bool = true,
         onGift: @escaping () -> Void = {},
         onBell: @escaping () -> Void = {},
         onAvatar: @escaping () -> Void,
         @ViewBuilder content: () -> Content
     ) {
         self._selectedCategory = selectedCategory
+        self.showsCategoryRail = showsCategoryRail
         self.onGift = onGift
         self.onBell = onBell
         self.onAvatar = onAvatar
@@ -46,8 +53,10 @@ public struct ShellChrome<Content: View>: View {
         AccentGlowBackground {
             VStack(spacing: 0) {
                 NOTopBar(onGift: onGift, onBell: onBell, onAvatar: onAvatar)
-                CategoryRail(selected: $selectedCategory)
-                Divider().overlay(DSColor.separator)
+                if showsCategoryRail {
+                    CategoryRail(selected: $selectedCategory)
+                    Divider().overlay(DSColor.separator)
+                }
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
