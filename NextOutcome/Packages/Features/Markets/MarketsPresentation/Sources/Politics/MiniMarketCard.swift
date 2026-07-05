@@ -78,10 +78,11 @@ struct MiniMarketCard: View {
     @ViewBuilder
     private var tradeButton: some View {
         if let market {
+            let price = yesLeads ? market.yesOutcome?.price : market.noOutcome?.price
             Button {
                 onTrade(market, yesLeads ? .yes : .no)
             } label: {
-                Text("Trade")
+                Text(MarketFormatting.tradeLabel(price: price ?? 0))
                     .font(DSFont.subheadline.bold())
                     .foregroundStyle(DSColor.background)
                     .frame(maxWidth: .infinity)

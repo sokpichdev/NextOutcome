@@ -16,14 +16,23 @@ public struct EventListView: View {
     @State private var viewModel: EventListViewModel
     /// The category selected in the shell rail, applied to the view model.
     private let selectedCategory: ShellCategory
+    /// The Politics hub view model, non-nil only when `selectedCategory == .politics` — drives
+    /// the "2026 Midterms Predictions" promo card prepended to the feed in that category.
+    private let politicsHubViewModel: PoliticsHubViewModel?
 
     /// Creates the view.
     /// - Parameters:
     ///   - viewModel: The event-list view model.
     ///   - selectedCategory: The initial rail category. Defaults to trending.
-    public init(viewModel: EventListViewModel, selectedCategory: ShellCategory = .trending) {
+    ///   - politicsHubViewModel: The Politics hub view model, when in the Politics category.
+    public init(
+        viewModel: EventListViewModel,
+        selectedCategory: ShellCategory = .trending,
+        politicsHubViewModel: PoliticsHubViewModel? = nil
+    ) {
         self._viewModel = State(initialValue: viewModel)
         self.selectedCategory = selectedCategory
+        self.politicsHubViewModel = politicsHubViewModel
     }
 
     public var body: some View {
@@ -47,9 +56,18 @@ public struct EventListView: View {
         .navigationDestination(for: MarketNavigationTarget.self) {
             MarketDetailView(market: $0.market, eventID: $0.eventID)
         }
+        .navigationDestination(for: MidtermsHubDestination.self) { _ in
+            if let politicsHubViewModel { PoliticsHubView(viewModel: politicsHubViewModel) }
+        }
         // `apply` is idempotent and loads on first appearance; it also resyncs the VM when
         // the view remounts with a different category (e.g. returning from the hub).
         .task { await viewModel.apply(category: selectedCategory) }
+        // Loaded from this stable, non-virtualized task rather than the promo card's own
+        // `.task` — that card lives inside the feed's `LazyVStack`, which SwiftUI can
+        // virtualize away (or does when the hub is pushed), cancelling the in-flight fetch.
+        // Keyed by category so it re-fires when switching into Politics (`.task` alone only
+        // runs once per view identity, not on every prop change).
+        .task(id: selectedCategory) { if let politicsHubViewModel { await politicsHubViewModel.loadIfNeeded() } }
         .onChange(of: selectedCategory) { _, new in Task { await viewModel.apply(category: new) } }
         // Debounced search: SwiftUI cancels and restarts this on every `searchQuery`
         // keystroke, so only the last one (after the delay) actually calls the API.
@@ -88,6 +106,12 @@ public struct EventListView: View {
     private var feed: some View {
         ScrollView {
             LazyVStack(spacing: DSLayout.spacing) {
+                if let politicsHubViewModel {
+                    NavigationLink(value: MidtermsHubDestination()) {
+                        MidtermsPromoCard(viewModel: politicsHubViewModel)
+                    }
+                    .buttonStyle(.plain)
+                }
                 ForEach(viewModel.visibleEvents) { event in
                     NavigationLink(value: event) {
                         HomeCard(event: event)

@@ -136,10 +136,12 @@ struct RootView: View {
                         WorldCupHubView(viewModel: worldCupViewModel)
                     } else if selectedCategory == .breaking {
                         BreakingView(viewModel: breakingViewModel)
-                    } else if selectedCategory == .politics {
-                        PoliticsHubView(viewModel: politicsHubViewModel)
                     } else {
-                        EventListView(viewModel: eventListViewModel, selectedCategory: selectedCategory)
+                        EventListView(
+                            viewModel: eventListViewModel,
+                            selectedCategory: selectedCategory,
+                            politicsHubViewModel: selectedCategory == .politics ? politicsHubViewModel : nil
+                        )
                     }
                 }
             }

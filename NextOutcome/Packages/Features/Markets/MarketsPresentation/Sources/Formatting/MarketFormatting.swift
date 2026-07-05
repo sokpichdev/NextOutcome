@@ -77,6 +77,15 @@ public enum MarketFormatting {
         return "Ends in \(minutes)m"
     }
 
+    /// "Trade $100 → $X" — what a flat $100 stake at this price pays out if correct.
+    /// Falls back to plain "Trade" when the price can't support the math (0 or 1, i.e. no
+    /// real market left to quote).
+    public static func tradeLabel(price: Decimal) -> String {
+        guard price > 0, price < 1 else { return "Trade" }
+        let payout = NSDecimalNumber(decimal: 100 / price).doubleValue
+        return "Trade $100 → $\(Int(payout.rounded()))"
+    }
+
     /// One decimal, trailing ".0" removed. 3.0 → "3", 3.2 → "3.2".
     private static func trimmed(_ v: Double) -> String {
         let s = String(format: "%.1f", v)
