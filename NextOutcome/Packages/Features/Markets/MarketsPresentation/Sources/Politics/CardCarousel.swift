@@ -22,23 +22,27 @@ struct CardCarousel<Card: View>: View {
     @GestureState private var dragOffset: CGFloat = 0
 
     var body: some View {
-        VStack(spacing: DSLayout.spacing) {
-            card(index)
-                .offset(x: dragOffset)
-                .animation(.interactiveSpring(), value: dragOffset)
-                .gesture(
-                    DragGesture()
-                        .updating($dragOffset) { value, state, _ in state = value.translation.width }
-                        .onEnded { value in
-                            if value.translation.width < -40 { advance(by: 1) }
-                            else if value.translation.width > 40 { advance(by: -1) }
-                        }
-                )
-            HStack(spacing: DSLayout.spacing) {
+        card(index)
+            .offset(x: dragOffset)
+            .animation(.interactiveSpring(), value: dragOffset)
+            .gesture(
+                DragGesture()
+                    .updating($dragOffset) { value, state, _ in state = value.translation.width }
+                    .onEnded { value in
+                        if value.translation.width < -40 { advance(by: 1) }
+                        else if value.translation.width > 40 { advance(by: -1) }
+                    }
+            )
+            .overlay(alignment: .leading) {
                 chevronButton(systemName: "chevron.left") { advance(by: -1) }
-                chevronButton(systemName: "chevron.right") { advance(by: 1) }
+                    .padding(.leading, 8)
+                    .opacity(index > 0 ? 1 : 0.3)
             }
-        }
+            .overlay(alignment: .trailing) {
+                chevronButton(systemName: "chevron.right") { advance(by: 1) }
+                    .padding(.trailing, 8)
+                    .opacity(index < count - 1 ? 1 : 0.3)
+            }
     }
 
     /// Moves the index by `delta`, clamped to the valid range (no wraparound).

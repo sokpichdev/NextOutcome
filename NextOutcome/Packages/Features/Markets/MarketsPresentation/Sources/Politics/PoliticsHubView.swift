@@ -61,7 +61,9 @@ public struct PoliticsHubView: View {
             searchBar
             chamberTabs
             mapSection
-            racesList
+            if viewModel.selectedChamber != .house {
+                racesList
+            }
             referendumsSection
             biggestRacesSection
             oddsBreakdownSection
@@ -302,10 +304,13 @@ private struct CountdownRow: View {
     }
 
     private func unit(_ value: Int, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("\(max(value, 0))")
+        let clamped = max(value, 0)
+        return VStack(alignment: .leading, spacing: 2) {
+            Text("\(clamped)")
                 .font(DSFont.largeTitle)
                 .foregroundStyle(DSColor.textSecondary)
+                .contentTransition(.numericText(value: Double(clamped)))
+                .animation(.snappy, value: clamped)
             Text(label)
                 .font(DSFont.caption2)
                 .foregroundStyle(DSColor.textSecondary)
@@ -329,7 +334,7 @@ private struct ControlCard: View {
                 Button {
                     onTrade(.yes)
                 } label: {
-                    Text("Trade")
+                    Text(MarketFormatting.tradeLabel(price: summary.percent))
                         .font(DSFont.subheadline.bold())
                         .foregroundStyle(DSColor.background)
                         .frame(maxWidth: .infinity)
@@ -353,7 +358,12 @@ private struct RaceOddsCard: View {
             Text(event.title.trimmingCharacters(in: .whitespaces))
                 .font(DSFont.subheadline.bold())
                 .foregroundStyle(DSColor.textPrimary)
-            ForEach(event.markets.sorted { ($0.yesOutcome?.price ?? 0) > ($1.yesOutcome?.price ?? 0) }.prefix(6)) { market in
+            ForEach(
+                event.markets
+                    .filter { ($0.yesOutcome?.price ?? 0) >= 0.01 }
+                    .sorted { ($0.yesOutcome?.price ?? 0) > ($1.yesOutcome?.price ?? 0) }
+                    .prefix(6)
+            ) { market in
                 HStack {
                     Text(market.groupItemTitle ?? market.question)
                         .font(DSFont.caption)
