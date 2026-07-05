@@ -9,7 +9,10 @@ import SwiftUI
 import DesignSystem
 import LiveStatsDomain
 
+/// The "Pitch" section: a simple pitch graphic with a dot showing approximate ball
+/// position. Falls back to the "Not available" row when the feed omits ball position.
 struct PitchSection: View {
+    /// The latest match snapshot to read `ballPositionPct` from.
     let match: MatchState?
 
     var body: some View {

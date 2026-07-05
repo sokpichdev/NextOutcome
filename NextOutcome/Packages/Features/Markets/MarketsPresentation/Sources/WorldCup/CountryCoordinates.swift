@@ -10,13 +10,20 @@ import Foundation
 /// Approximate (latitude, longitude) for nations that appear in World Cup markets, used to
 /// anchor their pills on the globe. Keyed by lowercased name; aliases cover feed spellings.
 enum CountryCoordinates {
+    /// Looks up a nation's approximate coordinates by name (case/whitespace-insensitive).
+    /// - Parameter name: The nation name (feed spelling).
+    /// - Returns: The `(lat, lon)` pair, or `nil` if the nation isn't in the table.
     static func location(for name: String) -> (lat: Double, lon: Double)? {
         table[normalize(name)]
     }
 
+    /// Lowercases and trims a name to match the table's keys.
     private static func normalize(_ name: String) -> String {
         name.lowercased().trimmingCharacters(in: .whitespaces)
     }
+
+    /// The lookup table of nation → approximate `(latitude, longitude)`; aliases cover
+    /// alternate feed spellings (e.g. "usa"/"united states").
 
     private static let table: [String: (lat: Double, lon: Double)] = [
         "argentina": (-38.4, -63.6), "australia": (-25.3, 133.8), "austria": (47.5, 14.6),

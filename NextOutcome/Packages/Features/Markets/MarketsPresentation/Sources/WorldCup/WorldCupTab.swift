@@ -10,6 +10,7 @@
 public enum WorldCupTab: String, CaseIterable, Sendable {
     case games, props, bracket, map
 
+    /// The tab's display title.
     public var title: String {
         switch self {
         case .games:   return "Games"

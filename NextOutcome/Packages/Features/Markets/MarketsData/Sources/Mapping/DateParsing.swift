@@ -7,13 +7,17 @@
 
 import Foundation
 
+/// Parses the several date formats Gamma sends, in one place so callers don't each have to
+/// juggle formatters.
 enum DateParsing {
+    /// ISO8601 formatter that also accepts fractional seconds.
     private static let fractionalFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
     }()
 
+    /// Formatter for Gamma's space-separated `gameStartTime` form.
     private static let spaceSeparatedFormatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")

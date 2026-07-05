@@ -12,7 +12,9 @@ import DesignSystem
 /// The hub's Props tab: All / Awards / Player H2H / Group Futures chips over the series'
 /// non-game events, rendered with the standard home cards.
 struct PropsListView: View {
+    /// The prop/futures events to filter and list.
     let props: [Event]
+    /// The selected props sub-filter (two-way bound).
     @Binding var filter: PropsFilter
 
     var body: some View {

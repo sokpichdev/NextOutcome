@@ -13,15 +13,23 @@ import DesignSystem
 /// Semi-finals → Final). Groups shows advance odds, the live round shows match cards with
 /// win %, and later rounds are TBD until their fixtures are set.
 struct BracketView: View {
+    /// The current-round games.
     let games: [Event]
+    /// Previously-finished games (the prior round).
     let completedGames: [Event]
+    /// Live/final results keyed by event id.
     let results: [String: GameResult]
+    /// Prop/futures events (used for the advance board).
     let props: [Event]
+    /// Per-group winner events.
     let groupEvents: [Event]
+    /// Team directory for flags/colours.
     let teams: [String: GameTeam]
 
+    /// The index of the currently-shown carousel page.
     @State private var index = 0
 
+    /// The ordered carousel pages, assembled by `BracketBuilder`.
     private var pages: [BracketPage] {
         BracketBuilder.pages(games: games, completedGames: completedGames, results: results,
                              props: props, groupEvents: groupEvents, teams: teams)
@@ -41,6 +49,10 @@ struct BracketView: View {
         }
     }
 
+    /// The carousel header: round title with prev/next chevrons.
+    /// - Parameters:
+    ///   - pages: All carousel pages.
+    ///   - current: The current page index.
     private func roundHeader(pages: [BracketPage], current: Int) -> some View {
         HStack {
             chevron("chevron.left", enabled: current > 0) { index = current - 1 }
@@ -54,6 +66,7 @@ struct BracketView: View {
         .padding(.vertical, DSLayout.spacingSmall)
     }
 
+    /// A prev/next chevron button, dimmed and disabled at the carousel ends.
     private func chevron(_ system: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: system)
@@ -65,6 +78,8 @@ struct BracketView: View {
         .buttonStyle(.plain)
     }
 
+    /// Renders one carousel page: group cards / advance board, match cards, or a placeholder.
+    /// - Parameter page: The page to render.
     @ViewBuilder
     private func pageContent(_ page: BracketPage) -> some View {
         switch page {
@@ -90,6 +105,7 @@ struct BracketView: View {
 /// reach the quarter-finals. The public feed has no group points table, so the advance % —
 /// not a points column — is the meaningful per-team number.
 private struct GroupCard: View {
+    /// The group's standing to render.
     let standing: GroupStanding
 
     var body: some View {
@@ -120,6 +136,7 @@ private struct GroupCard: View {
         )
     }
 
+    /// The trailing label for a team: "OUT" when eliminated, else the advance % pill.
     @ViewBuilder
     private func advanceLabel(_ team: GroupTeam) -> some View {
         if team.isOut {
@@ -141,6 +158,7 @@ private struct GroupCard: View {
 
 /// "Advance to the Quarter-finals" odds board — flat fallback when per-group markets are absent.
 private struct AdvanceBoardCard: View {
+    /// The advance rows (nation + %) to list.
     let rows: [AdvanceRow]
 
     var body: some View {
@@ -174,6 +192,7 @@ private struct AdvanceBoardCard: View {
 /// A knockout match: matchup + kickoff/status, and a row per team with win % (upcoming) or
 /// score (final), plus a team-coloured progress underline.
 private struct BracketMatchCard: View {
+    /// The knockout match to render.
     let match: BracketMatch
 
     var body: some View {
@@ -198,6 +217,7 @@ private struct BracketMatchCard: View {
         )
     }
 
+    /// The status subtitle: "Final", "Live", or the formatted kickoff time.
     private var subtitle: String {
         switch match.status {
         case .final: return "Final"
@@ -208,6 +228,9 @@ private struct BracketMatchCard: View {
         }
     }
 
+    /// A team row within a match card: flag, name, trailing win %/score, and progress
+    /// underline. Renders nothing when the team is unknown.
+    /// - Parameter team: The team to render, if any.
     @ViewBuilder
     private func teamRow(_ team: BracketTeam?) -> some View {
         if let team {
@@ -227,6 +250,8 @@ private struct BracketMatchCard: View {
         }
     }
 
+    /// The trailing element for a team: the win % pill for upcoming games, or the score box
+    /// once the game is final.
     @ViewBuilder
     private func trailing(_ team: BracketTeam, color: Color) -> some View {
         if let win = team.winPercent {
@@ -247,6 +272,7 @@ private struct BracketMatchCard: View {
         }
     }
 
+    /// A thin coloured progress bar under a team, filled to its win fraction.
     private func progressUnderline(_ team: BracketTeam, color: Color) -> some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
@@ -258,6 +284,7 @@ private struct BracketMatchCard: View {
         .frame(height: 2)
     }
 
+    /// The underline fill fraction: the clamped win % if known, else full for the winner.
     private func fillFraction(_ team: BracketTeam) -> Double {
         if let win = team.winPercent { return max(0, min(1, win)) }
         return team.isWinner ? 1 : 0
@@ -266,6 +293,7 @@ private struct BracketMatchCard: View {
 
 /// TBD card for rounds whose fixtures aren't set yet.
 private struct BracketPlaceholderCard: View {
+    /// The round title (e.g. "Semi-finals").
     let title: String
 
     var body: some View {
@@ -293,7 +321,9 @@ private struct BracketPlaceholderCard: View {
 
 /// Small flag thumbnail with a monogram fallback.
 private struct FlagThumb: View {
+    /// The flag image URL, if any.
     let url: URL?
+    /// The country name (for the monogram fallback).
     let name: String
 
     var body: some View {

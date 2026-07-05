@@ -11,14 +11,22 @@ import MarketsDomain
 /// Gamma `/events/results?id=<eventID>` payload — live/final sports scores plus team
 /// metadata. Decoded tolerantly: any missing field degrades instead of failing the row.
 struct GameResultDTO: Decodable {
+    /// The event id (accepts string or int form).
     let id: String?
+    /// The "home-away" score string.
     let score: String?
+    /// Elapsed-time label.
     let elapsed: String?
+    /// Period label.
     let period: String?
+    /// Whether the game is live.
     let live: Bool?
+    /// Whether the game has ended.
     let ended: Bool?
+    /// The teams playing.
     let teams: [GameTeamDTO]?
 
+    /// Tolerant decoder; any missing field degrades the row rather than failing it.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = (try? c.decode(String.self, forKey: .id)) ?? (try? c.decode(Int.self, forKey: .id)).map(String.init)
@@ -49,13 +57,20 @@ struct GameResultDTO: Decodable {
     }
 }
 
+/// Gamma team row within a game result.
 struct GameTeamDTO: Decodable {
+    /// The team's full name.
     let name: String?
+    /// The team's abbreviation.
     let abbreviation: String?
+    /// The team's logo URL string.
     let logo: String?
+    /// The team's brand colour hex.
     let color: String?
+    /// "home" or "away".
     let ordering: String?
 
+    /// Tolerant decoder; all fields optional.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         name = try? c.decode(String.self, forKey: .name)
@@ -69,6 +84,9 @@ struct GameTeamDTO: Decodable {
         case name, abbreviation, logo, color, ordering
     }
 
+    /// Maps to the domain `GameTeam`, or `nil` for a nameless team. Percent-encodes logo
+    /// URLs that contain spaces.
+    /// - Returns: The domain team, or `nil` if the name is missing/empty.
     func toDomain() -> GameTeam? {
         guard let name, !name.isEmpty else { return nil }
         // Logo URLs can contain spaces ("...Cabo Verde-eaec07ae28.png") — percent-encode.

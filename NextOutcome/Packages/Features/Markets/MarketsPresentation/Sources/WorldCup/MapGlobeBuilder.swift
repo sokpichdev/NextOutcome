@@ -10,19 +10,27 @@ import MarketsDomain
 
 /// A country to place on the globe: where it sits, its win %, and its pill styling.
 struct GlobeCountry: Identifiable, Equatable {
+    /// Stable identity (the source market id).
     let id: String
+    /// The country's name.
     let name: String
+    /// The country's short abbreviation shown on the pill.
     let abbreviation: String
+    /// Latitude used to place the pill.
     let lat: Double
+    /// Longitude used to place the pill.
     let lon: Double
+    /// Win probability, 0…1.
     let percent: Double // 0…1
+    /// The country's brand colour hex, if known.
     let colorHex: String?
 
-    /// "35%" / "<1%".
+    /// The pill caption: the win percent, or "<1%" for very small chances.
     var caption: String {
         percent < 0.01 ? "<1%" : MarketFormatting.percent(Decimal(percent))
     }
 
+    /// Returns a copy relocated to new coordinates (used by the anti-overlap spacing pass).
     func moved(lat: Double, lon: Double) -> GlobeCountry {
         GlobeCountry(id: id, name: name, abbreviation: abbreviation, lat: lat, lon: lon,
                      percent: percent, colorHex: colorHex)
@@ -32,6 +40,13 @@ struct GlobeCountry: Identifiable, Equatable {
 /// Builds the globe's country pills from the tournament-winner market, keeping only nations
 /// we have coordinates for.
 enum MapGlobeBuilder {
+    /// Builds the globe's pills from the winner market's per-country outcomes, ranked by win
+    /// chance, keeping only countries we have coordinates for, then spaced apart.
+    /// - Parameters:
+    ///   - winnerEvent: The tournament-winner futures event.
+    ///   - teams: Team directory for abbreviations/colours.
+    ///   - max: The maximum number of pills.
+    /// - Returns: The globe countries to render.
     static func countries(
         from winnerEvent: Event?,
         teams: [String: GameTeam] = [:],
@@ -64,6 +79,11 @@ enum MapGlobeBuilder {
     /// overlap on the globe. A few relaxation passes push any pair closer than `minSep` apart
     /// along the line between them, with each pill's total drift bounded so it stays near its
     /// true location. Longitude is scaled by cos(lat) to approximate on-sphere distance.
+    /// - Parameters:
+    ///   - countries: The pills to space apart.
+    ///   - minSep: The minimum separation (in scaled degrees) between any two pills.
+    ///   - maxDrift: How far a pill may drift from its true location.
+    /// - Returns: The pills nudged apart.
     static func spaced(_ countries: [GlobeCountry], minSep: Double = 15, maxDrift: Double = 13) -> [GlobeCountry] {
         guard countries.count > 1 else { return countries }
         let original = countries.map { (lat: $0.lat, lon: $0.lon) }
@@ -92,6 +112,7 @@ enum MapGlobeBuilder {
         return zip(countries, pos).map { $0.moved(lat: $1.lat, lon: $1.lon) }
     }
 
+    /// Clamps `v` to within `drift` of `origin`, then to the `[lo, hi]` bounds.
     private static func clamp(_ v: Double, around origin: Double, by drift: Double, lo: Double, hi: Double) -> Double {
         min(max(min(max(v, origin - drift), origin + drift), lo), hi)
     }

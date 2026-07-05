@@ -14,19 +14,29 @@ import DesignSystem
 /// countries appear dimmed and grayscaled with an "OUT" label. Fed by the tournament-winner
 /// market's per-country outcomes.
 struct FlagMarqueeView: View {
+    /// One flag tile on the marquee.
     struct Tile: Identifiable {
+        /// Stable identity (the source market id).
         let id: String
+        /// The caption riding the flag (win % or "OUT").
         let caption: String
+        /// The flag image, if any.
         let imageURL: URL?
+        /// Whether the country is eliminated (dimmed/grayscaled).
         let isOut: Bool
     }
 
+    /// The tiles to display on the arc.
     let tiles: [Tile]
 
     /// One tile per country market: caption is the win %, or "OUT" once its market has
     /// resolved to No (the team is eliminated). Placeholder (inactive) slots are dropped.
     /// Eliminated tiles are spread evenly through the still-alive ones so the arc always
     /// shows a mix rather than a cluster of "OUT".
+    /// - Parameters:
+    ///   - winnerEvent: The tournament-winner futures event.
+    ///   - max: The maximum number of tiles.
+    /// - Returns: The interleaved (alive + eliminated) tiles.
     static func tiles(from winnerEvent: Event?, max: Int = 20) -> [Tile] {
         guard let winnerEvent else { return [] }
         let ranked = winnerEvent.markets
@@ -63,12 +73,18 @@ struct FlagMarqueeView: View {
         return result
     }
 
+    /// Whether the user has reduce-motion enabled (freezes the marquee).
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// The overall strip height.
     private static let stripHeight: CGFloat = 140
+    /// The y of the centre (highest) flag.
     private static let apexY: CGFloat = 42      // y of the centre (highest) flag
+    /// How much lower the edge flags sit than the apex.
     private static let arcDepth: CGFloat = 30   // how much lower the edge flags sit
+    /// The maximum tile tilt at the arc's edges.
     private static let tiltDegrees: Double = 15
+    /// The marquee scroll speed in points per second.
     private static let pointsPerSecond: Double = 16
 
     var body: some View {
@@ -112,6 +128,8 @@ struct FlagMarqueeView: View {
         }
     }
 
+    /// Renders one tile: the flag image (grayscaled/dimmed when out) above its caption.
+    /// - Parameter tile: The tile to render.
     private func tileView(_ tile: Tile) -> some View {
         VStack(spacing: 4) {
             AsyncImage(url: tile.imageURL) { image in

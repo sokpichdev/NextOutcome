@@ -9,8 +9,12 @@ import SwiftUI
 import PortfolioDomain
 import DesignSystem
 
+/// A card row for one leaderboard entry: rank (top 3 accented), avatar, name, and the
+/// ranked amount (green when ranking by profit).
 struct LeaderboardRow: View {
+    /// The entry to render.
     let entry: LeaderboardEntry
+    /// The active ranking metric, used to colour the amount.
     let metric: LeaderboardMetric
 
     var body: some View {
@@ -34,6 +38,7 @@ struct LeaderboardRow: View {
         }
     }
 
+    /// Accent colour for the top-3 ranks, muted for the rest.
     private var rankColor: Color {
         switch entry.rank {
         case 1, 2, 3: return DSColor.accent
@@ -41,6 +46,8 @@ struct LeaderboardRow: View {
         }
     }
 
+    /// The trader's circular avatar, loaded async with a placeholder, or a plain circle
+    /// when there's no image URL.
     @ViewBuilder
     private var avatar: some View {
         if let url = entry.profileImageURL {

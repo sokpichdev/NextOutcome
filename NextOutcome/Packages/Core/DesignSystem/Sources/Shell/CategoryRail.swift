@@ -1,9 +1,19 @@
 import SwiftUI
 
 /// Horizontally scrolling top-level category rail pinned under the top bar.
+///
+/// Renders one tappable "chip" per `ShellCategory` case (Trending, World Cup,
+/// Breaking, Politics, Sports). Tapping a chip updates the `selected` binding,
+/// which the parent view uses to switch which content feed is shown below.
 public struct CategoryRail: View {
+    /// The currently active category. Changing this from outside (e.g. via deep
+    /// link) updates which chip is highlighted; tapping a chip updates this binding
+    /// so the parent screen can react.
     @Binding private var selected: ShellCategory
 
+    /// Creates the category rail.
+    /// - Parameter selected: A binding to the currently selected category, shared
+    ///   with the parent view that decides what content to show.
     public init(selected: Binding<ShellCategory>) {
         self._selected = selected
     }
@@ -20,6 +30,11 @@ public struct CategoryRail: View {
         }
     }
 
+    /// Builds a single tappable chip for one category, styled differently
+    /// depending on whether it's the currently active one (bold text and the
+    /// category's accent color vs. plain secondary text).
+    /// - Parameter category: The category this chip represents.
+    /// - Returns: A button that selects `category` when tapped.
     @ViewBuilder
     private func chip(_ category: ShellCategory) -> some View {
         let isActive = category == selected
