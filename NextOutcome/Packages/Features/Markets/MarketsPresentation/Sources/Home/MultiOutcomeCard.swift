@@ -25,14 +25,14 @@ public struct MultiOutcomeCard: View {
                 ForEach(topMarkets) { market in
                     NavigationLink(value: MarketNavigationTarget(market: market, eventID: event.id)) {
                         HStack {
-                            Text(market.question).font(DSFont.subheadline)
+                            Text(market.groupItemTitle ?? market.question).font(DSFont.subheadline)
                                 .foregroundStyle(DSColor.textPrimary).lineLimit(1)
                             Spacer()
                             if let yes = market.yesOutcome {
                                 Text(MarketFormatting.percent(yes.price))
                                     .font(DSFont.priceSmall).foregroundStyle(DSColor.textPrimary)
-                                OutcomePill(.yes, value: "Yes")
-                                OutcomePill(.no, value: "No")
+                                OutcomePill(.yes)
+                                OutcomePill(.no)
                             }
                         }
                     }
