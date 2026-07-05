@@ -12,6 +12,7 @@ public enum MarketGroup: String, CaseIterable, Sendable {
     case moneyline, spreads, totals, bothTeamsToScore, firstToScore
     case teamTotals, extraTime, penaltyShootout, other
 
+    /// The section header text shown on the event-detail page.
     public var title: String {
         switch self {
         case .moneyline: return "Moneyline"
@@ -47,6 +48,10 @@ public enum MarketGroupClassifier {
         }
     }
 
+    /// Classifies a single market into a `MarketGroup`, preferring Gamma's
+    /// `sportsMarketType` and falling back to keyword-matching the title/subtitle.
+    /// - Parameter market: The market to classify.
+    /// - Returns: The section it belongs to (`.other` if nothing matches).
     private static func classify(_ market: Market) -> MarketGroup {
         switch market.sportsMarketType?.lowercased() {
         case "moneyline": return .moneyline

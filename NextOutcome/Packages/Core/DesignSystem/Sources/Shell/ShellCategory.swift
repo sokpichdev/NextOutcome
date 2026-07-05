@@ -2,9 +2,22 @@ import SwiftUI
 
 /// Top-level content categories shown in the persistent chip rail.
 /// Order matches the screenshots exactly.
+///
+/// This drives the row of filter chips at the top of the home screen (see
+/// `CategoryRail`) that lets the user switch between different content feeds.
 public enum ShellCategory: String, CaseIterable, Sendable {
-    case trending, worldCup, breaking, politics, sports
+    /// The default "what's popular right now" feed.
+    case trending
+    /// The World Cup hub — brackets, schedules, and props for the tournament.
+    case worldCup
+    /// Breaking news markets.
+    case breaking
+    /// Political markets (elections, policy outcomes, etc.).
+    case politics
+    /// General sports markets (outside the dedicated World Cup hub).
+    case sports
 
+    /// The human-readable label shown on the chip for this category.
     public var title: String {
         switch self {
         case .trending: return "Trending"

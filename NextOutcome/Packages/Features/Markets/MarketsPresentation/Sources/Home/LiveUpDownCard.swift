@@ -5,16 +5,24 @@ import OrderbookPresentation
 
 /// Compact live BTC Up/Down card: circular Up% gauge, Up/Down buttons, decorative +$ chips.
 public struct LiveUpDownCard: View {
+    /// The event backing the card.
     private let event: Event
+    /// Factory (from the environment) for building the live-market view model.
     @Environment(\.marketLiveFactory) private var factory
+    /// The live view model, created lazily once a factory and Up outcome are available.
     @State private var model: LiveUpDownCardViewModel?
 
+    /// Creates the card.
+    /// - Parameter event: The event to display.
     public init(event: Event) { self.event = event }
 
+    /// The event's first market.
     private var market: Market? { event.markets.first }
+    /// The navigation target opened when the card's buttons are tapped.
     private var navigationTarget: MarketNavigationTarget? {
         market.map { MarketNavigationTarget(market: $0, eventID: event.id) }
     }
+    /// The "Up" outcome, if the market has one.
     private var upOutcome: Outcome? {
         market?.outcomes.first { $0.title.lowercased() == "up" }
     }
@@ -50,6 +58,7 @@ public struct LiveUpDownCard: View {
         .onDisappear { model?.stop() }
     }
 
+    /// The semicircular Up% gauge, filled to the live (or fallback static) Up fraction.
     @ViewBuilder
     private var gauge: some View {
         let fraction = model?.upFraction ?? upOutcome.map { NSDecimalNumber(decimal: $0.price).doubleValue } ?? 0.5

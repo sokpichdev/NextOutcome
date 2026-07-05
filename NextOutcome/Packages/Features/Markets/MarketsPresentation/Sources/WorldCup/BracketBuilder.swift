@@ -10,64 +10,99 @@ import MarketsDomain
 
 /// One nation's chance of advancing, from the "Nation To Reach …" futures market.
 struct AdvanceRow: Identifiable, Equatable {
+    /// Stable identity (the source market id).
     let id: String
+    /// The nation's name.
     let name: String
+    /// The nation's flag/logo, if known.
     let logoURL: URL?
+    /// The chance to advance, 0…1.
     let percent: Double // 0…1
 }
 
 /// A team within a group card.
 struct GroupTeam: Identifiable, Equatable {
+    /// Stable identity.
     let id: String
+    /// The team's name.
     let name: String
+    /// The team's flag/logo, if known.
     let logoURL: URL?
+    /// The team's brand colour hex, if known.
     let colorHex: String?
+    /// Chance to reach the quarter-finals (0…1), or `nil` if unknown.
     let advancePercent: Double? // chance to reach the quarter-finals, nil if unknown
+    /// Whether the team has been eliminated.
     let isOut: Bool
 }
 
 /// A group's teams (e.g. "Group A"), from the per-group winner market.
 struct GroupStanding: Identifiable, Equatable {
+    /// The group letter (e.g. "A").
     let id: String   // "A"
+    /// The group's display name (e.g. "Group A").
     let name: String // "Group A"
+    /// The teams in the group, ranked by advance chance.
     let teams: [GroupTeam]
 }
 
 /// The Groups page: real group cards when available, else the flat advance board.
 struct GroupsData: Equatable {
+    /// The per-group standings (may be empty).
     let standings: [GroupStanding]
+    /// The flat advance board fallback (may be empty).
     let advance: [AdvanceRow]
 }
 
 /// One side of a knockout match.
 struct BracketTeam: Equatable {
+    /// The team's name.
     let name: String
+    /// The team's abbreviation, if known.
     let abbreviation: String?
+    /// The team's flag/logo, if known.
     let logoURL: URL?
+    /// The team's brand colour hex, if known.
     let colorHex: String?
+    /// The team's score, or `nil` before the game starts.
     let score: Int?
+    /// Win probability (0…1), or `nil` once the game is final.
     let winPercent: Double? // 0…1, nil once the game is final
+    /// Whether this team won a completed match.
     let isWinner: Bool
 }
 
+/// One knockout match (two sides, plus status).
 struct BracketMatch: Identifiable, Equatable {
+    /// The match lifecycle status.
     enum Status: Equatable { case scheduled, live, final }
+    /// Stable identity (the source event id).
     let id: String
+    /// The match title.
     let title: String
+    /// Kickoff time, if known.
     let kickoff: Date?
+    /// Whether the match is scheduled, live, or final.
     let status: Status
+    /// The home side, if known.
     let home: BracketTeam?
+    /// The away side, if known.
     let away: BracketTeam?
 }
 
 /// A page of the bracket carousel.
 enum BracketPage: Identifiable, Equatable {
+    /// The group-stage page.
     case groups(GroupsData)
+    /// A round of matches, with a round title.
     case matches(title: String, [BracketMatch])
+    /// A TBD placeholder round (fixtures not yet set).
     case placeholder(title: String)
 
+    /// The page's identity (its title).
     var id: String { title }
 
+    /// The page's display title.
     var title: String {
         switch self {
         case .groups: return "Groups"
@@ -82,6 +117,17 @@ enum BracketPage: Identifiable, Equatable {
 /// games form "Round of 16", the "Reach Quarterfinals" market backs the Groups advance board,
 /// and later rounds are honest TBD placeholders until their fixtures are set.
 enum BracketBuilder {
+    /// Assembles the ordered pages of the bracket carousel from the hub's already-loaded
+    /// data: a Groups page (group cards or advance board), the completed "Round of 32", the
+    /// live "Round of 16", and honest TBD placeholders for later rounds.
+    /// - Parameters:
+    ///   - games: The current-round games.
+    ///   - completedGames: Previously-finished games.
+    ///   - results: Live/final results keyed by event id.
+    ///   - props: Prop/futures events (used for the advance market).
+    ///   - groupEvents: Per-group winner events.
+    ///   - teams: Team directory for flags/colours.
+    /// - Returns: The ordered bracket pages.
     static func pages(
         games: [Event],
         completedGames: [Event] = [],
@@ -117,6 +163,11 @@ enum BracketBuilder {
 
     /// Top nations by advance chance, from the futures market's per-country outcomes, with
     /// flags filled from the team directory.
+    /// - Parameters:
+    ///   - event: The "Nation To Reach …" futures event, if present.
+    ///   - teams: Team directory for flags.
+    ///   - max: The maximum number of rows to return.
+    /// - Returns: The top nations by advance chance.
     static func advanceRows(from event: Event?, teams: [String: GameTeam] = [:], max: Int = 16) -> [AdvanceRow] {
         guard let event else { return [] }
         return event.markets
@@ -136,6 +187,11 @@ enum BracketBuilder {
 
     /// Group cards from the per-group winner markets (which list each group's teams), with
     /// each team's chance to reach the quarter-finals pulled from the advance market.
+    /// - Parameters:
+    ///   - groupEvents: The per-group winner events.
+    ///   - advanceEvent: The advance ("Reach Quarterfinals") event, for each team's chance.
+    ///   - teams: Team directory for flags/colours.
+    /// - Returns: The group standings, sorted by group letter.
     static func groupStandings(
         groupEvents: [Event],
         advanceEvent: Event?,
@@ -170,6 +226,8 @@ enum BracketBuilder {
     }
 
     /// name → (advance %, eliminated) from the "Reach Quarterfinals" market.
+    /// - Parameter event: The advance market event.
+    /// - Returns: A map of lowercased team name → (advance %, whether eliminated).
     private static func advanceInfo(from event: Event?) -> [String: (percent: Double, isOut: Bool)] {
         guard let event else { return [:] }
         var map: [String: (Double, Bool)] = [:]
@@ -182,6 +240,9 @@ enum BracketBuilder {
     }
 
     /// "World Cup Group C Winner" / slug "world-cup-group-c-winner" → "C".
+    /// Extracts the group letter from an event's slug or title.
+    /// - Parameter event: The group event.
+    /// - Returns: The single-letter group id (e.g. "C"), or `nil` if not found.
     private static func groupLetter(from event: Event) -> String? {
         if let range = event.slug.range(of: "group-"),
            let end = event.slug[range.upperBound...].firstIndex(of: "-") {
@@ -199,6 +260,11 @@ enum BracketBuilder {
     /// Builds a match from a game's moneyline markets (team + win %) hydrated with the live
     /// result (logos, colours, score), falling back to the team directory. Returns nil if the
     /// game has no two teams.
+    /// - Parameters:
+    ///   - game: The game event.
+    ///   - result: The live/final result, if any.
+    ///   - teams: Team directory fallback for logos/colours.
+    /// - Returns: A `BracketMatch`, or `nil` if the game has no two teams.
     static func match(from game: Event, result: GameResult?, teams: [String: GameTeam] = [:]) -> BracketMatch? {
         let teamMarkets = WorldCupEventSplitter.moneylineMarkets(for: game)
             .filter { ($0.groupItemTitle?.lowercased().hasPrefix("draw") ?? false) == false }
@@ -208,6 +274,7 @@ enum BracketBuilder {
         let status: BracketMatch.Status = result?.live == true ? .live
             : (result?.ended == true || game.isResolved ? .final : .scheduled)
 
+        // Builds one side (home/away) from its moneyline market, hydrated with result data.
         func side(index: Int, resultTeam: GameTeam?) -> BracketTeam? {
             let market = teamMarkets.indices.contains(index) ? teamMarkets[index] : nil
             let name = resultTeam?.name ?? market?.groupItemTitle
@@ -250,6 +317,7 @@ enum BracketBuilder {
                             status: status, home: home, away: away)
     }
 
+    /// Returns a copy of `team` with its `isWinner` flag set.
     private static func withWinner(_ team: BracketTeam, isWinner: Bool) -> BracketTeam {
         BracketTeam(name: team.name, abbreviation: team.abbreviation, logoURL: team.logoURL,
                     colorHex: team.colorHex, score: team.score, winPercent: team.winPercent,

@@ -7,7 +7,11 @@
 
 import SharedDomain
 
+/// Read access to Polymarket's market/event catalogue and the social data around it
+/// (holders, comments, trades). The concrete implementation lives in the Data layer; the
+/// Domain and Presentation layers only ever see this protocol.
 public protocol MarketRepository: Sendable {
+    /// Fetches one page of events, optionally filtered by tag and sorted/scoped.
     func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus) async throws -> Page<Event>
     /// All events of a Gamma series (e.g. a tournament). Bounded, unpaginated.
     func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event]
@@ -18,12 +22,19 @@ public protocol MarketRepository: Sendable {
     /// Most-recently-finished events of a series (closed, newest first) — e.g. the last
     /// knockout round played.
     func fetchCompletedEvents(seriesID: String, limit: Int) async throws -> [Event]
+    /// Fetches one page of individual markets.
     func fetchMarkets(cursor: String?) async throws -> Page<Market>
+    /// Fetches a single event by its URL slug.
     func fetchEvent(slug: String) async throws -> Event
+    /// Full-text searches markets by query string.
     func searchMarkets(query: String) async throws -> [Market]
+    /// Fetches the filter tags (categories) shown in the chip row.
     func fetchTags() async throws -> [Tag]
+    /// Fetches the top holders of a market's condition.
     func holders(conditionId: String) async throws -> [Holder]
+    /// Fetches the comments on an event's discussion thread.
     func comments(eventID: String) async throws -> [Comment]
+    /// Fetches recent trades for a market's condition.
     func trades(conditionId: String) async throws -> [ActivityTrade]
 }
 

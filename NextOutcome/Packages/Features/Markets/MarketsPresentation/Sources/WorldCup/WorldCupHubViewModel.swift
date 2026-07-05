@@ -9,11 +9,22 @@ import Foundation
 import MarketsDomain
 import SharedDomain
 
+/// Drives the World Cup hub: loads the tournament's games, props/futures, group events, team
+/// directory, and live results, then feeds the Games/Props/Bracket/Map sub-tabs. Polls live
+/// scores while on screen.
 @MainActor
 @Observable
 public final class WorldCupHubViewModel {
+    /// The hub's overall load state.
     public enum State {
-        case idle, loading, loaded, failed(String)
+        /// Nothing loaded yet.
+        case idle
+        /// Loading the tournament data.
+        case loading
+        /// Data loaded.
+        case loaded
+        /// The load failed, with a user-facing message.
+        case failed(String)
     }
 
     /// 2026 FIFA World Cup Gamma series (`/sports` → sport "fifwc"): games + player props.
@@ -25,30 +36,46 @@ public final class WorldCupHubViewModel {
     /// it is neither in the series nor reliably in the futures tag's top page.
     static let winnerSlug = "world-cup-winner"
 
+    /// The current load state.
     public private(set) var state: State = .idle
+    /// The upcoming/current games (schedulable events).
     public private(set) var games: [Event] = []
     /// Most-recent finished knockout games (the previous round), for the bracket's Round of 32.
     public private(set) var completedGames: [Event] = []
+    /// The prop/futures events (winner, awards, player props, group futures).
     public private(set) var props: [Event] = []
+    /// Live/final results keyed by event id.
     public private(set) var results: [String: GameResult] = [:]
     /// League team reference (logo, colour) keyed by lowercased name — fills flags/colours
     /// where a game result hasn't loaded (e.g. the bracket's advance board).
     public private(set) var teamsByName: [String: GameTeam] = [:]
+    /// The tournament-winner futures event, backing the flag marquee.
     public private(set) var winnerEvent: Event?
     /// Per-group winner events (world-cup-group-{a…l}-winner), each listing its group's teams.
     public private(set) var groupEvents: [Event] = []
+    /// When results were last refreshed (for a "last updated" label).
     public private(set) var lastUpdated: Date?
+    /// The selected sub-tab.
     public var selectedTab: WorldCupTab = .games
+    /// The selected Props sub-filter.
     public var selectedPropsFilter: PropsFilter = .all
 
+    /// Loads a series' events.
     private let fetchSeriesEvents: FetchSeriesEventsUseCase
+    /// Loads game results.
     private let fetchGameResults: FetchGameResultsUseCase
+    /// Loads events by tag (futures).
     private let fetchEvents: FetchEventsUseCase
+    /// Loads a single event by slug (winner, groups).
     private let fetchEvent: FetchEventUseCase
+    /// Loads the league team directory.
     private let fetchTeams: FetchTeamsUseCase
+    /// Loads the most-recent completed events.
     private let fetchCompleted: FetchCompletedEventsUseCase
+    /// Injectable clock (defaults to `Date()`), for deterministic tests.
     private let now: @Sendable () -> Date
 
+    /// Creates the view model with its use cases.
     public init(
         fetchSeriesEvents: FetchSeriesEventsUseCase,
         fetchGameResults: FetchGameResultsUseCase,
@@ -67,8 +94,10 @@ public final class WorldCupHubViewModel {
         self.now = now
     }
 
+    /// The league code used for the team directory.
     static let league = "fifwc"
 
+    /// The games grouped by calendar day for the Games schedule tab.
     public var gamesByDay: [(day: Date, games: [Event])] {
         WorldCupEventSplitter.gamesByDay(games)
     }
@@ -84,10 +113,14 @@ public final class WorldCupHubViewModel {
             .max { $0.volume < $1.volume }
     }
 
+    /// Loads on first appearance only (no-op once loaded/loading).
     public func loadIfNeeded() async {
         if case .idle = state { await load() }
     }
 
+    /// Loads all the hub's data concurrently (series, futures, winner, teams, groups,
+    /// completed games), splits events into games/props, then kicks off an initial results
+    /// fetch. Fails only if both the series and futures come back empty.
     public func load() async {
         state = .loading
         async let seriesFetch = fetchSeriesEvents.execute(seriesID: Self.seriesID)
@@ -140,6 +173,7 @@ public final class WorldCupHubViewModel {
         }
     }
 
+    /// Reloads everything (pull-to-refresh).
     public func refresh() async {
         await load()
     }
@@ -154,6 +188,9 @@ public final class WorldCupHubViewModel {
     }
 
     /// Fetch scores for the given games; individual failures keep existing entries.
+    /// Fetches scores for the given games and merges them in; individual failures keep the
+    /// existing entries.
+    /// - Parameter eventIDs: The game ids to refresh.
     func refreshResults(for eventIDs: [String]) async {
         guard !eventIDs.isEmpty else { return }
         guard let fresh = try? await fetchGameResults.execute(eventIDs: eventIDs) else { return }
@@ -162,6 +199,10 @@ public final class WorldCupHubViewModel {
     }
 
     /// Games worth an initial score fetch: kickoff within ±1 day, bounded fan-out.
+    /// - Parameters:
+    ///   - windowHours: How far around now (± hours) a kickoff must fall to qualify.
+    ///   - cap: The maximum number of ids to return.
+    /// - Returns: Ids of games worth an immediate score fetch.
     func initialResultIDs(windowHours: Double = 24, cap: Int = 20) -> [String] {
         let reference = now()
         return games
@@ -175,6 +216,7 @@ public final class WorldCupHubViewModel {
 
     /// Games whose score can still change: currently live, or kicked off in the last 3h
     /// (covers games the initial fetch saw as scheduled).
+    /// - Returns: Ids of games whose score can still change (live, or kicked off in the last 3h).
     func liveRefreshIDs() -> [String] {
         let reference = now()
         return games.filter { game in

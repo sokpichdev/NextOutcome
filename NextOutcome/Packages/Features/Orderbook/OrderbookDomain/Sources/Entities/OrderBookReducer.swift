@@ -11,6 +11,14 @@ import Foundation
 /// keeping bids high→low and asks low→high. No I/O — trivially unit-testable.
 public enum OrderBookReducer {
 
+    /// Produces the next book state by applying one event to the current book.
+    ///
+    /// This is a pure function (same inputs → same output, no side effects), which makes
+    /// the socket handling easy to test and reason about.
+    /// - Parameters:
+    ///   - book: The current reconciled book.
+    ///   - event: The incoming normalized event.
+    /// - Returns: The updated book (or the same book for connection-only events).
     public static func reduce(_ book: OrderBook, _ event: OrderBookEvent) -> OrderBook {
         switch event {
         case let .snapshot(bids, asks, tickSize, lastTrade):
@@ -54,6 +62,12 @@ public enum OrderBookReducer {
         }
     }
 
+    /// Applies one level change into the working price→size dictionaries, adding/updating
+    /// the level or removing it when the new size is zero or negative.
+    /// - Parameters:
+    ///   - change: The level change to apply.
+    ///   - bids: The mutable bid map (price → size).
+    ///   - asks: The mutable ask map (price → size).
     private static func apply(
         _ change: LevelChange,
         bids: inout [Decimal: Decimal],
@@ -68,14 +82,17 @@ public enum OrderBookReducer {
         }
     }
 
+    /// Converts a price→size map back into `PriceLevel`s (unsorted).
     private static func levels(from map: [Decimal: Decimal]) -> [PriceLevel] {
         map.map { PriceLevel(price: $0.key, size: $0.value) }
     }
 
+    /// Drops empty levels and sorts bids highest price first.
     private static func sortedBids(_ levels: [PriceLevel]) -> [PriceLevel] {
         levels.filter { $0.size > 0 }.sorted { $0.price > $1.price }
     }
 
+    /// Drops empty levels and sorts asks lowest price first.
     private static func sortedAsks(_ levels: [PriceLevel]) -> [PriceLevel] {
         levels.filter { $0.size > 0 }.sorted { $0.price < $1.price }
     }

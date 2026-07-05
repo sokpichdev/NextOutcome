@@ -11,12 +11,19 @@
 import SwiftUI
 import LiveStatsDomain
 
+/// The "Table" (standings) section. Always renders the "Not available" placeholder today
+/// because the public feed carries no standings; kept as a first-class section so the
+/// chip nav matches the live site.
 struct TableSection: View {
+    /// The current match snapshot (unused today; reserved for a richer feed).
     let match: MatchState?
     var body: some View { UnavailableRow() }
 }
 
+/// The "H2H" (head-to-head history) section. Always renders the "Not available"
+/// placeholder today for the same reason as `TableSection`.
 struct H2HSection: View {
+    /// The current match snapshot (unused today; reserved for a richer feed).
     let match: MatchState?
     var body: some View { UnavailableRow() }
 }

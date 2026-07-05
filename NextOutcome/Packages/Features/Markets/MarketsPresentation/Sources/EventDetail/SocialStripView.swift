@@ -5,8 +5,11 @@ import DesignSystem
 
 /// The Comments · Top Holders · Positions · Activity strip below an event's rules.
 public struct SocialStripView: View {
+    /// The view model driving the tabs and their lazy loading.
     @State private var viewModel: SocialStripViewModel
 
+    /// Creates the view.
+    /// - Parameter viewModel: The social-strip view model.
     public init(viewModel: SocialStripViewModel) {
         self._viewModel = State(initialValue: viewModel)
     }
@@ -21,10 +24,12 @@ public struct SocialStripView: View {
         }
     }
 
+    /// The chip row of tab titles.
     private var tabStrip: some View {
         ChipRow(items: SocialTab.allCases.map(\.title), selection: selectionBinding)
     }
 
+    /// Bridges the chip row's `Int` selection to the view model's `SocialTab`.
     private var selectionBinding: Binding<Int> {
         Binding(
             get: { SocialTab.allCases.firstIndex(of: viewModel.selectedTab) ?? 0 },
@@ -35,6 +40,7 @@ public struct SocialStripView: View {
         )
     }
 
+    /// The body for the selected tab (comments/holders/positions/activity).
     @ViewBuilder
     private var content: some View {
         switch viewModel.selectedTab {
@@ -52,8 +58,11 @@ public struct SocialStripView: View {
 
 // MARK: - Comments
 
+/// The comments tab body: renders loading/empty/error or a list of `CommentRow`s.
 private struct CommentsTabContent: View {
+    /// The comments load state to render.
     let state: LoadState<[Comment]>
+    /// Retry action for the error state.
     let onRetry: () async -> Void
 
     var body: some View {
@@ -72,7 +81,9 @@ private struct CommentsTabContent: View {
     }
 }
 
+/// A single comment: avatar, author + relative time, and the body text.
 private struct CommentRow: View {
+    /// The comment to render.
     let comment: Comment
 
     var body: some View {
@@ -96,6 +107,7 @@ private struct CommentRow: View {
         }
     }
 
+    /// The commenter's circular avatar, or a placeholder circle when there's no image.
     @ViewBuilder
     private var avatar: some View {
         if let url = comment.avatarURL {
@@ -114,8 +126,11 @@ private struct CommentRow: View {
 
 // MARK: - Top Holders
 
+/// The holders tab body: renders loading/empty/error or a ranked list of `HolderRankRow`s.
 private struct HoldersTabContent: View {
+    /// The holders load state to render.
     let state: LoadState<[Holder]>
+    /// Retry action for the error state.
     let onRetry: () async -> Void
 
     var body: some View {
@@ -136,8 +151,11 @@ private struct HoldersTabContent: View {
     }
 }
 
+/// One ranked holder row: rank, avatar, name, outcome badge, and shares.
 private struct HolderRankRow: View {
+    /// The 1-based rank.
     let rank: Int
+    /// The holder to render.
     let holder: Holder
 
     var body: some View {
@@ -161,6 +179,7 @@ private struct HolderRankRow: View {
         }
     }
 
+    /// The holder's shares formatted compactly with K/M suffixes.
     private var sharesText: String {
         let value = NSDecimalNumber(decimal: holder.shares).doubleValue
         switch value {
@@ -170,6 +189,7 @@ private struct HolderRankRow: View {
         }
     }
 
+    /// The holder's circular avatar, or a placeholder circle when there's no image.
     @ViewBuilder
     private var avatar: some View {
         if let url = holder.profileImageURL {
@@ -188,6 +208,7 @@ private struct HolderRankRow: View {
 
 // MARK: - Positions (static empty state)
 
+/// The static "no positions" placeholder for the Positions tab (real data arrives later).
 private struct PositionsEmptyState: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
@@ -205,8 +226,11 @@ private struct PositionsEmptyState: View {
 
 // MARK: - Activity
 
+/// The activity tab body: renders loading/empty/error or a list of `ActivityTradeRow`s.
 private struct ActivityTabContent: View {
+    /// The activity load state to render.
     let state: LoadState<[ActivityTrade]>
+    /// Retry action for the error state.
     let onRetry: () async -> Void
 
     var body: some View {
@@ -225,7 +249,9 @@ private struct ActivityTabContent: View {
     }
 }
 
+/// One activity trade row: side badge, actor + outcome, and size + relative time.
 private struct ActivityTradeRow: View {
+    /// The trade to render.
     let trade: ActivityTrade
 
     var body: some View {
@@ -254,10 +280,12 @@ private struct ActivityTradeRow: View {
         }
     }
 
+    /// Green for a buy, red for a sell.
     private var sideColor: Color {
         trade.side == .buy ? DSColor.positive : DSColor.negative
     }
 
+    /// The trade size formatted compactly with K/M suffixes.
     private var sizeText: String {
         let value = NSDecimalNumber(decimal: trade.size).doubleValue
         switch value {
@@ -270,7 +298,9 @@ private struct ActivityTradeRow: View {
 
 // MARK: - Shared row helpers
 
+/// A simple muted one-line empty-state row shared by the tabs.
 private struct EmptyRow: View {
+    /// The message to show.
     let text: String
 
     var body: some View {
@@ -284,7 +314,9 @@ private struct EmptyRow: View {
 
 /// Inline retry row — every tab's `.failed` state renders this, never a blank section.
 private struct RetryRow: View {
+    /// The error message to show.
     let message: String
+    /// The retry action.
     let onRetry: () async -> Void
 
     var body: some View {

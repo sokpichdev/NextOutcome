@@ -9,9 +9,14 @@ import SwiftUI
 import MarketsDomain
 import DesignSystem
 
+/// A card summarizing one event: icon, title, the first market's Yes price + probability
+/// bar, and a volume/market-count footer. Used in feed lists.
 public struct EventCard: View {
+    /// The event to render.
     private let event: Event
-    
+
+    /// Creates the card.
+    /// - Parameter event: The event to display.
     public init(event: Event) {
         self.event = event
     }
@@ -57,6 +62,8 @@ public struct EventCard: View {
         }
     }
     
+    /// The event icon, loaded async with a placeholder, or a plain rounded rectangle when
+    /// there's no image URL.
     @ViewBuilder
     private var icon: some View {
         if let url = event.imageURL {

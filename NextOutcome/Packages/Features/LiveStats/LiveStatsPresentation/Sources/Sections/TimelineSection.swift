@@ -9,10 +9,14 @@ import SwiftUI
 import DesignSystem
 import LiveStatsDomain
 
+/// The "Timeline" section: live commentary lines, newest first. Falls back to the
+/// "Not available" row when the feed carries no commentary.
 struct TimelineSection: View {
+    /// The latest match snapshot to read `commentary` from.
     let match: MatchState?
 
     var body: some View {
+        // Newest commentary first.
         let commentary = Array((match?.commentary ?? []).reversed())
         if !commentary.isEmpty {
             VStack(alignment: .leading, spacing: DSLayout.spacing) {

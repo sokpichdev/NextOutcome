@@ -10,8 +10,20 @@ import LiveStatsDomain
 
 /// The chip-nav sections of the Live sub-tab, in display order.
 public enum LiveSection: String, CaseIterable, Sendable {
-    case stats, pitch, lineups, timeline, table, h2h
+    /// Match statistics (shots, corners, cards).
+    case stats
+    /// Pitch view showing approximate ball position.
+    case pitch
+    /// Team lineups and formations.
+    case lineups
+    /// Event/commentary timeline.
+    case timeline
+    /// League table (not populated by the public feed yet).
+    case table
+    /// Head-to-head history (not populated by the public feed yet).
+    case h2h
 
+    /// The human-readable chip label for this section.
     public var title: String {
         switch self {
         case .stats: return "Stats"
@@ -28,11 +40,20 @@ public enum LiveSection: String, CaseIterable, Sendable {
 /// not populate resolve to `.unavailable`, which the UI renders as a "Not available for this
 /// match" row — in-spec degradation, never a blank.
 public enum SectionAvailability: Sendable, Equatable {
+    /// The section has data and should be shown.
     case available
+    /// The feed didn't provide this section's data; show the "Not available" row.
     case unavailable
 }
 
 public extension LiveSection {
+    /// Decides whether this section has anything to show for the given match snapshot.
+    ///
+    /// Each section checks the specific fields it needs (e.g. `stats` needs at least one
+    /// detailed stat; `pitch` needs ball position). `table`/`h2h` are always unavailable
+    /// because the public feed doesn't carry them yet.
+    /// - Parameter state: The current match snapshot, or `nil` if none has loaded.
+    /// - Returns: `.available` or `.unavailable`.
     func availability(in state: MatchState?) -> SectionAvailability {
         guard let state else { return .unavailable }
         switch self {

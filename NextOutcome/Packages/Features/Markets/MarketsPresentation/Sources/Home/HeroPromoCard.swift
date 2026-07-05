@@ -4,9 +4,13 @@ import DesignSystem
 
 /// Large promo tile (e.g. "World Cup Odds & Predictions") with tilted outcome tiles.
 public struct HeroPromoCard: View {
+    /// The event to promote.
     private let event: Event
+    /// Creates the card.
+    /// - Parameter event: The event to display.
     public init(event: Event) { self.event = event }
 
+    /// Up to 5 markets whose icons form the tilted fan.
     private var topMarkets: [Market] { Array(event.markets.prefix(5)) }
 
     public var body: some View {

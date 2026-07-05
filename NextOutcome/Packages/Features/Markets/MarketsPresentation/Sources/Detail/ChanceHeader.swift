@@ -2,8 +2,17 @@ import SwiftUI
 import MarketsDomain
 import DesignSystem
 
-public enum ChanceDirection: Equatable { case up, down, flat }
+/// Which way a chance has moved, used to pick the colour and arrow.
+public enum ChanceDirection: Equatable {
+    /// Chance increased.
+    case up
+    /// Chance decreased.
+    case down
+    /// No change.
+    case flat
+}
 
+/// Formatting helpers for the chance-change indicator.
 public enum ChanceDelta {
     /// Formats a percentage-point change. nil input → nil (hidden). Rounds to a whole percent.
     public static func format(_ deltaPoints: Decimal?) -> (text: String, direction: ChanceDirection)? {
@@ -15,6 +24,7 @@ public enum ChanceDelta {
         return ("0%", .flat)
     }
 
+    /// The colour for a change direction (green up, red down, muted flat).
     static func color(_ direction: ChanceDirection) -> Color {
         switch direction {
         case .up: return DSColor.positive
@@ -26,10 +36,18 @@ public enum ChanceDelta {
 
 /// The big "60% chance ▲ 9%" block on a market detail screen.
 public struct ChanceHeader: View {
+    /// The current chance as a 0…1 fraction.
     private let chanceFraction: Decimal
+    /// The recent change in percentage points, or `nil` to hide the indicator.
     private let deltaPoints: Decimal?
+    /// The colour of the leading "% chance" text.
     private let leadingColor: Color
 
+    /// Creates the header.
+    /// - Parameters:
+    ///   - chanceFraction: The current chance (0…1).
+    ///   - deltaPoints: The recent change in points, or `nil` to hide it.
+    ///   - leadingColor: The colour of the main percentage. Defaults to the accent colour.
     public init(chanceFraction: Decimal, deltaPoints: Decimal?, leadingColor: Color = DSColor.accent) {
         self.chanceFraction = chanceFraction
         self.deltaPoints = deltaPoints

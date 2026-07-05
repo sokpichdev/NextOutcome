@@ -23,5 +23,8 @@ public protocol OrderbookRepository: Sendable {
 /// Realtime port: a reconnecting stream of normalized book events for one token.
 /// The concrete socket lives in the Data layer; Domain only sees this protocol.
 public protocol MarketStreaming: Sendable {
+    /// Opens a reconnecting stream of normalized book events for one token.
+    /// - Parameter assetID: The token to subscribe to.
+    /// - Returns: An async stream of `OrderBookEvent`s to feed into the reducer.
     func events(assetID: String) -> AsyncStream<OrderBookEvent>
 }

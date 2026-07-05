@@ -9,10 +9,18 @@ import SwiftUI
 import MarketsDomain
 import DesignSystem
 
+/// The main markets feed screen: secondary filter row, optional trending chips, and an
+/// infinitely-scrolling list of `HomeCard`s, with navigation to event/market detail.
 public struct EventListView: View {
+    /// The view model driving the feed.
     @State private var viewModel: EventListViewModel
+    /// The category selected in the shell rail, applied to the view model.
     private let selectedCategory: ShellCategory
 
+    /// Creates the view.
+    /// - Parameters:
+    ///   - viewModel: The event-list view model.
+    ///   - selectedCategory: The initial rail category. Defaults to trending.
     public init(viewModel: EventListViewModel, selectedCategory: ShellCategory = .trending) {
         self._viewModel = State(initialValue: viewModel)
         self.selectedCategory = selectedCategory
@@ -42,6 +50,7 @@ public struct EventListView: View {
         .onChange(of: selectedCategory) { _, new in Task { await viewModel.apply(category: new) } }
     }
 
+    /// Switches on the view model's state to show loading/empty/error states or the feed.
     @ViewBuilder
     private var content: some View {
         switch viewModel.state {
@@ -52,6 +61,8 @@ public struct EventListView: View {
         }
     }
 
+    /// The scrolling list of cards. The last row triggers `loadMore()` for infinite scroll,
+    /// and the whole list supports pull-to-refresh.
     private var feed: some View {
         ScrollView {
             LazyVStack(spacing: DSLayout.spacing) {

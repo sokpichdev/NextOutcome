@@ -12,6 +12,7 @@ import DesignSystem
 /// that control stretches segments to equal widths, while this row hugs its labels and
 /// scrolls if it must.
 struct WorldCupTabBar: View {
+    /// The selected sub-tab (two-way bound).
     @Binding var selection: WorldCupTab
 
     var body: some View {
@@ -25,6 +26,8 @@ struct WorldCupTabBar: View {
         }
     }
 
+    /// Builds one pill button for a tab, highlighted when selected.
+    /// - Parameter tab: The tab this button selects.
     private func tabButton(for tab: WorldCupTab) -> some View {
         let isSelected = selection == tab
         return Button {

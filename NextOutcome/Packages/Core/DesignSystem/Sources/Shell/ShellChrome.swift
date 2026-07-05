@@ -2,13 +2,32 @@ import SwiftUI
 
 /// Wraps a tab-root's scroll content with the persistent top bar + category rail
 /// over the accent-glow background. Market-detail pushes do NOT use this.
+///
+/// This is the standard "frame" used by each top-level tab screen (Home, World
+/// Cup hub, etc.): it stacks the glowing background, the `NOTopBar`, the
+/// `CategoryRail`, a divider, and finally the caller's own scrollable content.
+/// Screens reached by pushing into a detail (e.g. an individual market's page)
+/// skip this wrapper since they don't need the category rail.
 public struct ShellChrome<Content: View>: View {
+    /// The currently selected top-level category, shown highlighted in the
+    /// category rail and shared with the parent to filter content.
     @Binding private var selectedCategory: ShellCategory
+    /// Forwarded to `NOTopBar`'s gift icon action.
     private let onGift: () -> Void
+    /// Forwarded to `NOTopBar`'s bell/notifications icon action.
     private let onBell: () -> Void
+    /// Forwarded to `NOTopBar`'s avatar/account icon action.
     private let onAvatar: () -> Void
+    /// The tab's own scrollable content, rendered below the top bar and category rail.
     private let content: Content
 
+    /// Creates the shell chrome wrapper around a tab's content.
+    /// - Parameters:
+    ///   - selectedCategory: Binding to the active top-level category.
+    ///   - onGift: Action for the gift icon. Defaults to a no-op.
+    ///   - onBell: Action for the bell icon. Defaults to a no-op.
+    ///   - onAvatar: Action for the avatar icon (required — typically opens the account menu/drawer).
+    ///   - content: A view builder producing the tab's main content.
     public init(
         selectedCategory: Binding<ShellCategory>,
         onGift: @escaping () -> Void = {},

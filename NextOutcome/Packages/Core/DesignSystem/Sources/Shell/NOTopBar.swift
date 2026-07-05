@@ -1,11 +1,24 @@
 import SwiftUI
 
 /// Persistent top app bar: NextOutcome wordmark left; gift, bell, avatar-orb right.
+///
+/// Shown at the top of most screens via `ShellChrome`. Provides three tappable
+/// icons on the right (gift/rewards, notifications, account menu) via closures the
+/// caller supplies, so this view stays free of navigation logic — it just reports
+/// "the user tapped X" and lets the parent decide what happens.
 public struct NOTopBar: View {
+    /// Called when the gift/rewards icon is tapped.
     private let onGift: () -> Void
+    /// Called when the bell/notifications icon is tapped.
     private let onBell: () -> Void
+    /// Called when the circular avatar icon is tapped (typically opens the account menu).
     private let onAvatar: () -> Void
 
+    /// Creates the top bar.
+    /// - Parameters:
+    ///   - onGift: Action to run when the gift icon is tapped. Defaults to a no-op.
+    ///   - onBell: Action to run when the bell icon is tapped. Defaults to a no-op.
+    ///   - onAvatar: Action to run when the avatar icon is tapped. Defaults to a no-op.
     public init(
         onGift: @escaping () -> Void = {},
         onBell: @escaping () -> Void = {},
