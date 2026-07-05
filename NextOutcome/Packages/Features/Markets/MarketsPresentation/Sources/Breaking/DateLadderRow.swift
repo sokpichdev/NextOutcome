@@ -10,31 +10,39 @@ import MarketsDomain
 import DesignSystem
 
 /// One row of a Breaking movers "date ladder" detail (e.g. "GPT-5.6 released by…?"): the
-/// deadline date, that market's volume, its headline chance, and a Buy Yes/No pair.
+/// deadline date, that market's volume, its headline chance, and a Buy Yes/No pair. Tapping
+/// the date/volume/chance part pushes that specific date's own `MarketDetailView` (same
+/// Rules/Comments/Top Holders/Positions/Activity treatment, scoped to that one market);
+/// tapping a price button fires `onTrade` directly instead of navigating.
 struct DateLadderRow: View {
     /// The market this row represents (one "by \<date\>" deadline).
     let market: Market
+    /// The parent event id, threaded into the navigation target.
+    let eventID: String
     /// Called with the tapped side when Buy Yes/No is pressed.
     let onTrade: (Side) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(dateLabel)
-                        .font(DSFont.headline)
-                        .foregroundStyle(DSColor.textPrimary)
-                    Text("\(MarketFormatting.compactUSD(market.volume)) Vol.")
-                        .font(DSFont.caption)
-                        .foregroundStyle(DSColor.textSecondary)
-                }
-                Spacer()
-                if let yes = market.yesOutcome {
-                    Text(MarketFormatting.percent(yes.price))
-                        .font(DSFont.title)
-                        .foregroundStyle(DSColor.textPrimary)
+            NavigationLink(value: MarketNavigationTarget(market: market, eventID: eventID)) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(dateLabel)
+                            .font(DSFont.headline)
+                            .foregroundStyle(DSColor.textPrimary)
+                        Text("\(MarketFormatting.compactUSD(market.volume)) Vol.")
+                            .font(DSFont.caption)
+                            .foregroundStyle(DSColor.textSecondary)
+                    }
+                    Spacer()
+                    if let yes = market.yesOutcome {
+                        Text(MarketFormatting.percent(yes.price))
+                            .font(DSFont.title)
+                            .foregroundStyle(DSColor.textPrimary)
+                    }
                 }
             }
+            .buttonStyle(.plain)
             tradeRow
         }
         .padding(.vertical, DSLayout.spacingSmall)
