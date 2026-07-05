@@ -6,13 +6,15 @@ final class MoverRankingTests: XCTestCase {
     private func mover(
         _ id: String,
         eventSlug: String? = nil,
+        question: String? = nil,
         probability: Decimal = 0.5,
         dayChange: Decimal = 0.1,
         volume24h: Decimal = 100
     ) -> Mover {
-        // Defaults each mover to its own event unless a shared slug is passed explicitly,
-        // so ranking-order tests aren't accidentally collapsed by the one-per-event rule.
-        Mover(id: id, question: id, eventSlug: eventSlug ?? "e-\(id)", eventTitle: id, imageURL: nil,
+        // Defaults each mover to its own event and a plain (non-date) question unless
+        // overridden, so ranking-order tests aren't accidentally collapsed by the
+        // one-per-event or one-per-topic rules.
+        Mover(id: id, question: question ?? id, eventSlug: eventSlug ?? "e-\(id)", eventTitle: id, imageURL: nil,
               probability: probability, dayChange: dayChange, volume24h: volume24h)
     }
 
@@ -99,12 +101,11 @@ final class MoverRankingTests: XCTestCase {
         XCTAssertEqual(ranked.map(\.id), ["july7", "other"])
     }
 
-    /// A genuinely distinct event whose question merely *reads* similarly (e.g. a separate
-    /// duplicate-looking market on Polymarket with its own event id) is not collapsed — only
-    /// markets sharing the same event id are, since the detail screen groups by event id.
-    func test_distinctEvents_withSimilarQuestions_areNotCollapsed() {
-        let a = mover("a", eventSlug: "event-a", dayChange: -0.4)
-        let b = mover("b", eventSlug: "event-b", dayChange: -0.3)
+    /// Two events whose questions have unrelated subjects and/or dates are not collapsed —
+    /// only markets sharing the same event id, or the same topic key, are.
+    func test_distinctEvents_withUnrelatedQuestions_areNotCollapsed() {
+        let a = mover("a", eventSlug: "event-a", question: "Will Bitcoin hit $100k?", dayChange: -0.4)
+        let b = mover("b", eventSlug: "event-b", question: "Will Ethereum hit $10k?", dayChange: -0.3)
 
         let ranked = MoverRanking.rank([a, b])
 
@@ -120,5 +121,55 @@ final class MoverRankingTests: XCTestCase {
         let ranked = MoverRanking.rank([lowVol, highVol])
 
         XCTAssertEqual(ranked.map(\.id), ["high-vol"])
+    }
+
+    // MARK: - Cross-event topic collapsing
+
+    /// Regression test for the user-reported bug: Polymarket lists "GPT-5.6 released by
+    /// July 7, 2026?" and "Will GPT-5.6 be released on July 7, 2026?" as two *separate
+    /// events*, so the same-event collapse alone leaves both in the Breaking feed. The
+    /// topic-key pass must collapse them to the single biggest mover even across event ids.
+    func test_collapsesSameTopicAndDate_acrossDifferentEvents() {
+        let a = mover(
+            "a", eventSlug: "gpt-5pt6-released-by",
+            question: "GPT-5.6 released by July 7, 2026?", dayChange: -0.59
+        )
+        let b = mover(
+            "b", eventSlug: "gpt-5pt6-released-on",
+            question: "Will GPT-5.6 be released on July 7, 2026?", dayChange: -0.52
+        )
+
+        let ranked = MoverRanking.rank([a, b])
+
+        XCTAssertEqual(ranked.map(\.id), ["a"])   // "a" has the bigger 24h move
+    }
+
+    /// Same subject, but a different date mentioned — genuinely distinct deadlines, not the
+    /// same story, so both survive.
+    func test_sameSubject_differentDate_acrossDifferentEvents_areNotCollapsed() {
+        let july7 = mover(
+            "july7", eventSlug: "event-a",
+            question: "GPT-5.6 released by July 7, 2026?", dayChange: -0.5
+        )
+        let july8 = mover(
+            "july8", eventSlug: "event-b",
+            question: "GPT-5.6 released by July 8, 2026?", dayChange: -0.4
+        )
+
+        let ranked = MoverRanking.rank([july7, july8])
+
+        XCTAssertEqual(ranked.count, 2)
+    }
+
+    /// Questions with no detectable date fall back to their event id as the topic key, so
+    /// unrelated same-event-less markets never accidentally collapse into each other just for
+    /// lacking a date.
+    func test_noDateInQuestion_fallsBackToEventKey_soUnrelatedMoversSurvive() {
+        let a = mover("a", eventSlug: "event-a", question: "Will Trump speak to Putin?", dayChange: -0.4)
+        let b = mover("b", eventSlug: "event-b", question: "Will Musk step down?", dayChange: -0.3)
+
+        let ranked = MoverRanking.rank([a, b])
+
+        XCTAssertEqual(ranked.count, 2)
     }
 }
