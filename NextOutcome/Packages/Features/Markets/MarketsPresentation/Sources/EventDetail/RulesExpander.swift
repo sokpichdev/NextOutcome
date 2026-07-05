@@ -26,15 +26,19 @@ public struct RulesExpander: View {
     /// The per-market rules listed below the description.
     private let marketRules: [MarketRule]
     /// Whether the block is expanded.
-    @State private var isExpanded = false
+    @State private var isExpanded: Bool
 
     /// Creates the rules expander.
     /// - Parameters:
     ///   - eventDescription: The event-level description, if any.
     ///   - marketRules: The per-market resolution rules.
-    public init(eventDescription: String?, marketRules: [MarketRule]) {
+    ///   - startsExpanded: Whether the block starts expanded. Defaults to `false` (the
+    ///     inline collapsed-by-default look); pass `true` when hosting this in a sheet
+    ///     whose whole purpose is showing the rules.
+    public init(eventDescription: String?, marketRules: [MarketRule], startsExpanded: Bool = false) {
         self.eventDescription = eventDescription
         self.marketRules = marketRules
+        self._isExpanded = State(initialValue: startsExpanded)
     }
 
     /// Whether there's any content to show (otherwise the block renders nothing).
