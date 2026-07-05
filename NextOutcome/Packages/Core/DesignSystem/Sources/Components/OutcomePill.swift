@@ -21,14 +21,15 @@ public struct OutcomePill: View {
     /// Which side of the outcome this pill represents.
     let outcome: Outcome
     /// The value to display alongside the outcome label, typically a formatted
-    /// price or probability (e.g. "62¢").
-    let value: String
+    /// price or probability (e.g. "62¢"). `nil` shows just the "Yes"/"No" label.
+    let value: String?
 
     /// Creates an outcome pill.
     /// - Parameters:
     ///   - outcome: Whether this is the "Yes" or "No" side.
-    ///   - value: The formatted price/value string to display.
-    public init(_ outcome: Outcome, value: String) {
+    ///   - value: The formatted price/value string to display alongside the label, or `nil`
+    ///     to show just "Yes"/"No" (e.g. when the price is already shown elsewhere on the row).
+    public init(_ outcome: Outcome, value: String? = nil) {
         self.outcome = outcome
         self.value = value
     }
@@ -37,8 +38,10 @@ public struct OutcomePill: View {
         HStack(spacing: 4) {
             Text(outcome == .yes ? "Yes" : "No")
                 .font(DSFont.caption.bold())
-            Text(value)
-                .font(DSFont.priceSmall)
+            if let value {
+                Text(value)
+                    .font(DSFont.priceSmall)
+            }
         }
         .foregroundStyle(outcome == .yes ? DSColor.positive : DSColor.negative)
         .padding(.horizontal, 10)
