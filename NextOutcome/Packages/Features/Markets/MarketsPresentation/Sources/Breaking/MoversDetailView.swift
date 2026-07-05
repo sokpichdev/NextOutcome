@@ -10,9 +10,13 @@ import MarketsDomain
 import DesignSystem
 import SharedDomain
 
-/// The bespoke Breaking movers detail: the mover's headline chance + 24h delta, a multi-series
-/// chart of the parent event's sibling outcomes with a timeframe picker and volume line, and a
-/// Buy Yes / Buy No trade row. Reuses `EventChartViewModel` / `MultiSeriesChart` for the chart.
+/// The bespoke Breaking movers detail. Two layouts, per `EventLayoutClassifier`:
+/// - `.chart`: the mover's headline chance + 24h delta, a multi-series chart of the parent
+///   event's sibling outcomes (mutually-exclusive candidates resolving on one date), and a
+///   single Buy Yes/No trade row.
+/// - `.dateLadder`: no single headline chance (the event has no one resolution date to
+///   summarize) — just the total volume line and a scrollable list of per-date rows, each
+///   with its own chance and Buy Yes/No (e.g. "GPT-5.6 released by…?").
 public struct MoversDetailView: View {
     /// The view model, which fetches the parent event and builds the chart.
     @State private var viewModel: MoversDetailViewModel
@@ -31,8 +35,7 @@ public struct MoversDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSLayout.spacingLarge) {
                 header
-                chartSection
-                tradeRow
+                content
             }
             .padding(.horizontal, DSLayout.margin)
             .padding(.top, DSLayout.spacing)
@@ -45,7 +48,8 @@ public struct MoversDetailView: View {
         .task { await viewModel.load() }
     }
 
-    /// The mover headline: category breadcrumb, question, big chance, and coloured 24h delta.
+    /// Category breadcrumb + question title. The headline chance/delta only apply to `.chart`
+    /// events (a date-ladder has no single resolution date to summarize a chance against).
     private var header: some View {
         VStack(alignment: .leading, spacing: DSLayout.spacingXSmall) {
             if !viewModel.categoryBreadcrumb.isEmpty {
@@ -56,14 +60,47 @@ public struct MoversDetailView: View {
             Text(viewModel.mover.question)
                 .font(DSFont.headline)
                 .foregroundStyle(DSColor.textPrimary)
-            HStack(alignment: .firstTextBaseline, spacing: DSLayout.spacingSmall) {
-                Text(MarketFormatting.percent(viewModel.mover.probability))
-                    .font(DSFont.largeTitle)
-                    .foregroundStyle(DSColor.textPrimary)
-                delta
+            if viewModel.layout == .chart {
+                HStack(alignment: .firstTextBaseline, spacing: DSLayout.spacingSmall) {
+                    Text(MarketFormatting.percent(viewModel.mover.probability))
+                        .font(DSFont.largeTitle)
+                        .foregroundStyle(DSColor.textPrimary)
+                    delta
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The chart-and-trade-row body for `.chart` events, or the volume line + date rows for
+    /// `.dateLadder` events, switching once the event has loaded (defaults to the chart's own
+    /// loading placeholder beforehand).
+    @ViewBuilder
+    private var content: some View {
+        if viewModel.layout == .dateLadder {
+            dateLadderSection
+        } else {
+            chartSection
+            tradeRow
+        }
+    }
+
+    /// The date-ladder body: the event's total volume, then one row per unresolved deadline.
+    private var dateLadderSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(volumeText)
+                .font(DSFont.caption)
+                .foregroundStyle(DSColor.textSecondary)
+                .padding(.bottom, DSLayout.spacingSmall)
+            ForEach(Array(viewModel.dateLadderMarkets.enumerated()), id: \.element.id) { index, market in
+                DateLadderRow(market: market) { side in
+                    tradeContext = TradeSheetContext(market: market, side: side)
+                }
+                if index < viewModel.dateLadderMarkets.count - 1 {
+                    Divider().overlay(DSColor.separator)
+                }
+            }
+        }
     }
 
     /// The 24h delta chip beside the headline chance.
