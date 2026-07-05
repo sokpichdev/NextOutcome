@@ -53,8 +53,6 @@ public struct EventDetailView: View {
     private let event: Event
     /// Callback fired when a price button is tapped (also opens the trade sheet).
     private let onSelect: (Market, Side) -> Void
-    /// Dismisses this screen.
-    @Environment(\.dismiss) private var dismiss
     /// Supplies chart price-history data.
     @Environment(\.priceHistoryProvider) private var priceHistoryProvider
     /// Factory for the social strip view model.
@@ -116,8 +114,6 @@ public struct EventDetailView: View {
         ZStack(alignment: .top) {
             ScrollView {
                 VStack(alignment: .leading, spacing: DSLayout.spacing) {
-                    DetailHeader(title: .breadcrumb(breadcrumb), actions: [.rules, .discuss, .bookmark, .link],
-                                 onBack: { dismiss() }, onAction: handleHeaderAction)
                     header
 
                     if showsLive {
@@ -146,9 +142,7 @@ public struct EventDetailView: View {
             }
             .coordinateSpace(name: "eventDetailScroll")
             .background(DSColor.background)
-            #if os(iOS)
-            .toolbar(.hidden, for: .navigationBar)
-            #endif
+            .detailToolbar(title: breadcrumb, actions: [.rules, .discuss, .bookmark, .link], onAction: handleHeaderAction)
             .task(id: event.id) {
                 guard let provider = priceHistoryProvider else { return }
                 let vm = EventChartViewModel(event: event, provider: provider)
@@ -204,9 +198,9 @@ public struct EventDetailView: View {
         }
     }
 
-    /// Routes a `DetailHeader` trailing-action tap: Rules/Comments open their bottom
-    /// sheets; bookmark/link/embed are no-ops for now (unchanged from before).
-    private func handleHeaderAction(_ action: DetailHeaderActions) {
+    /// Routes a toolbar trailing-action tap: Rules/Comments open their bottom sheets;
+    /// bookmark/link/embed are no-ops for now (unchanged from before).
+    private func handleHeaderAction(_ action: DetailToolbarActions) {
         if action.contains(.rules) { showsRulesSheet = true }
         if action.contains(.discuss) { showsDiscussSheet = true }
     }

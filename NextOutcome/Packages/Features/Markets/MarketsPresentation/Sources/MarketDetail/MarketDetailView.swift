@@ -40,8 +40,6 @@ public struct MarketDetailView: View {
     @Environment(\.socialStripFactory) private var socialStripFactory
     /// The (simulated) trade submitter for the trade sheet.
     @Environment(\.tradeSubmitter) private var tradeSubmitter
-    /// Dismisses this screen (back button).
-    @Environment(\.dismiss) private var dismiss
     /// The selected segment of the mock portfolio section.
     @State private var portfolioSegment = 0
     /// Task 8's mock trade sheet, opened from the Yes/No buttons next to the order book.
@@ -65,11 +63,6 @@ public struct MarketDetailView: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSLayout.spacingLarge) {
-                DetailHeader(
-                    title: .text(market.question, iconURL: market.imageURL),
-                    actions: [.code, .bookmark, .link],
-                    onBack: { dismiss() }
-                )
                 chanceHeader
                 tradeRow
                 liveSection
@@ -82,9 +75,7 @@ public struct MarketDetailView: View {
             .padding(.top, DSLayout.spacing)
         }
         .background(DSColor.background)
-        #if os(iOS)
-        .toolbar(.hidden, for: .navigationBar)
-        #endif
+        .detailToolbar(title: market.question, iconURL: market.imageURL, actions: [.code, .bookmark, .link])
         .sheet(item: $tradeContext) { context in
             TradeSheet(viewModel: TradeSheetViewModel(market: context.market, side: context.side, submitter: tradeSubmitter))
         }
