@@ -47,6 +47,7 @@ final class MarketDecodingTests: XCTestCase {
           "outcomePrices": "[\\"0.62\\", \\"0.38\\"]",
           "clobTokenIds": "[\\"t1\\", \\"t2\\"]",
           "volume": "4200.00",
+          "endDate": "2024-05-13T00:00:00Z",
           "endDateIso": "2024-05-13",
           "closed": false
         }
@@ -61,6 +62,26 @@ final class MarketDecodingTests: XCTestCase {
         XCTAssertEqual(dto.clobTokenIds, ["t1", "t2"])
         XCTAssertEqual(dto.volume, Decimal(string: "4200.00"))
         XCTAssertEqual(dto.liquidity, 0)   // absent → tolerant default
+    }
+
+    /// Regression test: Gamma's `endDateIso` key is a bare `"yyyy-MM-dd"` date with no time
+    /// component, which `DateParsing` can't parse (nil `Market.endDate` for every market broke
+    /// `EventLayoutClassifier`'s date-ladder detection). The full ISO8601 timestamp lives under
+    /// the `endDate` key instead, and that's what must be decoded and end up parseable.
+    func test_marketDTO_readsEndDate_fromTheFullTimestampKey_notTheDateOnlyIsoKey() throws {
+        let json = """
+        {
+          "id": "abc", "question": "Q", "slug": "q",
+          "endDate": "2026-07-07T00:00:00Z",
+          "endDateIso": "2026-07-07"
+        }
+        """.data(using: .utf8)!
+
+        let dto = try JSONDecoder.polymarket.decode(MarketDTO.self, from: json)
+        let market = MarketMapper.market(from: dto)
+
+        XCTAssertEqual(dto.endDate, "2026-07-07T00:00:00Z")
+        XCTAssertNotNil(market.endDate)   // must actually parse, not silently stay nil
     }
 
     func test_marketDTO_toleratesMissingArrays() throws {

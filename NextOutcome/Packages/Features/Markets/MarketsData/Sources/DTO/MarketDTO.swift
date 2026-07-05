@@ -31,8 +31,10 @@ struct MarketDTO: Decodable {
     let volume: Decimal
     /// Available liquidity.
     let liquidity: Decimal
-    /// The close date as an ISO string, if present.
-    let endDateIso: String?
+    /// The close date as a full ISO8601 timestamp, if present. Decoded from the wire's
+    /// `endDate` key — Gamma's `endDateIso` key is a bare `"yyyy-MM-dd"` date with no time
+    /// component, which `DateParsing` can't parse (it only accepts full timestamps).
+    let endDate: String?
     /// Whether the market is closed/resolved.
     let closed: Bool
     /// Gamma's tradeable flag. `false` for undetermined placeholder slots
@@ -49,7 +51,7 @@ struct MarketDTO: Decodable {
     /// JSON keys for `MarketDTO`.
     enum CodingKeys: String, CodingKey {
         case id, conditionId, question, slug, outcomes, outcomePrices, clobTokenIds
-        case volume, liquidity, endDateIso, closed, active, image
+        case volume, liquidity, endDate, closed, active, image
         case sportsMarketType, groupItemTitle, description
     }
 
@@ -66,7 +68,7 @@ struct MarketDTO: Decodable {
         clobTokenIds = DTODecoding.stringArray(c, .clobTokenIds)
         volume = DTODecoding.decimal(c, .volume)
         liquidity = DTODecoding.decimal(c, .liquidity)
-        endDateIso = try? c.decode(String.self, forKey: .endDateIso)
+        endDate = try? c.decode(String.self, forKey: .endDate)
         closed = (try? c.decode(Bool.self, forKey: .closed)) ?? false
         // Default to tradeable when absent so we never hide a real market on a missing
         // field; placeholders explicitly send `active: false`.
