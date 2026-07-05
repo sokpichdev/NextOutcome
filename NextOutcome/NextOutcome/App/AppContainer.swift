@@ -74,6 +74,12 @@ final class AppContainer {
         BreakingViewModel(fetchMovers: FetchMoversUseCase(repository: repository))
     }
 
+    /// Builds the view model for the Politics hub (2026 Midterms).
+    /// - Returns: A view model wired to fetch the midterms + referendums tags.
+    func makePoliticsHubViewModel() -> PoliticsHubViewModel {
+        PoliticsHubViewModel(fetchAllEvents: FetchAllEventsUseCase(repository: repository))
+    }
+
     /// A factory for the bespoke movers detail screen. It builds the detail view model when a
     /// mover row is tapped, wiring in the parent-event fetch and the social-strip factory (for
     /// Comments/Top Holders/Positions/Activity) — built synchronously in `load()` rather than
