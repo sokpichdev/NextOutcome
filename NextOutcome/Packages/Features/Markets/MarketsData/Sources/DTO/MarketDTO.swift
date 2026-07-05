@@ -24,6 +24,9 @@ struct MarketDTO: Decodable {
     let liquidity: Decimal
     let endDateIso: String?
     let closed: Bool
+    /// Gamma's tradeable flag. `false` for undetermined placeholder slots
+    /// (e.g. "Team AG" World Cup qualifiers) that have no prices/liquidity yet.
+    let active: Bool
     let image: String?
     /// Sports section hint, e.g. "moneyline" / "spreads" / "totals". Absent for non-sports markets.
     let sportsMarketType: String?
@@ -34,7 +37,7 @@ struct MarketDTO: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case id, conditionId, question, slug, outcomes, outcomePrices, clobTokenIds
-        case volume, liquidity, endDateIso, closed, image
+        case volume, liquidity, endDateIso, closed, active, image
         case sportsMarketType, groupItemTitle, description
     }
 
@@ -51,6 +54,9 @@ struct MarketDTO: Decodable {
         liquidity = DTODecoding.decimal(c, .liquidity)
         endDateIso = try? c.decode(String.self, forKey: .endDateIso)
         closed = (try? c.decode(Bool.self, forKey: .closed)) ?? false
+        // Default to tradeable when absent so we never hide a real market on a missing
+        // field; placeholders explicitly send `active: false`.
+        active = (try? c.decode(Bool.self, forKey: .active)) ?? true
         image = try? c.decode(String.self, forKey: .image)
         sportsMarketType = try? c.decode(String.self, forKey: .sportsMarketType)
         groupItemTitle = try? c.decode(String.self, forKey: .groupItemTitle)

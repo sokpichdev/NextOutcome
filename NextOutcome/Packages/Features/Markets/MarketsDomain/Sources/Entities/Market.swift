@@ -18,6 +18,9 @@ public struct Market: Identifiable, Hashable {
     public let liquidity: Decimal
     public let endDate: Date?
     public let isResolved: Bool
+    /// Tradeable per Gamma's `active` flag. `false` for undetermined placeholder outcomes
+    /// (e.g. not-yet-qualified "Team AG" slots) that carry no prices and shouldn't be listed.
+    public let isActive: Bool
     public let imageURL: URL?
     /// Sports section hint from Gamma, e.g. "moneyline" / "spreads" / "totals". Absent for non-sports markets.
     public let sportsMarketType: String?
@@ -36,6 +39,7 @@ public struct Market: Identifiable, Hashable {
         liquidity: Decimal,
         endDate: Date?,
         isResolved: Bool,
+        isActive: Bool = true,
         imageURL: URL?,
         sportsMarketType: String? = nil,
         groupItemTitle: String? = nil,
@@ -50,6 +54,7 @@ public struct Market: Identifiable, Hashable {
         self.liquidity = liquidity
         self.endDate = endDate
         self.isResolved = isResolved
+        self.isActive = isActive
         self.imageURL = imageURL
         self.sportsMarketType = sportsMarketType
         self.groupItemTitle = groupItemTitle

@@ -39,7 +39,7 @@ public final class TradeSheetViewModel {
     public let successCaption = "Simulated — trading arrives with funding"
 
     public let market: Market
-    public let side: Side
+    public private(set) var side: Side
     private let submitter: TradeSubmitting
 
     public init(market: Market, side: Side, submitter: TradeSubmitting) {
@@ -83,6 +83,21 @@ public final class TradeSheetViewModel {
     /// Confirm is always enabled per the design — this is a mock sheet, not a real
     /// order form. Kept as a computed property so the view has a single source of truth.
     public var isConfirmEnabled: Bool { phase == .entering }
+
+    /// Switch the traded side (Yes/No) from inside the sheet. `outcomeTitle`,
+    /// `priceCents`, and `potential` all derive from `side`, so the payout updates.
+    public func setSide(_ newSide: Side) {
+        guard phase == .entering else { return }
+        side = newSide
+    }
+
+    /// Quick-add a whole-dollar amount from the +$1/+$5/+$10/+$100 chips.
+    public func addAmount(_ dollars: Int) {
+        guard phase == .entering else { return }
+        let next = amountCents + dollars * 100
+        guard next <= 100_000_00 else { return }
+        amountCents = next
+    }
 
     public func appendDigit(_ digit: Int) {
         guard phase == .entering else { return }

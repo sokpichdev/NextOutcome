@@ -21,6 +21,14 @@ public struct EventListView: View {
     public var body: some View {
         VStack(spacing: 0) {
             SecondaryFilterRow(viewModel: viewModel)
+            // Outside `content` so the row stays visible while a chip re-query is loading.
+            if viewModel.showsTrendingChips {
+                TrendingChipRow(
+                    chips: viewModel.trendingChips,
+                    selectedTagID: viewModel.selectedTrendingTagID,
+                    onSelect: { id in Task { await viewModel.selectTrendingChip(tagID: id) } }
+                )
+            }
             content
         }
         .background(DSColor.background)
@@ -28,7 +36,9 @@ public struct EventListView: View {
         .navigationDestination(for: MarketNavigationTarget.self) {
             MarketDetailView(market: $0.market, eventID: $0.eventID)
         }
-        .task { if case .idle = viewModel.state { await viewModel.load() } }
+        // `apply` is idempotent and loads on first appearance; it also resyncs the VM when
+        // the view remounts with a different category (e.g. returning from the hub).
+        .task { await viewModel.apply(category: selectedCategory) }
         .onChange(of: selectedCategory) { _, new in Task { await viewModel.apply(category: new) } }
     }
 

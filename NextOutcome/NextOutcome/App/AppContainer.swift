@@ -42,6 +42,17 @@ final class AppContainer {
         )
     }
 
+    func makeWorldCupHubViewModel() -> WorldCupHubViewModel {
+        WorldCupHubViewModel(
+            fetchSeriesEvents: FetchSeriesEventsUseCase(repository: repository),
+            fetchGameResults: FetchGameResultsUseCase(repository: repository),
+            fetchEvents: FetchEventsUseCase(repository: repository),
+            fetchEvent: FetchEventUseCase(repository: repository),
+            fetchTeams: FetchTeamsUseCase(repository: repository),
+            fetchCompleted: FetchCompletedEventsUseCase(repository: repository)
+        )
+    }
+
     func makeSearchViewModel() -> SearchViewModel {
         SearchViewModel(searchMarkets: SearchMarketsUseCase(repository: repository))
     }

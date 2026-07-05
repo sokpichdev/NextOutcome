@@ -48,7 +48,7 @@ public final class EventChartViewModel {
                         let fallback = points.isEmpty
                             ? [PricePoint(date: Date(), price: NSDecimalNumber(decimal: yes.price).doubleValue)]
                             : points
-                        return (index, PriceSeries(id: market.id, label: market.question,
+                        return (index, PriceSeries(id: market.id, label: market.groupItemTitle ?? market.question,
                                                    color: OutcomePalette.color(index), points: fallback))
                     }
                 }
