@@ -16,6 +16,9 @@ public protocol MarketRepository: Sendable {
     func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod) async throws -> Page<Event>
     /// All events of a Gamma series (e.g. a tournament). Bounded, unpaginated.
     func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event]
+    /// All events under a Gamma tag (e.g. the "midterms" tag). Bounded, unpaginated — for hub
+    /// screens (like Politics) that need the full set at once rather than a scrolling page.
+    func fetchAllEvents(tagID: String, status: EventStatus) async throws -> [Event]
     /// Live/final scores for game events, keyed by event id. Missing ids are simply absent.
     func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult]
     /// Team reference data (name, logo, colour) for a sports league, e.g. "fifwc".
@@ -52,6 +55,7 @@ public extension MarketRepository {
     /// repository overrides these.
     func fetchTeams(league: String) async throws -> [GameTeam] { [] }
     func fetchCompletedEvents(seriesID: String, limit: Int) async throws -> [Event] { [] }
+    func fetchAllEvents(tagID: String, status: EventStatus) async throws -> [Event] { [] }
     func searchEvents(query: String) async throws -> [Event] { [] }
     func commenterPositions(proxyWallet: String, eventID: String) async throws -> [CommentHolding] { [] }
     func movers(tagID: String?) async throws -> [Mover] { [] }

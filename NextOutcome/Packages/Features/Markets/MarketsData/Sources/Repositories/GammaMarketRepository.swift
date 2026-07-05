@@ -160,6 +160,19 @@ public struct GammaMarketRepository: MarketRepository {
         return all.map { $0.toDomain() }
     }
 
+    /// Fetches all events under a tag (e.g. the Politics hub's "midterms" tag), walking up to
+    /// 5 pages of 100 — bounded like `fetchEvents(seriesID:status:)`, but keyed by tag instead.
+    public func fetchAllEvents(tagID: String, status: EventStatus) async throws -> [Event] {
+        var all: [EventDTO] = []
+        for page in 0..<5 {
+            let query = GammaEventQuery.tagParams(tagID: tagID, offset: page * 100, status: status)
+            let dtos: [EventDTO] = try await client.fetch(Endpoint(host: .gamma, path: "/events", query: query))
+            all += dtos
+            if dtos.count < 100 { break }
+        }
+        return all.map(MarketMapper.event(from:))
+    }
+
     /// Fetches live/final results for a batch of events, one request per id with a bounded
     /// concurrency of 8 (a sliding window), skipping ids that fail or return nothing.
     public func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] {
@@ -273,6 +286,20 @@ public enum GammaEventQuery {
     public static func seriesParams(seriesID: String, offset: Int, status: EventStatus) -> [String: String] {
         var query: [String: String] = [
             "series_id": seriesID,
+            "limit": "100",
+            "offset": "\(offset)",
+        ]
+        if status == .active {
+            query["closed"] = "false"
+        }
+        return query
+    }
+
+    /// Params for fetching all events under a tag (e.g. Politics hub's "midterms" tag) in
+    /// bounded 100-item pages.
+    public static func tagParams(tagID: String, offset: Int, status: EventStatus) -> [String: String] {
+        var query: [String: String] = [
+            "tag_id": tagID,
             "limit": "100",
             "offset": "\(offset)",
         ]
