@@ -48,6 +48,26 @@ enum MarketMapper {
         Tag(id: dto.id, label: dto.label, slug: dto.slug)
     }
 
+    /// Maps a `MoverDTO` to a domain `Mover`, resolving the current probability (first outcome
+    /// price, falling back to the last trade) and pulling the parent event's slug/title/icon.
+    /// - Parameter dto: The decoded `/markets` row.
+    /// - Returns: The domain mover.
+    static func mover(from dto: MoverDTO) -> Mover {
+        let parent = dto.events.first
+        let probability = dto.outcomePrices.first ?? dto.lastTradePrice ?? 0
+        let imageString = parent?.image ?? parent?.icon ?? dto.image ?? dto.icon
+        return Mover(
+            id: dto.id,
+            question: dto.question,
+            eventSlug: parent?.slug ?? "",
+            eventTitle: parent?.title ?? dto.question,
+            imageURL: imageString.flatMap(URL.init(string:)),
+            probability: probability,
+            dayChange: dto.oneDayPriceChange,
+            volume24h: dto.volume24hr
+        )
+    }
+
     /// Flattens the grouped holder DTOs into a single list of domain `Holder`s, sorted by
     /// shares held (largest first).
     /// - Parameter groups: The per-outcome holder groups.

@@ -25,6 +25,9 @@ public protocol MarketRepository: Sendable {
     func fetchCompletedEvents(seriesID: String, limit: Int) async throws -> [Event]
     /// Fetches one page of individual markets.
     func fetchMarkets(cursor: String?) async throws -> Page<Market>
+    /// Fetches the biggest 24h market movers for the Breaking feed, optionally scoped to a
+    /// category tag, ranked by the magnitude of their 24h probability move.
+    func movers(tagID: String?) async throws -> [Mover]
     /// Fetches a single event by its URL slug.
     func fetchEvent(slug: String) async throws -> Event
     /// Full-text searches markets by query string.
@@ -51,4 +54,5 @@ public extension MarketRepository {
     func fetchCompletedEvents(seriesID: String, limit: Int) async throws -> [Event] { [] }
     func searchEvents(query: String) async throws -> [Event] { [] }
     func commenterPositions(proxyWallet: String, eventID: String) async throws -> [CommentHolding] { [] }
+    func movers(tagID: String?) async throws -> [Mover] { [] }
 }
