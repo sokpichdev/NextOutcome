@@ -19,6 +19,10 @@ public struct PoliticsHubView: View {
     @Environment(\.tradeSubmitter) private var tradeSubmitter
     /// The context that presents the mock trade sheet, when a Trade button is tapped.
     @State private var tradeContext: TradeSheetContext?
+    /// The currently-shown card in the Referendums carousel.
+    @State private var referendumIndex = 0
+    /// The currently-shown card in the Biggest-races carousel.
+    @State private var biggestRaceIndex = 0
 
     /// Creates the view.
     /// - Parameter viewModel: The Politics hub view model.
@@ -57,6 +61,48 @@ public struct PoliticsHubView: View {
             searchBar
             chamberTabs
             racesList
+            referendumsSection
+            biggestRacesSection
+        }
+    }
+
+    // MARK: - Carousels
+
+    /// "Referendums — top issue markets": a swipeable carousel of ballot-measure cards.
+    @ViewBuilder
+    private var referendumsSection: some View {
+        if !viewModel.referendums.isEmpty {
+            VStack(alignment: .leading, spacing: DSLayout.spacing) {
+                sectionHeading("Referendums", subtitle: "top issue markets")
+                CardCarousel(count: viewModel.referendums.count, index: $referendumIndex) { index in
+                    MiniMarketCard(event: viewModel.referendums[index]) { market, side in
+                        tradeContext = TradeSheetContext(market: market, side: side)
+                    }
+                }
+            }
+        }
+    }
+
+    /// "Biggest races — most pivotal markets": a swipeable carousel of the highest-volume races.
+    @ViewBuilder
+    private var biggestRacesSection: some View {
+        if !viewModel.biggestRaces.isEmpty {
+            VStack(alignment: .leading, spacing: DSLayout.spacing) {
+                sectionHeading("Biggest races", subtitle: "most pivotal markets")
+                CardCarousel(count: viewModel.biggestRaces.count, index: $biggestRaceIndex) { index in
+                    MiniMarketCard(event: viewModel.biggestRaces[index]) { market, side in
+                        tradeContext = TradeSheetContext(market: market, side: side)
+                    }
+                }
+            }
+        }
+    }
+
+    /// A two-line section heading: a bold title and a muted subtitle beneath it.
+    private func sectionHeading(_ title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title).font(DSFont.title).foregroundStyle(DSColor.textPrimary)
+            Text(subtitle).font(DSFont.title).foregroundStyle(DSColor.textSecondary)
         }
     }
 

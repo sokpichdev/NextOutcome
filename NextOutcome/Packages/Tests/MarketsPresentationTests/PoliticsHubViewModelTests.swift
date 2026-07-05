@@ -4,8 +4,8 @@ import SharedDomain
 @testable import MarketsPresentation
 
 final class PoliticsHubViewModelTests: XCTestCase {
-    private func event(_ id: String, title: String, slug: String) -> Event {
-        Event(id: id, title: title, slug: slug, markets: [], volume: 0, imageURL: nil)
+    private func event(_ id: String, title: String, slug: String, volume: Decimal = 0) -> Event {
+        Event(id: id, title: title, slug: slug, markets: [], volume: volume, imageURL: nil)
     }
 
     @MainActor
@@ -105,6 +105,20 @@ final class PoliticsHubViewModelTests: XCTestCase {
 
         vm.searchQuery = ""
         XCTAssertEqual(vm.filteredRaces.count, 2)
+    }
+
+    @MainActor
+    func test_biggestRaces_sortsByVolumeDescending_andLimitsTo10() async {
+        let manyRaces = (0..<15).map { i in
+            event("\(i)", title: "State\(i) Senate Election Winner", slug: "s\(i)", volume: Decimal(i))
+        }
+        let vm = makeVM(midterms: manyRaces)
+        await vm.loadIfNeeded()
+
+        let biggest = vm.biggestRaces
+        XCTAssertEqual(biggest.count, 10)
+        XCTAssertEqual(biggest.first?.id, "14")   // highest volume (14) first
+        XCTAssertEqual(biggest.last?.id, "5")     // 10th highest volume
     }
 
     @MainActor

@@ -116,6 +116,11 @@ public final class PoliticsHubViewModel {
             .sorted { $0.title < $1.title }
     }
 
+    /// The top races by volume — "Biggest races: most pivotal markets".
+    public var biggestRaces: [Event] {
+        Array(races.sorted { $0.volume > $1.volume }.prefix(10))
+    }
+
     /// The number of loaded races in a given chamber, for the tab labels (e.g. "Senate 35").
     public func raceCount(for chamber: Chamber) -> Int {
         races.reduce(into: 0) { count, event in
