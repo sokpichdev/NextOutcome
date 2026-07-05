@@ -11,6 +11,7 @@ import DesignSystem
 /// The hub's Map tab: a rotating, draggable globe with each nation's win % pill anchored to
 /// its coordinates.
 struct MapView: View {
+    /// The country pills to place on the globe.
     let countries: [GlobeCountry]
 
     var body: some View {
@@ -39,12 +40,16 @@ import UIKit
 /// pill nodes (flag colour dot + "ABBR %") anchored on the surface. Pills on the far side are
 /// occluded by the sphere via the depth buffer.
 struct GlobeSceneView: UIViewRepresentable {
+    /// The country pills to render on the sphere.
     let countries: [GlobeCountry]
 
+    /// The sphere radius in scene units.
     private static let radius: CGFloat = 1.5
 
+    /// Creates the coordinator that owns pan-gesture state.
     func makeCoordinator() -> Coordinator { Coordinator() }
 
+    /// Builds the `SCNView`, its scene, camera, auto-rotation, and pan gesture.
     func makeUIView(context: Context) -> SCNView {
         let view = SCNView()
         view.backgroundColor = .clear
@@ -59,6 +64,7 @@ struct GlobeSceneView: UIViewRepresentable {
         return view
     }
 
+    /// Rebuilds the pill nodes only when the set of countries changes (tracked by signature).
     func updateUIView(_ view: SCNView, context: Context) {
         guard let globe = view.scene?.rootNode.childNode(withName: "globe", recursively: false) else { return }
         context.coordinator.globe = globe
@@ -72,6 +78,7 @@ struct GlobeSceneView: UIViewRepresentable {
 
     // MARK: scene
 
+    /// Builds the scene: camera (with bloom) and the tilted, auto-rotating globe node.
     private func makeScene() -> SCNScene {
         let scene = SCNScene()
 
@@ -96,6 +103,7 @@ struct GlobeSceneView: UIViewRepresentable {
         return scene
     }
 
+    /// Builds the sphere geometry with the dotted-glow emission texture.
     private func makeGlobeGeometry() -> SCNSphere {
         let sphere = SCNSphere(radius: Self.radius)
         sphere.segmentCount = 96
@@ -109,6 +117,8 @@ struct GlobeSceneView: UIViewRepresentable {
     }
 
     /// A dark texture speckled with glowing blue dots — the "dotted globe" look.
+    /// - Parameter size: The texture width in pixels (height is half).
+    /// - Returns: The dotted globe emission texture.
     private static func dotTexture(size: Int = 1024) -> UIImage {
         let s = CGSize(width: size, height: size / 2)
         return UIGraphicsImageRenderer(size: s).image { ctx in
@@ -131,6 +141,7 @@ struct GlobeSceneView: UIViewRepresentable {
 
     // MARK: pills
 
+    /// Builds a container node holding one billboarded pill per country, placed on the surface.
     private func makePills() -> SCNNode {
         let container = SCNNode()
         container.name = "pills"
@@ -143,6 +154,12 @@ struct GlobeSceneView: UIViewRepresentable {
         return container
     }
 
+    /// Converts latitude/longitude to a 3D point on (or just above) the sphere surface.
+    /// - Parameters:
+    ///   - lat: Latitude in degrees.
+    ///   - lon: Longitude in degrees.
+    ///   - scale: A radius multiplier (>1 lifts the pill slightly off the surface).
+    /// - Returns: The scene-space position.
     private func surfacePosition(lat: Double, lon: Double, scale: Float) -> SCNVector3 {
         let r = Float(Self.radius) * scale
         let phi = Float(lat * .pi / 180)
@@ -154,6 +171,7 @@ struct GlobeSceneView: UIViewRepresentable {
         )
     }
 
+    /// Builds a textured plane displaying a country's pill image, sized to the image aspect.
     private func pillPlane(for country: GlobeCountry) -> SCNPlane {
         let image = Self.pillImage(for: country)
         let aspect = image.size.width / max(image.size.height, 1)
@@ -167,6 +185,7 @@ struct GlobeSceneView: UIViewRepresentable {
         return plane
     }
 
+    /// Renders a country's pill (coloured dot + "ABBR %") into an image for the plane texture.
     private static func pillImage(for country: GlobeCountry) -> UIImage {
         let text = "\(country.abbreviation)  \(country.caption)"
         let font = UIFont.systemFont(ofSize: 34, weight: .bold)
@@ -194,11 +213,18 @@ struct GlobeSceneView: UIViewRepresentable {
         }
     }
 
+    /// Owns the pan-gesture handling and remembers the current pill set so `updateUIView`
+    /// can skip needless rebuilds.
     final class Coordinator: NSObject {
+        /// The globe node being rotated (weak to avoid a retain cycle).
         weak var globe: SCNNode?
+        /// A signature of the current country set, to detect changes.
         var pillSignature = ""
+        /// The globe's orientation when a drag began.
         private var startAngles: SCNVector3?
 
+        /// Handles the drag gesture: pauses auto-rotation, rotates with the finger, then
+        /// resumes the slow spin when the drag ends.
         @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
             guard let globe else { return }
             switch gesture.state {
@@ -225,6 +251,7 @@ struct GlobeSceneView: UIViewRepresentable {
 }
 
 private extension UIColor {
+    /// Creates a colour from a 6-digit hex string (with optional `#`), or `nil` if invalid.
     convenience init?(hexString: String?) {
         guard let raw = hexString?.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "#", with: ""),
               raw.count == 6, let v = UInt32(raw, radix: 16) else { return nil }

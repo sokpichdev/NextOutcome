@@ -20,14 +20,34 @@ import PortfolioDomain
 import PortfolioPresentation
 import TradingDomain
 
+/// The app's composition root — a single object that builds and holds the shared
+/// dependencies (repositories, streams) once, then hands out ready-made view models
+/// and factories to the UI.
+///
+/// This is the one place where concrete Data-layer types (like `GammaMarketRepository`
+/// or `MarketSocket`) are chosen. Views and view models only ever see protocols and
+/// use cases, so they stay easy to test and don't need to know how the network is wired.
+/// Marked `@MainActor` because it vends UI-facing view models that must live on the main
+/// thread.
 @MainActor
 final class AppContainer {
+    /// Fetches markets, events, tags, holders, comments, etc. from the Gamma/Data layer.
     private let repository: MarketRepository
+    /// Fetches order books and price history from the CLOB (central limit order book) layer.
     private let orderbookRepository: OrderbookRepository
+    /// Live price/quote stream used by the order book and live market screens.
     private let marketStream: MarketStreaming
+    /// Fetches the user's positions, activity, and leaderboard data.
     private let portfolioRepository: PortfolioRepository
 
+    /// Creates the container and eagerly builds the shared low-level dependencies.
+    ///
+    /// Marked `nonisolated` even though the type is `@MainActor`: the app needs to build
+    /// the container during launch without first hopping onto the main actor. The work
+    /// here is cheap object construction with no main-thread requirement, so it's safe.
     nonisolated init() {
+        // A single shared HTTP client is reused by every repository below so they share
+        // one connection pool, retry policy, and logger.
         let client = APIClient()
         self.repository = GammaMarketRepository(client: client)
         self.orderbookRepository = ClobOrderbookRepository(client: client)
@@ -35,6 +55,11 @@ final class AppContainer {
         self.portfolioRepository = DataPortfolioRepository(client: client)
     }
 
+    /// Builds the view model for the main markets/events list screen.
+    ///
+    /// Each `makeXxxViewModel` method injects the use cases a screen needs, keeping the
+    /// view model free of any knowledge about how data is fetched.
+    /// - Returns: A view model wired to fetch events and their filter tags.
     func makeEventListViewModel() -> EventListViewModel {
         EventListViewModel(
             fetchEvents: FetchEventsUseCase(repository: repository),
@@ -42,6 +67,8 @@ final class AppContainer {
         )
     }
 
+    /// Builds the view model for the World Cup hub screen (bracket, map, results, teams).
+    /// - Returns: A view model wired with every use case the hub's sub-tabs need.
     func makeWorldCupHubViewModel() -> WorldCupHubViewModel {
         WorldCupHubViewModel(
             fetchSeriesEvents: FetchSeriesEventsUseCase(repository: repository),
@@ -53,10 +80,14 @@ final class AppContainer {
         )
     }
 
+    /// Builds the view model backing the market search screen.
+    /// - Returns: A view model that runs text searches against the market repository.
     func makeSearchViewModel() -> SearchViewModel {
         SearchViewModel(searchMarkets: SearchMarketsUseCase(repository: repository))
     }
 
+    /// Builds the view model for the portfolio screen (open and closed positions).
+    /// - Returns: A view model that loads the user's current and historical positions.
     func makePortfolioViewModel() -> PortfolioViewModel {
         PortfolioViewModel(
             fetchPortfolio: FetchPortfolioUseCase(repository: portfolioRepository),
@@ -64,15 +95,20 @@ final class AppContainer {
         )
     }
 
+    /// Builds the view model for the account activity feed (recent trades/transactions).
+    /// - Returns: A view model that loads the user's activity history.
     func makeActivityViewModel() -> ActivityViewModel {
         ActivityViewModel(fetchActivity: FetchActivityUseCase(repository: portfolioRepository))
     }
 
+    /// Builds the view model for the leaderboard screen (top traders by profit/volume).
+    /// - Returns: A view model that loads leaderboard rankings.
     func makeLeaderboardViewModel() -> LeaderboardViewModel {
         LeaderboardViewModel(fetchLeaderboard: FetchLeaderboardUseCase(repository: portfolioRepository))
     }
 
-    /// Factory injected into the environment so Market Detail can build its live view model.
+    /// A factory function used by screens that show market detail.
+    /// It delays creating the live market view model until the screen knows the asset ID.
     func makeMarketLiveFactory() -> MarketLiveViewModelFactory {
         MarketLiveViewModelFactory { [orderbookRepository, marketStream] assetID in
             MarketLiveViewModel(
@@ -83,8 +119,8 @@ final class AppContainer {
         }
     }
 
-    /// Factory injected into the environment so Market Detail can build its expandable
-    /// live order book independently of the chart's view model.
+    /// A factory for the order book section inside market detail.
+    /// The screen can build this view model later when it knows the asset ID.
     func makeOrderbookFactory() -> OrderbookViewModelFactory {
         OrderbookViewModelFactory { [orderbookRepository, marketStream] assetID in
             OrderbookViewModel(assetID: assetID, repository: orderbookRepository, stream: marketStream)
@@ -98,7 +134,8 @@ final class AppContainer {
         }
     }
 
-    /// Factory for the Event Detail social strip (Comments · Top Holders · Positions · Activity).
+    /// A factory for the event detail social strip (comments, holders, trades, etc.).
+    /// It creates the social strip view model when the screen knows the event details.
     func makeSocialStripFactory() -> SocialStripViewModelFactory {
         SocialStripViewModelFactory { [repository] eventID, conditionId in
             SocialStripViewModel(

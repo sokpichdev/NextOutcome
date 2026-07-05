@@ -10,15 +10,24 @@ import Networking
 import MarketsDomain
 import SharedDomain
 
+/// The live implementation of `MarketRepository`, backed by Polymarket's Gamma and Data
+/// APIs. Each method builds an `Endpoint`, fetches via `APIClient`, and maps DTOs to domain
+/// types with `MarketMapper`. Query-string construction lives in the separate, testable
+/// `GammaEventQuery` helper.
 public struct GammaMarketRepository: MarketRepository {
+    /// The shared API client used for all requests.
     private let client: APIClient
-    
+
+    /// Creates the repository.
+    /// - Parameter client: The shared `APIClient`.
     public init(client: APIClient) {
         self.client = client
     }
-    
+
+    /// Page size for cursor pagination (also how the next cursor is derived).
     private static let pageSize = 20
 
+    /// Fetches one page of events from Gamma `/events`, applying the tag/sort/status filters.
     public func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus) async throws -> Page<Event> {
         let offset = cursor.flatMap(Int.init) ?? 0
         let query = GammaEventQuery.params(offset: offset, tagID: tagID, sort: sort, status: status)
@@ -29,6 +38,7 @@ public struct GammaMarketRepository: MarketRepository {
         return Page(items: events, nextCursor: nextCursor)
     }
 
+    /// Fetches one page of markets by flattening the markets out of an events page.
     public func fetchMarkets(cursor: String?) async throws -> Page<Market> {
         let offset = cursor.flatMap(Int.init) ?? 0
         let endpoint = Endpoint(host: .gamma, path: "/events", query: GammaEventQuery.params(offset: offset, tagID: nil, sort: .volume24h, status: .active))
@@ -38,13 +48,16 @@ public struct GammaMarketRepository: MarketRepository {
         return Page(items: markets, nextCursor: nextCursor)
     }
 
+    /// Fetches a single event by slug, throwing `APIError.badURL` if none matches.
     public func fetchEvent(slug: String) async throws -> Event {
         let endpoint = Endpoint(host: .gamma, path: "/events", query: ["slug": slug])
         let dtos: [EventDTO] = try await client.fetch(endpoint)
         guard let dto = dtos.first else { throw APIError.badURL }
         return MarketMapper.event(from: dto)
     }
-    
+
+    /// Full-text searches markets via Gamma `/public-search`, decoding only the markets
+    /// array out of the composite search envelope.
     public func searchMarkets(query: String) async throws -> [Market] {
             let endpoint = Endpoint(
                 host: .gamma,
@@ -57,6 +70,7 @@ public struct GammaMarketRepository: MarketRepository {
             return envelope.markets.map(MarketMapper.market(from:))
         }
 
+    /// Fetches the top holders of a market's condition from Data `/holders`.
     public func holders(conditionId: String) async throws -> [Holder] {
         let endpoint = Endpoint(
             host: .data,
@@ -67,6 +81,7 @@ public struct GammaMarketRepository: MarketRepository {
         return MarketMapper.holders(from: groups)
     }
 
+    /// Fetches an event's comments from Gamma `/comments`.
     public func comments(eventID: String) async throws -> [Comment] {
         let endpoint = Endpoint(
             host: .gamma,
@@ -77,6 +92,7 @@ public struct GammaMarketRepository: MarketRepository {
         return MarketMapper.comments(from: dtos)
     }
 
+    /// Fetches recent trades for a market's condition from Data `/trades`.
     public func trades(conditionId: String) async throws -> [ActivityTrade] {
         let endpoint = Endpoint(
             host: .data,
@@ -87,6 +103,7 @@ public struct GammaMarketRepository: MarketRepository {
         return MarketMapper.trades(from: dtos)
     }
 
+    /// Fetches all events of a series (tournament), walking up to 3 pages of 100.
     public func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] {
         // A series (tournament) is bounded but can exceed one page; walk a few pages.
         var all: [SeriesEventDTO] = []
@@ -99,6 +116,8 @@ public struct GammaMarketRepository: MarketRepository {
         return all.map { $0.toDomain() }
     }
 
+    /// Fetches live/final results for a batch of events, one request per id with a bounded
+    /// concurrency of 8 (a sliding window), skipping ids that fail or return nothing.
     public func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] {
         // Multi-id support on /events/results is undocumented, so fetch per id with bounded
         // concurrency; a failed or empty id is skipped rather than failing the batch.
@@ -107,6 +126,7 @@ public struct GammaMarketRepository: MarketRepository {
             var pending = eventIDs.makeIterator()
             var inFlight = 0
 
+            // Starts the next pending request if any remain, tracking the in-flight count.
             func addNext() {
                 guard let id = pending.next() else { return }
                 inFlight += 1
@@ -128,6 +148,7 @@ public struct GammaMarketRepository: MarketRepository {
         }
     }
 
+    /// Fetches the most-recently-closed events of a series (ordered by end date, descending).
     public func fetchCompletedEvents(seriesID: String, limit: Int) async throws -> [Event] {
         let query: [String: String] = [
             "series_id": seriesID, "closed": "true",
@@ -137,12 +158,14 @@ public struct GammaMarketRepository: MarketRepository {
         return dtos.map { $0.toDomain() }
     }
 
+    /// Fetches team reference data for a league from Gamma `/teams`.
     public func fetchTeams(league: String) async throws -> [GameTeam] {
         let endpoint = Endpoint(host: .gamma, path: "/teams", query: ["league": league, "limit": "500"])
         let dtos: [GameTeamDTO] = try await client.fetch(endpoint)
         return dtos.compactMap { $0.toDomain() }
     }
 
+    /// Fetches the carousel filter tags from Gamma `/tags`.
     public func fetchTags() async throws -> [Tag] {
         let endpoint = Endpoint(
             host: .gamma,
@@ -156,8 +179,16 @@ public struct GammaMarketRepository: MarketRepository {
 
 /// Pure, testable mapper from domain query params to Gamma API query dictionary.
 public enum GammaEventQuery {
+    /// The page size used for the events list query.
     private static let pageSize = 20
 
+    /// Builds the query dictionary for the paged `/events` list.
+    /// - Parameters:
+    ///   - offset: The pagination offset.
+    ///   - tagID: An optional tag filter.
+    ///   - sort: The sort order (mapped to Gamma's order/ascending params).
+    ///   - status: When `.active`, restricts to open, non-closed events.
+    /// - Returns: The query dictionary.
     public static func params(offset: Int, tagID: String?, sort: EventSort, status: EventStatus) -> [String: String] {
         let (order, ascending) = sortParams(for: sort)
         var query: [String: String] = [
@@ -187,6 +218,7 @@ public enum GammaEventQuery {
         return query
     }
 
+    /// Maps a domain `EventSort` to Gamma's `(order, ascending)` query values.
     private static func sortParams(for sort: EventSort) -> (order: String, ascending: String) {
         switch sort {
         case .volume24h:   return ("volume24hr", "false")

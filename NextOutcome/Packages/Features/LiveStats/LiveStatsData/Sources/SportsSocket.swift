@@ -15,10 +15,17 @@ import os
 /// `MatchState`, and transparently reconnects with exponential back-off until the consumer
 /// stops iterating. Mirrors `MarketSocket`'s reconnect/back-off/cancellation shape.
 public struct SportsSocket: SportsStateStreaming {
+    /// The WebSocket URL to connect to.
     private let url: URL
+    /// Decoder used to turn incoming frames into `SportsFrameDTO`.
     private let decoder: JSONDecoder
+    /// Logs connection drops (never logs sensitive data).
     private let logger = Logger(subsystem: "com.nextoutcome.networking", category: "SportsSocket")
 
+    /// Creates the socket.
+    /// - Parameters:
+    ///   - url: The feed URL. Defaults to Polymarket's sports WebSocket.
+    ///   - decoder: The JSON decoder to use. Defaults to a plain `JSONDecoder`.
     public init(
         url: URL = URL(string: "wss://sports-api.polymarket.com/ws")!,
         decoder: JSONDecoder = JSONDecoder()
@@ -27,6 +34,10 @@ public struct SportsSocket: SportsStateStreaming {
         self.decoder = decoder
     }
 
+    /// Starts streaming snapshots for one game (see `SportsStateStreaming`).
+    ///
+    /// Wraps the reconnect loop in an `AsyncThrowingStream` and cancels the underlying
+    /// task automatically when the consumer stops iterating.
     public func states(gameID: String) -> AsyncThrowingStream<MatchState, Error> {
         AsyncThrowingStream { continuation in
             let task = Task { await run(gameID: gameID, continuation: continuation) }
@@ -34,6 +45,12 @@ public struct SportsSocket: SportsStateStreaming {
         }
     }
 
+    /// The outer connect/reconnect loop: connects, pings, drains messages, and on any
+    /// drop waits with exponential back-off before trying again — until the task is
+    /// cancelled, at which point it finishes the stream.
+    /// - Parameters:
+    ///   - gameID: The game to filter frames to.
+    ///   - continuation: The stream continuation to yield snapshots into.
     private func run(
         gameID: String,
         continuation: AsyncThrowingStream<MatchState, Error>.Continuation
@@ -62,6 +79,14 @@ public struct SportsSocket: SportsStateStreaming {
         continuation.finish()
     }
 
+    /// The inner receive loop: reads messages off one live connection, decodes each,
+    /// keeps only frames for the requested game, merges them onto the previous snapshot,
+    /// and yields the result. Throws when the connection drops so `run` can reconnect.
+    /// - Parameters:
+    ///   - socket: The active WebSocket task to read from.
+    ///   - gameID: The game to filter to.
+    ///   - latest: The most recent snapshot, carried forward so unresent fields persist.
+    ///   - continuation: The stream continuation to yield onto.
     private func receiveLoop(
         _ socket: URLSessionWebSocketTask,
         gameID: String,
@@ -85,7 +110,10 @@ public struct SportsSocket: SportsStateStreaming {
         }
     }
 
-    /// 0.5s, 1s, 2s … capped at 30s, with ±20% jitter. Matches `MarketSocket`.
+    /// Computes the reconnect delay for a given attempt: 0.5s, 1s, 2s … capped at 30s,
+    /// with ±20% random jitter so many clients don't all reconnect in lockstep.
+    /// - Parameter attempt: The 1-based reconnect attempt number.
+    /// - Returns: The delay in nanoseconds, ready for `Task.sleep`.
     private func backoffNanos(_ attempt: Int) -> UInt64 {
         let base = min(30.0, 0.5 * pow(2.0, Double(attempt - 1)))
         let jittered = base * Double.random(in: 0.8...1.2)

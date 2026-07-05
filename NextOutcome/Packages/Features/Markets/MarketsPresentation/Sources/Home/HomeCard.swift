@@ -3,10 +3,18 @@ import MarketsDomain
 import DesignSystem
 
 /// Renders the correct Home card variant for an event.
+/// Renders the correct Home card variant for an event.
 public struct HomeCard: View {
+    /// The event to render.
     private let event: Event
+    /// The chosen card variant (from `kindOverride` or classification).
     private let kind: HomeCardKind
 
+    /// Creates the card.
+    /// - Parameters:
+    ///   - event: The event to display.
+    ///   - kindOverride: Force a specific variant (e.g. `.hero` for a feed slot); otherwise
+    ///     the kind is derived from the event via `HomeCardKind.classify`.
     public init(event: Event, kindOverride: HomeCardKind? = nil) {
         self.event = event
         self.kind = kindOverride ?? HomeCardKind.classify(event)

@@ -9,7 +9,10 @@ import SwiftUI
 import DesignSystem
 import LiveStatsDomain
 
+/// The "Stats" section: a stack of opposing-bar rows (shots, corners, cards). Falls back
+/// to the "Not available" row when the feed carries no detailed stats.
 struct StatsSection: View {
+    /// The latest match snapshot to read stats from.
     let match: MatchState?
 
     var body: some View {
@@ -24,9 +27,13 @@ struct StatsSection: View {
         }
     }
 
+    /// Builds the list of stat rows to display, including only stats where *both* teams'
+    /// values are present (so half-populated stats are skipped rather than shown as 0).
+    /// - Returns: The labelled home/away rows, or `nil` when there's no match yet.
     private var statRows: [(label: String, home: Int, away: Int)]? {
         guard let match else { return nil }
         var rows: [(String, Int, Int)] = []
+        // Adds a row only when both teams reported the stat.
         func add(_ label: String, _ h: Int?, _ a: Int?) {
             if let h, let a { rows.append((label, h, a)) }
         }

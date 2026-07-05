@@ -5,11 +5,21 @@ import DesignSystem
 /// outcome labels, the leading chance %, and a "Trade" button shortcutting to
 /// the top market.
 public struct StickyEventHeader: View {
+    /// The left/home side's abbreviation.
     private let leftAbbrev: String
+    /// The right/away side's abbreviation.
     private let rightAbbrev: String
+    /// The leading chance percentage text.
     private let chanceText: String
+    /// Called when the "Trade" shortcut is tapped.
     private let onTrade: () -> Void
 
+    /// Creates the sticky header.
+    /// - Parameters:
+    ///   - leftAbbrev: Left side abbreviation.
+    ///   - rightAbbrev: Right side abbreviation.
+    ///   - chanceText: The chance percentage text.
+    ///   - onTrade: Action for the Trade button.
     public init(leftAbbrev: String, rightAbbrev: String, chanceText: String, onTrade: @escaping () -> Void) {
         self.leftAbbrev = leftAbbrev
         self.rightAbbrev = rightAbbrev

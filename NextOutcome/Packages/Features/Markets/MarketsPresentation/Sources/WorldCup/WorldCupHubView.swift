@@ -12,8 +12,11 @@ import DesignSystem
 /// Dedicated World Cup screen shown when the category rail selects World Cup: flag-marquee
 /// header, Games / Props / Bracket / Map sub-tabs, and per-tab content.
 public struct WorldCupHubView: View {
+    /// The view model driving the hub's data and sub-tab selection.
     @State private var viewModel: WorldCupHubViewModel
 
+    /// Creates the view.
+    /// - Parameter viewModel: The World Cup hub view model.
     public init(viewModel: WorldCupHubViewModel) {
         self._viewModel = State(initialValue: viewModel)
     }
@@ -39,6 +42,7 @@ public struct WorldCupHubView: View {
         .task { await viewModel.pollResults() }
     }
 
+    /// The hub header: the flag marquee, the "World Cup" title, and a last-updated line.
     private var header: some View {
         VStack(spacing: DSLayout.spacingSmall) {
             FlagMarqueeView(tiles: FlagMarqueeView.tiles(from: viewModel.winnerEvent))
@@ -61,6 +65,7 @@ public struct WorldCupHubView: View {
         .padding(.bottom, DSLayout.spacing)
     }
 
+    /// The selected sub-tab's content (Games/Props/Bracket/Map), or loading/error states.
     @ViewBuilder
     private var tabContent: some View {
         switch viewModel.state {
@@ -88,6 +93,7 @@ public struct WorldCupHubView: View {
 
 /// "Coming soon" body for hub tabs whose data views haven't landed yet.
 struct WorldCupPlaceholderView: View {
+    /// The tab this placeholder stands in for.
     let tab: WorldCupTab
 
     var body: some View {
@@ -99,6 +105,7 @@ struct WorldCupPlaceholderView: View {
         .padding(.vertical, DSLayout.spacingXLarge)
     }
 
+    /// The SF Symbol shown for the placeholder's tab.
     private var icon: String {
         switch tab {
         case .games:   return "sportscourt"

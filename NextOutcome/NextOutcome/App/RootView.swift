@@ -14,31 +14,67 @@ import LiveStatsPresentation
 import PortfolioPresentation
 import TradingDomain
 
+/// The top-level screen of the app: a four-tab layout (Home, Search, Breaking,
+/// Portfolio) with a side drawer that can slide in from the left.
+///
+/// `RootView` owns the long-lived view models and the shared factories/services. It
+/// holds the tab-driving view models in `@State` so their loaded data survives when the
+/// user switches tabs, and it injects the factories into the SwiftUI environment so deep
+/// child screens can build their own view models without importing the Data layer.
 struct RootView: View {
-    // View models kept here so their state persists across tab switches
+    // These view models are stored on the root view so their data stays alive
+    // even when the user switches between tabs.
+
+    /// Drives the Home tab's market/event feed.
     @State private var eventListViewModel: EventListViewModel
+    /// Drives the World Cup hub shown in the Home tab when that category is selected.
     @State private var worldCupViewModel: WorldCupHubViewModel
+    /// Drives the Search tab.
     @State private var searchViewModel: SearchViewModel
+    /// Drives the Portfolio tab.
     @State private var portfolioViewModel: PortfolioViewModel
+    /// Drives the Breaking/activity tab.
     @State private var activityViewModel: ActivityViewModel
+    /// Provides shell-level state such as the balance label shown on the Portfolio tab.
     @State private var shellViewModel: ShellViewModel
+
+    // Factories and services below are handed to child views through the SwiftUI
+    // environment. They aren't `@State` because they're immutable and don't drive UI.
+
+    /// View model for the leaderboard screen reached from the drawer.
     private let leaderboardViewModel: LeaderboardViewModel
+    /// Lazily builds a live market view model once a detail screen knows its asset ID.
     private let marketLiveFactory: MarketLiveViewModelFactory
+    /// Lazily builds an order book view model for a given asset ID.
     private let orderbookFactory: OrderbookViewModelFactory
+    /// Lazily builds the "top holders" view model for a market's condition ID.
     private let marketHoldersFactory: MarketHoldersViewModelFactory
+    /// Lazily builds the event detail social strip view model.
     private let socialStripFactory: SocialStripViewModelFactory
+    /// Supplies price-history data to charts without exposing the Data layer.
     private let priceHistoryProvider: PriceHistoryProvider
+    /// Lazily builds the BTC 5-minute live screen view model.
     private let btcLiveFactory: BTCLiveViewModelFactory
+    /// Handles (simulated) order submission for the mock trade sheet.
     private let tradeSubmitter: TradeSubmitting
+    /// Streams live sports-stats updates to the Live sub-tab.
     private let sportsStreamer: any SportsStateStreaming
 
+    /// Which feed category the Home tab currently shows (e.g. trending, World Cup).
     @State private var selectedCategory: ShellCategory = .trending
-    // UI state
+    /// Whether the side drawer is currently slid in over the main content.
     @State private var isDrawerOpen = false
 
+    /// Builds the root view, resolving every view model and factory from the container.
+    ///
+    /// Everything is created exactly once here at launch so switching tabs never rebuilds
+    /// (and thus never reloads) a screen's state.
+    /// - Parameter container: The composition root that vends dependencies. Defaults to a
+    ///   fresh `AppContainer`; inject a custom one in previews or tests.
     @MainActor
     init(container: AppContainer = AppContainer()) {
-        // Dependency injection: create view models and factories from the app container
+        // Create all required view models and helper objects once when the app starts.
+        // The container hides how each object is built so the root view stays simple.
         let portfolio = container.makePortfolioViewModel()
         _eventListViewModel = State(initialValue: container.makeEventListViewModel())
         _worldCupViewModel = State(initialValue: container.makeWorldCupHubViewModel())
@@ -46,6 +82,7 @@ struct RootView: View {
         _portfolioViewModel = State(initialValue: portfolio)
         _activityViewModel = State(initialValue: container.makeActivityViewModel())
         _shellViewModel = State(initialValue: ShellViewModel(portfolio: portfolio))
+
         leaderboardViewModel = container.makeLeaderboardViewModel()
         marketLiveFactory = container.makeMarketLiveFactory()
         orderbookFactory = container.makeOrderbookFactory()
@@ -57,14 +94,17 @@ struct RootView: View {
         sportsStreamer = container.makeSportsStreamer()
     }
 
+    /// The view hierarchy: the tab bar with the drawer layered on top, plus the shared
+    /// factories/services published into the environment for descendant views to read.
     var body: some View {
-        // Root layout: main tabs with an optional drawer overlay
+        // Main app view: tabs plus a drawer that can slide in from the left.
         ZStack(alignment: .leading) {
             tabs
             if isDrawerOpen { drawerOverlay.transition(.move(edge: .leading)) }
         }
         .tint(DSColor.accent)
         .animation(.easeInOut(duration: 0.3), value: isDrawerOpen)
+        // Provide shared factories and services to child views through environment keys.
         .environment(\.marketLiveFactory, marketLiveFactory)
         .environment(\.orderbookFactory, orderbookFactory)
         .environment(\.marketHoldersFactory, marketHoldersFactory)
@@ -75,14 +115,16 @@ struct RootView: View {
         .environment(\.sportsStreamer, sportsStreamer)
     }
 
+    /// The four-tab layout. Each tab gets its own `NavigationStack` so navigation depth is
+    /// tracked independently per tab.
     private var tabs: some View {
-        // Tab bar with separate navigation stacks per tab
+        // A tab view with its own navigation stack for each section.
         TabView {
             NavigationStack {
                 chrome {
-                    // World Cup swaps the generic feed for its dedicated hub; the rail
-                    // (ShellChrome) stays, and both view models live here so each keeps
-                    // its state across switches.
+                    // Home tab content changes depending on the selected shell category.
+                    // The view models here are kept at root so the feed state does not
+                    // reset when users switch tabs.
                     if selectedCategory == .worldCup {
                         WorldCupHubView(viewModel: worldCupViewModel)
                     } else {
@@ -109,9 +151,16 @@ struct RootView: View {
         }
     }
 
+    /// Wraps a screen in the shared chrome (category rail + avatar button).
+    ///
+    /// Using one helper for every tab keeps the top bar and drawer trigger identical
+    /// across the app.
+    /// - Parameter content: The tab's screen content to embed inside the chrome.
+    /// - Returns: The content wrapped in `ShellChrome` with the navigation bar hidden.
     @ViewBuilder
     private func chrome<C: View>(@ViewBuilder _ content: () -> C) -> some View {
-        // Common chrome wrapper that provides the shell rail and avatar action
+        // Wrap each screen in the shared chrome UI used across tabs.
+        // This adds the category rail and the avatar button that opens the drawer.
         ShellChrome(
             selectedCategory: $selectedCategory,
             onAvatar: { isDrawerOpen = true }
@@ -119,8 +168,10 @@ struct RootView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
+    /// The side menu drawer plus its dimmed backdrop. Tapping the backdrop closes it.
     private var drawerOverlay: some View {
-        // Semi-transparent overlay + side menu drawer
+        // Drawer overlay appears above the main content. A tap outside
+        // closes the drawer.
         ZStack(alignment: .leading) {
             Color.black.opacity(0.5).ignoresSafeArea()
                 .onTapGesture { isDrawerOpen = false }

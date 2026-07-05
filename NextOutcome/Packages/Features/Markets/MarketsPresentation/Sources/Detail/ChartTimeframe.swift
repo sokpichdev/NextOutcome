@@ -6,6 +6,7 @@ import DesignSystem
 public enum ChartTimeframe: String, CaseIterable {
     case h1, d1, w1, m1, max
 
+    /// The short pill label (e.g. "1H").
     public var title: String {
         switch self {
         case .h1: return "1H"
@@ -16,6 +17,7 @@ public enum ChartTimeframe: String, CaseIterable {
         }
     }
 
+    /// The domain price-history interval this timeframe maps to.
     public var interval: PriceHistoryInterval {
         switch self {
         case .h1: return .oneHour
@@ -27,8 +29,12 @@ public enum ChartTimeframe: String, CaseIterable {
     }
 }
 
+/// A row of chips for choosing the chart timeframe, bound to a selection.
 public struct TimeframePicker: View {
+    /// The currently-selected timeframe (two-way bound).
     @Binding private var selected: ChartTimeframe
+    /// Creates the picker.
+    /// - Parameter selected: A binding to the selected timeframe.
     public init(selected: Binding<ChartTimeframe>) { self._selected = selected }
 
     public var body: some View {

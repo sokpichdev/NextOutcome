@@ -10,14 +10,28 @@ import MarketsDomain
 import SharedDomain
 import DesignSystem
 
+/// Drives the main markets feed: loads a paginated list of events, exposes category and
+/// trending-chip filters, sort/status options, and a client-side "hide sports" toggle.
 @MainActor
 @Observable
 public final class EventListViewModel {
+    /// What the feed is currently showing.
     public enum State {
-        case idle, loading, loaded([Event]), empty, failed(String)
+        /// Nothing loaded yet.
+        case idle
+        /// Loading the first page.
+        case loading
+        /// Loaded events.
+        case loaded([Event])
+        /// No events for the current filters.
+        case empty
+        /// The load failed, with a user-facing message.
+        case failed(String)
     }
 
+    /// The current feed state.
     public private(set) var state: State = .idle
+    /// Whether a "load more" page fetch is in flight.
     public private(set) var isLoadingMore = false
 
     /// Category filter chips. `selectedTagID == nil` means "All".
@@ -37,8 +51,10 @@ public final class EventListViewModel {
     /// category tag. Pagination reads the same value, so `loadMore` follows the chip filter.
     private var effectiveTagID: String? { selectedTrendingTagID ?? selectedTagID }
 
+    /// The sort options offered in the secondary filter row.
     public enum MarketSort: String, CaseIterable {
         case volume24h, liquidity, newest, endingSoon, competitive
+        /// The menu label for this sort.
         public var title: String {
             switch self {
             case .volume24h:   return "24hr Volume"
@@ -50,13 +66,18 @@ public final class EventListViewModel {
         }
     }
 
+    /// The status filter offered in the secondary filter row.
     public enum MarketStatus: String, CaseIterable {
         case active, all
+        /// The menu label for this status.
         public var title: String { self == .active ? "Active" : "All" }
     }
 
+    /// The active sort order.
     public private(set) var sort: MarketSort = .volume24h
+    /// The active status filter.
     public private(set) var status: MarketStatus = .active
+    /// Whether sports events are hidden client-side.
     public private(set) var hideSports: Bool = false
 
     /// Loaded events with the hide-sports client filter applied.
@@ -123,6 +144,7 @@ public final class EventListViewModel {
         await load()
     }
 
+    /// Changes the sort order and reloads from the top.
     public func setSort(_ newSort: MarketSort) async {
         guard newSort != sort else { return }
         sort = newSort
@@ -130,6 +152,7 @@ public final class EventListViewModel {
         await load()
     }
 
+    /// Changes the status filter and reloads from the top.
     public func setStatus(_ newStatus: MarketStatus) async {
         guard newStatus != status else { return }
         status = newStatus
@@ -137,19 +160,29 @@ public final class EventListViewModel {
         await load()
     }
 
+    /// Toggles the client-side hide-sports filter (no refetch — `visibleEvents` re-filters).
     public func toggleHideSports() { hideSports.toggle() }
 
+    /// The cursor for the next page, or `nil` at the end.
     private var nextCursor: String?
+    /// Whether another page is available.
     public var hasMore: Bool { nextCursor != nil }
 
+    /// Use case that fetches event pages.
     private let fetchEvents: FetchEventsUseCase
+    /// Use case that fetches the filter tags.
     private let fetchTags: FetchTagsUseCase
 
+    /// Creates the view model.
+    /// - Parameters:
+    ///   - fetchEvents: Loads event pages.
+    ///   - fetchTags: Loads the category filter tags.
     public init(fetchEvents: FetchEventsUseCase, fetchTags: FetchTagsUseCase) {
         self.fetchEvents = fetchEvents
         self.fetchTags = fetchTags
     }
 
+    /// The domain sort corresponding to the selected `MarketSort`.
     private var domainSort: EventSort {
         switch sort {
         case .volume24h:   return .volume24h
@@ -160,8 +193,11 @@ public final class EventListViewModel {
         }
     }
 
+    /// The domain status corresponding to the selected `MarketStatus`.
     private var domainStatus: EventStatus { status == .active ? .active : .all }
 
+    /// Loads the first page for the current filters, and (on the unfiltered trending feed)
+    /// derives the trending sub-filter chips.
     public func load() async {
         state = .loading
         if tags.isEmpty { await loadTags() }
@@ -179,6 +215,7 @@ public final class EventListViewModel {
         }
     }
 
+    /// Reloads from the first page (pull-to-refresh).
     public func refresh() async {
         nextCursor = nil
         await load()
@@ -192,6 +229,9 @@ public final class EventListViewModel {
         await load()
     }
 
+    /// Appends the next page when the user scrolls near the end. When hide-sports is on and a
+    /// page yields no visible items, it keeps fetching (bounded to 5 extra pages) so the
+    /// feed can still advance. Errors are non-fatal — the existing list stays visible.
     public func loadMore() async {
         guard case .loaded(let current) = state, let cursor = nextCursor, !isLoadingMore else {
             return
@@ -222,6 +262,7 @@ public final class EventListViewModel {
         }
     }
 
+    /// Loads the category filter tags. Best-effort: a failure just hides the filter row.
     private func loadTags() async {
         // Tags are a non-critical enhancement — a failure just hides the filter row.
         tags = (try? await fetchTags.execute()) ?? []

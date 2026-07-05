@@ -14,30 +14,49 @@ import OrderbookPresentation
 /// pushing view has a parent `Event` in scope, so `MarketDetailView` can thread the real
 /// event id down to `SocialStripView` (Gamma scopes `/comments` per-event, not per-market).
 public struct MarketNavigationTarget: Hashable {
+    /// The market to open.
     public let market: Market
+    /// The parent event's id, threaded down so comments can be scoped correctly.
     public let eventID: String
 
+    /// Creates a navigation target.
+    /// - Parameters:
+    ///   - market: The market to open.
+    ///   - eventID: The parent event's id.
     public init(market: Market, eventID: String) {
         self.market = market
         self.eventID = eventID
     }
 }
 
+/// The market detail screen: chance header, Yes/No trade buttons, live chart and order book,
+/// a mock portfolio section, market stats, and the comments/holders social strip.
 public struct MarketDetailView: View {
+    /// Factory for the live price chart view model.
     @Environment(\.marketLiveFactory) private var marketLiveFactory
+    /// Factory for the order book view model.
     @Environment(\.orderbookFactory) private var orderbookFactory
+    /// Factory for the social strip (comments/holders) view model.
     @Environment(\.socialStripFactory) private var socialStripFactory
+    /// The (simulated) trade submitter for the trade sheet.
     @Environment(\.tradeSubmitter) private var tradeSubmitter
+    /// Dismisses this screen (back button).
     @Environment(\.dismiss) private var dismiss
+    /// The selected segment of the mock portfolio section.
     @State private var portfolioSegment = 0
     /// Task 8's mock trade sheet, opened from the Yes/No buttons next to the order book.
     @State private var tradeContext: TradeSheetContext?
+    /// The market being displayed.
     private let market: Market
     /// The parent event's id, used to scope the Comments strip. `nil` when this screen was
     /// reached from a flow with no event context (Search results are flat markets with no
     /// parent event attached) — the comments strip is hidden rather than sending a wrong id.
     private let eventID: String?
 
+    /// Creates the view.
+    /// - Parameters:
+    ///   - market: The market to display.
+    ///   - eventID: The parent event id (for comments); `nil` hides the comments strip.
     public init(market: Market, eventID: String? = nil) {
         self.market = market
         self.eventID = eventID
@@ -86,10 +105,12 @@ public struct MarketDetailView: View {
         }
     }
 
+    /// Formats a 0…1 price as a cent label (reusing the percent formatter's number).
     private func cents(_ price: Decimal) -> String {
         MarketFormatting.percent(price).replacingOccurrences(of: "%", with: "¢")
     }
 
+    /// The big "% chance" header, or a fallback when the market has no outcomes.
     @ViewBuilder
     private var chanceHeader: some View {
         if let yes = market.yesOutcome {
@@ -127,6 +148,8 @@ public struct MarketDetailView: View {
 
     /// Positions / Open Orders / History — static empty states until sub-project D
     /// wires real portfolio data into Market Detail.
+    /// The mock Positions/Open Orders/History section with empty states (real data lands
+    /// with funding).
     private var portfolioSection: some View {
         DSCard {
             VStack(alignment: .leading, spacing: DSLayout.spacing) {
@@ -143,6 +166,7 @@ public struct MarketDetailView: View {
         }
     }
 
+    /// The empty-state copy for the selected portfolio segment.
     private var portfolioEmptyState: some View {
         VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
             Text(portfolioEmptyTitle)
@@ -156,6 +180,7 @@ public struct MarketDetailView: View {
         .padding(.vertical, DSLayout.spacingLarge)
     }
 
+    /// The title for the currently-selected portfolio segment.
     private var portfolioEmptyTitle: String {
         switch portfolioSegment {
         case 1: return "Open orders"
@@ -174,6 +199,7 @@ public struct MarketDetailView: View {
         }
     }
 
+    /// The market stats card: volume, liquidity, and status/countdown.
     private var stats: some View {
         DSCard {
             VStack(alignment: .leading, spacing: DSLayout.spacing) {
@@ -186,6 +212,10 @@ public struct MarketDetailView: View {
         }
     }
 
+    /// A single label/value row in the stats card.
+    /// - Parameters:
+    ///   - label: The row's label.
+    ///   - value: The row's formatted value.
     private func statRow(_ label: String, _ value: String) -> some View {
         HStack {
             Text(label)
