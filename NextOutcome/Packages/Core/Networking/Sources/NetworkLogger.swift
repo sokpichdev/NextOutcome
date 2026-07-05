@@ -120,23 +120,16 @@ public struct NetworkLogger: Sendable {
 
     /// Attempts to format raw response/request body bytes as indented, readable JSON
     /// for logging. Falls back to a plain UTF-8 string if the bytes aren't valid JSON.
-    /// Truncates very long output so a single huge payload doesn't flood the console.
-    /// - Parameters:
-    ///   - data: The raw body bytes to format.
-    ///   - limit: The maximum number of characters to include before truncating.
-    ///     Defaults to 4000.
+    /// - Parameter data: The raw body bytes to format.
     /// - Returns: A pretty-printed (or plain-text) string, or `nil` if `data` is empty.
-    private func prettyJSON(_ data: Data, limit: Int = 4000) -> String? {
+    private func prettyJSON(_ data: Data) -> String? {
         guard !data.isEmpty else { return nil }
-        let pretty: String
         if let object = try? JSONSerialization.jsonObject(with: data),
            let formatted = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .withoutEscapingSlashes]),
            let text = String(data: formatted, encoding: .utf8) {
-            pretty = text
-        } else {
-            pretty = String(decoding: data, as: UTF8.self)
+            return text
         }
-        return pretty.count > limit ? String(pretty.prefix(limit)) + "\n   …(truncated)" : pretty
+        return String(decoding: data, as: UTF8.self)
     }
 
     /// Never log auth material verbatim.
