@@ -38,17 +38,19 @@ public final class EventListViewModel {
     public private(set) var tags: [Tag] = []
     public private(set) var selectedTagID: String?
 
-    /// Trending sub-filter chips, derived from the tags of the unfiltered trending feed.
-    /// `selectedTrendingTagID == nil` means "All". Orthogonal to `selectedTagID`: the chip
-    /// only exists while the rail is on Trending (which itself applies no tag filter).
+    /// Trending sub-filter chips, derived from the tags of the unfiltered feed. Shown for
+    /// categories in `categoriesWithSubChips` (Trending, Politics — e.g. Politics's
+    /// "All/Trump/Trump Daily/Midterms" row). `selectedTrendingTagID == nil` means "All".
     public private(set) var trendingChips: [Tag] = []
     public private(set) var selectedTrendingTagID: String?
     private var currentCategory: ShellCategory = .trending
+    /// Categories that show the sub-filter chip row (derived from the loaded events' tags).
+    private static let categoriesWithSubChips: Set<ShellCategory> = [.trending, .politics]
 
-    /// Whether the trending sub-filter chip row has anything to show. This row is always
-    /// visible (non-collapsible) once populated — the collapsible control is the advanced
-    /// filter row instead (see `filterRowVisible`).
-    public var showsTrendingChips: Bool { currentCategory == .trending && !trendingChips.isEmpty }
+    /// Whether the sub-filter chip row has anything to show. This row is always visible
+    /// (non-collapsible) once populated — the collapsible control is the advanced filter row
+    /// instead (see `filterRowVisible`).
+    public var showsTrendingChips: Bool { Self.categoriesWithSubChips.contains(currentCategory) && !trendingChips.isEmpty }
 
     /// The tag actually sent to the API: the trending chip when one is active, else the
     /// category tag. Pagination reads the same value, so `loadMore` follows the chip filter.
@@ -219,7 +221,7 @@ public final class EventListViewModel {
 
     /// Select a trending sub-filter chip (nil = "All") and reload from the top.
     public func selectTrendingChip(tagID: String?) async {
-        guard currentCategory == .trending, tagID != selectedTrendingTagID else { return }
+        guard Self.categoriesWithSubChips.contains(currentCategory), tagID != selectedTrendingTagID else { return }
         selectedTrendingTagID = tagID
         nextCursor = nil
         await load()
@@ -343,9 +345,9 @@ public final class EventListViewModel {
             let page = try await fetchEvents.execute(tagID: effectiveTagID, sort: domainSort, status: domainStatus, period: domainPeriod)
             nextCursor = page.nextCursor
             state = page.items.isEmpty ? .empty : .loaded(page.items)
-            // Chips come only from the *unfiltered* trending feed so the row doesn't
-            // reshuffle while the user filters with it.
-            if currentCategory == .trending && selectedTrendingTagID == nil && !page.items.isEmpty {
+            // Chips come only from the *unfiltered* feed so the row doesn't reshuffle while
+            // the user filters with it.
+            if Self.categoriesWithSubChips.contains(currentCategory) && selectedTrendingTagID == nil && !page.items.isEmpty {
                 trendingChips = TrendingChipDeriver.chips(from: page.items)
             }
         } catch {
