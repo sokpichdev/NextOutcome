@@ -28,48 +28,52 @@ public struct ChamberComposition: Sendable {
     public static let house = ChamberComposition(republicans: 220, democrats: 213)
 }
 
-/// A dot-grid pictogram of a chamber's current seats, grouped by party — matching the web's
-/// "49 REPUBLICANS / 51 DEMOCRATS"-style seat grids.
+/// A dot-grid pictogram of a chamber's current seats, as two separate party blocks side by
+/// side (Republicans left, Democrats right) — matching the web's
+/// "49 REPUBLICANS ⓘ / 51 DEMOCRATS ⓘ" layout.
 struct SeatPictogram: View {
     let composition: ChamberComposition
-    /// Dots per row.
-    private let columns = 15
+    /// Dots per row within each party's block.
+    private let columns = 12
     private let dotSize: CGFloat = 8
     private let spacing: CGFloat = 4
 
     var body: some View {
+        HStack(alignment: .top, spacing: DSLayout.spacingLarge) {
+            partyBlock(count: composition.republicans, label: "REPUBLICANS", color: DSColor.negative)
+            partyBlock(count: composition.democrats, label: "DEMOCRATS", color: DSColor.accent)
+        }
+    }
+
+    private func partyBlock(count: Int, label: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
-            grid
-            HStack(spacing: DSLayout.spacing) {
-                legendLabel("\(composition.republicans) REPUBLICANS", color: DSColor.negative)
-                legendLabel("\(composition.democrats) DEMOCRATS", color: DSColor.accent)
+            grid(count: count, color: color)
+            HStack(spacing: 4) {
+                Text("\(count)")
+                    .font(DSFont.caption.bold())
+                    .foregroundStyle(color)
+                Text(label)
+                    .font(DSFont.caption2)
+                    .foregroundStyle(DSColor.textSecondary)
             }
         }
     }
 
-    private var grid: some View {
-        let total = composition.republicans + composition.democrats
-        let rows = Int(ceil(Double(total) / Double(columns)))
+    private func grid(count: Int, color: Color) -> some View {
+        let rows = Int(ceil(Double(count) / Double(columns)))
         return VStack(alignment: .leading, spacing: spacing) {
             ForEach(0..<rows, id: \.self) { row in
                 HStack(spacing: spacing) {
                     ForEach(0..<columns, id: \.self) { col in
                         let dotIndex = row * columns + col
-                        if dotIndex < total {
+                        if dotIndex < count {
                             Circle()
-                                .fill(dotIndex < composition.republicans ? DSColor.negative : DSColor.accent)
+                                .fill(color)
                                 .frame(width: dotSize, height: dotSize)
                         }
                     }
                 }
             }
-        }
-    }
-
-    private func legendLabel(_ text: String, color: Color) -> some View {
-        HStack(spacing: 4) {
-            Circle().fill(color).frame(width: 6, height: 6)
-            Text(text).font(DSFont.caption2).foregroundStyle(DSColor.textSecondary)
         }
     }
 }
