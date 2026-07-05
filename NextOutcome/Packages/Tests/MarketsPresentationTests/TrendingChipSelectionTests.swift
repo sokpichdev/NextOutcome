@@ -92,10 +92,10 @@ final class TrendingChipSelectionTests: XCTestCase {
         await vm.apply(category: .trending)
         await vm.selectTrendingChip(tagID: "id-Trump")
 
-        await vm.apply(category: .politics)
+        // Breaking has no sub-chip row (unlike Trending/Politics).
+        await vm.apply(category: .breaking)
         XCTAssertNil(vm.selectedTrendingTagID)
-        XCTAssertEqual(repo.fetchedTagIDs.last, "2")
-        XCTAssertFalse(vm.showsTrendingChips)     // hidden off Trending…
+        XCTAssertFalse(vm.showsTrendingChips)     // hidden off Trending/Politics…
         XCTAssertFalse(vm.trendingChips.isEmpty)  // …but cached for the way back.
 
         await vm.apply(category: .trending)
@@ -103,12 +103,22 @@ final class TrendingChipSelectionTests: XCTestCase {
         XCTAssertTrue(vm.showsTrendingChips)
     }
 
-    func test_selectChip_ignoredOffTrending() async {
-        let (vm, repo) = makeVM(events: chipEvents)
+    func test_categorySwitch_toPolitics_alsoShowsChips() async {
+        let (vm, _) = makeVM(events: chipEvents)
+        await vm.apply(category: .trending)
         await vm.apply(category: .politics)
+        XCTAssertTrue(vm.showsTrendingChips)
+
+        await vm.selectTrendingChip(tagID: "id-Trump")
+        XCTAssertEqual(vm.selectedTrendingTagID, "id-Trump")
+    }
+
+    func test_selectChip_ignoredOffTrendingAndPolitics() async {
+        let (vm, repo) = makeVM(events: chipEvents)
+        await vm.apply(category: .breaking)
         await vm.selectTrendingChip(tagID: "id-Trump")
         XCTAssertNil(vm.selectedTrendingTagID)
-        XCTAssertEqual(repo.fetchedTagIDs, ["2"])
+        XCTAssertEqual(repo.fetchedTagIDs, ["198"])
     }
 }
 
