@@ -91,8 +91,10 @@ public struct MoversDetailView: View {
         if action.contains(.discuss) { showsDiscussSheet = true }
     }
 
-    /// Category breadcrumb + question title. The headline chance/delta only apply to `.chart`
-    /// events (a date-ladder has no single resolution date to summarize a chance against).
+    /// Category breadcrumb + the parent event's title (matching the web, which always shows
+    /// the event's own title here — e.g. "GPT-5.6 released by…?" — never the specific tapped
+    /// market's full question). The headline chance/delta only apply to `.chart` events (a
+    /// date-ladder has no single resolution date to summarize a chance against).
     private var header: some View {
         VStack(alignment: .leading, spacing: DSLayout.spacingXSmall) {
             if !viewModel.categoryBreadcrumb.isEmpty {
@@ -100,7 +102,7 @@ public struct MoversDetailView: View {
                     .font(DSFont.caption)
                     .foregroundStyle(DSColor.textSecondary)
             }
-            Text(viewModel.mover.question)
+            Text(viewModel.event?.title ?? viewModel.mover.eventTitle)
                 .font(DSFont.headline)
                 .foregroundStyle(DSColor.textPrimary)
             if viewModel.layout == .chart {
