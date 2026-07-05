@@ -35,7 +35,9 @@ struct RootView: View {
     @State private var searchViewModel: SearchViewModel
     /// Drives the Portfolio tab.
     @State private var portfolioViewModel: PortfolioViewModel
-    /// Drives the Breaking/activity tab.
+    /// Drives the account activity feed. Not currently reachable from any tab — the bottom
+    /// "Breaking" tab shows `breakingViewModel`'s movers feed instead — kept in case a future
+    /// screen (e.g. under the drawer) needs it.
     @State private var activityViewModel: ActivityViewModel
     /// Provides shell-level state such as the balance label shown on the Portfolio tab.
     @State private var shellViewModel: ShellViewModel
@@ -149,9 +151,10 @@ struct RootView: View {
             .tabItem { Label("Search", systemImage: "magnifyingglass") }
 
             NavigationStack {
-                chrome { ActivityView(viewModel: activityViewModel) }
+                chrome { BreakingView(viewModel: breakingViewModel) }
+                    .onAppear { selectedCategory = .breaking }
             }
-            .tabItem { Label("Breaking", systemImage: "circle.dashed") }
+            .tabItem { Label("Breaking", systemImage: "bolt.fill") }
 
             NavigationStack {
                 chrome { PortfolioView(viewModel: portfolioViewModel) }
