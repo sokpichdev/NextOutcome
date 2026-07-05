@@ -83,7 +83,12 @@ struct RootView: View {
         _eventListViewModel = State(initialValue: container.makeEventListViewModel())
         _worldCupViewModel = State(initialValue: container.makeWorldCupHubViewModel())
         _breakingViewModel = State(initialValue: container.makeBreakingViewModel())
-        _politicsHubViewModel = State(initialValue: container.makePoliticsHubViewModel())
+        let politics = container.makePoliticsHubViewModel()
+        _politicsHubViewModel = State(initialValue: politics)
+        // Kicked off here (an unstructured Task, not a SwiftUI `.task` view modifier) so the
+        // fetch survives category/navigation churn — it isn't tied to any view's presence in
+        // the hierarchy and can't be cancelled by scrolling, tab switches, or re-renders.
+        Task { await politics.loadIfNeeded() }
         _searchViewModel = State(initialValue: container.makeSearchViewModel())
         _portfolioViewModel = State(initialValue: portfolio)
         _shellViewModel = State(initialValue: ShellViewModel(portfolio: portfolio))

@@ -61,13 +61,9 @@ public struct EventListView: View {
         }
         // `apply` is idempotent and loads on first appearance; it also resyncs the VM when
         // the view remounts with a different category (e.g. returning from the hub).
+        // (The Politics hub's own data is loaded independently — see `RootView.init` — since
+        // a view-tied `.task` here was getting cancelled by navigation/category churn.)
         .task { await viewModel.apply(category: selectedCategory) }
-        // Loaded from this stable, non-virtualized task rather than the promo card's own
-        // `.task` — that card lives inside the feed's `LazyVStack`, which SwiftUI can
-        // virtualize away (or does when the hub is pushed), cancelling the in-flight fetch.
-        // Keyed by category so it re-fires when switching into Politics (`.task` alone only
-        // runs once per view identity, not on every prop change).
-        .task(id: selectedCategory) { if let politicsHubViewModel { await politicsHubViewModel.loadIfNeeded() } }
         .onChange(of: selectedCategory) { _, new in Task { await viewModel.apply(category: new) } }
         // Debounced search: SwiftUI cancels and restarts this on every `searchQuery`
         // keystroke, so only the last one (after the delay) actually calls the API.
