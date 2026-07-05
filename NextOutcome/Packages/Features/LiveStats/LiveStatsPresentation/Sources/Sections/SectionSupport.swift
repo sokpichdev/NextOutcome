@@ -21,10 +21,15 @@ struct UnavailableRow: View {
 
 /// An opposing bar row: label centered, home value left, away value right, proportional fill.
 struct OpposingStatRow: View {
+    /// The stat's name shown centered above the bar (e.g. "Shots").
     let label: String
+    /// The home team's value.
     let home: Int
+    /// The away team's value.
     let away: Int
 
+    /// The home team's share of the combined total, used to size the bar's left fill.
+    /// Falls back to 0.5 (an even split) when both values are zero to avoid divide-by-zero.
     private var homeFraction: Double {
         let total = home + away
         return total == 0 ? 0.5 : Double(home) / Double(total)

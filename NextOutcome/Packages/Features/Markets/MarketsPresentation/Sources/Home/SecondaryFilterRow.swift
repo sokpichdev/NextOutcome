@@ -10,7 +10,10 @@ import DesignSystem
 
 /// Home's secondary filter row: sort menu, status menu, Hide-sports toggle.
 public struct SecondaryFilterRow: View {
+    /// The event-list view model whose sort/status/hide-sports state this row drives.
     @Bindable private var viewModel: EventListViewModel
+    /// Creates the row.
+    /// - Parameter viewModel: The event-list view model to bind to.
     public init(viewModel: EventListViewModel) { self.viewModel = viewModel }
 
     public var body: some View {
@@ -43,8 +46,13 @@ public struct SecondaryFilterRow: View {
     }
 }
 
+/// A capsule label (icon + text) used as the tappable label for the sort/status menus.
 private struct DSMenuLabel: View {
-    let title: String; let systemImage: String
+    /// The label text.
+    let title: String
+    /// The SF Symbol name shown before the text.
+    let systemImage: String
+    /// Creates the label.
     init(_ title: String, systemImage: String) { self.title = title; self.systemImage = systemImage }
     var body: some View {
         HStack(spacing: 6) { Image(systemName: systemImage); Text(title) }

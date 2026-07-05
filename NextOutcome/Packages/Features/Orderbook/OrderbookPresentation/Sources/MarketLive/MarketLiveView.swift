@@ -12,8 +12,11 @@ import DesignSystem
 /// Price-history section embedded in the Market Detail screen. The order book itself
 /// is `OrderbookView` (expandable, live-updating) rendered separately below this.
 public struct MarketLiveView: View {
+    /// The view model driving the chart and connection status.
     @State private var viewModel: MarketLiveViewModel
 
+    /// Creates the view.
+    /// - Parameter viewModel: The live-market view model (usually from `marketLiveFactory`).
     public init(viewModel: MarketLiveViewModel) {
         self._viewModel = State(initialValue: viewModel)
     }
@@ -26,6 +29,8 @@ public struct MarketLiveView: View {
 
     // MARK: Chart
 
+    /// The chart card: title, connection badge, the price chart (or an empty state), and
+    /// the interval picker.
     private var chartSection: some View {
         DSCard {
             VStack(alignment: .leading, spacing: DSLayout.spacing) {
@@ -53,6 +58,7 @@ public struct MarketLiveView: View {
         }
     }
 
+    /// The row of chips that let the user switch the chart's time window.
     private var intervalPicker: some View {
         HStack(spacing: 8) {
             ForEach(PriceHistoryInterval.allCases, id: \.self) { option in
@@ -63,6 +69,7 @@ public struct MarketLiveView: View {
         }
     }
 
+    /// A small coloured dot + label showing the live/connecting/offline status.
     private var connectionBadge: some View {
         HStack(spacing: 6) {
             Circle()
@@ -74,6 +81,7 @@ public struct MarketLiveView: View {
         }
     }
 
+    /// The dot colour for the current connection status.
     private var connectionColor: Color {
         switch viewModel.connection {
         case .live: return DSColor.positive
@@ -82,6 +90,7 @@ public struct MarketLiveView: View {
         }
     }
 
+    /// The text label for the current connection status.
     private var connectionLabel: String {
         switch viewModel.connection {
         case .live: return "Live"
@@ -92,6 +101,8 @@ public struct MarketLiveView: View {
 
     // MARK: Formatting (Decimal stays domain-side; Double only here)
 
+    /// Converts a domain `Decimal` price into a clamped 0…1 `Double` for the chart, keeping
+    /// `Decimal` on the domain side and only crossing to `Double` at the view boundary.
     private func fractionValue(_ value: Decimal) -> Double {
         min(1, max(0, NSDecimalNumber(decimal: value).doubleValue))
     }

@@ -8,9 +8,13 @@ import SharedDomain
 @MainActor
 @Observable
 public final class EventChartViewModel {
+    /// The event whose outcomes are charted.
     private let event: Event
+    /// Supplies price-history data per outcome token.
     private let provider: PriceHistoryProvider
+    /// The selected timeframe; changing it reloads the chart.
     public var timeframe: ChartTimeframe = .max { didSet { Task { await load() } } }
+    /// The chart series, wrapped in a load state.
     public private(set) var state: LoadState<[PriceSeries]> = .idle
 
     /// Monotonically increasing token used to discard stale `load()` results when
@@ -18,6 +22,10 @@ public final class EventChartViewModel {
     /// Only the most recently started `load()` call is allowed to write `state`.
     private var loadGeneration = 0
 
+    /// Creates the view model.
+    /// - Parameters:
+    ///   - event: The event to chart.
+    ///   - provider: The price-history data source.
     public init(event: Event, provider: PriceHistoryProvider) {
         self.event = event
         self.provider = provider
@@ -26,6 +34,9 @@ public final class EventChartViewModel {
     /// Top markets (up to 4). Each market's Yes outcome token id drives one series.
     private var topMarkets: [Market] { Array(event.markets.prefix(4)) }
 
+    /// Loads one price-history series per top market, in parallel, keeping the previous
+    /// chart visible while new data loads. Uses `loadGeneration` to ignore results from a
+    /// superseded load when the timeframe changes rapidly.
     public func load() async {
         loadGeneration += 1
         let generation = loadGeneration

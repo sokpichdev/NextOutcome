@@ -13,16 +13,27 @@ import Networking
 /// and several fields are frequently absent. Decoding is deliberately tolerant:
 /// a missing/odd field degrades that market, it never fails the whole page.
 struct MarketDTO: Decodable {
+    /// The market id.
     let id: String
+    /// The condition id (for holders/CLOB lookups).
     let conditionId: String
+    /// The market question.
     let question: String
+    /// The market's URL slug.
     let slug: String
+    /// Outcome labels, parsed from a stringified array.
     let outcomes: [String]
+    /// Outcome prices (0…1), parallel to `outcomes`.
     let outcomePrices: [Decimal]
+    /// CLOB token ids, parallel to `outcomes`.
     let clobTokenIds: [String]
+    /// Total traded volume.
     let volume: Decimal
+    /// Available liquidity.
     let liquidity: Decimal
+    /// The close date as an ISO string, if present.
     let endDateIso: String?
+    /// Whether the market is closed/resolved.
     let closed: Bool
     /// Gamma's tradeable flag. `false` for undetermined placeholder slots
     /// (e.g. "Team AG" World Cup qualifiers) that have no prices/liquidity yet.
@@ -35,12 +46,15 @@ struct MarketDTO: Decodable {
     /// Resolution-criteria text. Absent for many markets.
     let description: String?
 
+    /// JSON keys for `MarketDTO`.
     enum CodingKeys: String, CodingKey {
         case id, conditionId, question, slug, outcomes, outcomePrices, clobTokenIds
         case volume, liquidity, endDateIso, closed, active, image
         case sportsMarketType, groupItemTitle, description
     }
 
+    /// Tolerant decoder: missing/odd fields degrade a single market rather than failing the
+    /// whole page, and the parallel stringified arrays are parsed via `DTODecoding`.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
@@ -64,23 +78,35 @@ struct MarketDTO: Decodable {
     }
 }
 
+/// Gamma `/events` row wrapping several `MarketDTO`s. Tolerant decoding: a missing `title`
+/// falls back to the slug, missing arrays default to empty.
 struct EventDTO: Decodable {
+    /// The event id.
     let id: String
+    /// The event title (falls back to the slug when absent).
     let title: String
+    /// The event's URL slug.
     let slug: String
+    /// The markets embedded in this event.
     let markets: [MarketDTO]
+    /// Total event volume.
     let volume: Decimal
+    /// The event image URL string, if any.
     let image: String?
+    /// The event's category tags.
     let tags: [TagDTO]
     /// Kickoff time for sports events. Absent for non-sports events.
     let gameStartTime: String?
     /// Event-level context/description. Absent for many events.
     let description: String?
 
+    /// JSON keys for `EventDTO`.
     enum CodingKeys: String, CodingKey {
         case id, title, slug, markets, volume, image, tags, gameStartTime, description
     }
 
+    /// Tolerant decoder falling back to the slug for a missing title and to empty
+    /// collections for missing arrays.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
@@ -96,9 +122,13 @@ struct EventDTO: Decodable {
     }
 }
 
+/// Gamma tag row (category).
 struct TagDTO: Decodable {
+    /// The tag id.
     let id: String
+    /// The display label.
     let label: String
+    /// The tag's URL slug.
     let slug: String
 }
 

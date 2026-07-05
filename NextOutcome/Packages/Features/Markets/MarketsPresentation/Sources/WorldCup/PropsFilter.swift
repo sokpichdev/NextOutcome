@@ -12,6 +12,7 @@ import MarketsDomain
 public enum PropsFilter: String, CaseIterable, Sendable {
     case all, awards, playerH2H, groupFutures
 
+    /// The chip label for this filter.
     public var title: String {
         switch self {
         case .all:          return "All"
@@ -21,9 +22,14 @@ public enum PropsFilter: String, CaseIterable, Sendable {
         }
     }
 
+    /// Title keywords that identify award markets (Golden Boot, etc.).
     static let awardKeywords = ["golden boot", "golden ball", "golden glove", "best young", "award"]
+    /// The sports-market-type prefix that identifies player-vs-player markets.
     static let playerMarketTypePrefix = "soccer_player"
 
+    /// Whether an event belongs to this filter, using keyword/market-type heuristics.
+    /// - Parameter event: The event to test.
+    /// - Returns: `true` if the event matches this filter (`.all` always matches).
     public func matches(_ event: Event) -> Bool {
         let title = event.title.lowercased()
         switch self {

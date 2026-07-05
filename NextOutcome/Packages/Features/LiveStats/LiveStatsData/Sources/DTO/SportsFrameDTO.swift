@@ -14,13 +14,23 @@
 import Foundation
 import LiveStatsDomain
 
+/// The raw JSON shape of one WebSocket frame from the sports feed. Every field is
+/// optional because the feed mixes per-game state frames with control traffic
+/// (PING/PONG) that carries none of these keys.
 struct SportsFrameDTO: Decodable {
+    /// The game's unique ID. `nil` means this frame isn't per-game state and is skipped.
     let metadataGameId: String?
+    /// The league/competition abbreviation (e.g. "cricket").
     let leagueAbbreviation: String?
+    /// The score as a `"home-away"` string (e.g. "156-156"), if present.
     let score: String?
+    /// The current period label, if present.
     let period: String?
+    /// Whether the match is live, if present.
     let live: Bool?
+    /// Whether the match has ended, if present.
     let ended: Bool?
+    /// The finish timestamp, if the match has ended.
     let finishedTimestamp: String?
 }
 

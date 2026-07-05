@@ -9,6 +9,9 @@
 import Foundation
 import SharedDomain
 
+/// A do-nothing `MarketRepository` for previews and unit tests: every method returns an
+/// empty result (and `fetchEvent` throws), so use-case `.stub` instances can be built
+/// without any real networking. DEBUG-only.
 #if DEBUG
 struct StubMarketRepository: MarketRepository {
     func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus) async throws -> Page<Event> {

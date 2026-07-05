@@ -14,11 +14,17 @@ import LiveStatsDomain
 /// "Not available for this match" placeholder. The socket is injected via environment so
 /// this view carries no Data-layer dependency.
 public struct LiveTabView: View {
+    /// The game to show live stats for.
     private let gameID: String
+    /// The streamer injected from the environment; `nil` in previews/tests.
     @Environment(\.sportsStreamer) private var streamer
+    /// The view model, created lazily once a streamer is available.
     @State private var vm: LiveTabViewModel?
+    /// Index of the currently-selected section chip.
     @State private var selectedSection = 0
 
+    /// Creates the Live tab for a specific game.
+    /// - Parameter gameID: The game's feed identifier.
     public init(gameID: String) {
         self.gameID = gameID
     }
@@ -39,6 +45,9 @@ public struct LiveTabView: View {
         }
     }
 
+    /// Builds the loaded content: the score hero, then either an error+retry block or the
+    /// section chip row and the selected section's view.
+    /// - Parameter vm: The active view model to read state from.
     @ViewBuilder
     private func content(_ vm: LiveTabViewModel) -> some View {
         ScoreHero(match: vm.match, connection: vm.connection)
@@ -57,6 +66,10 @@ public struct LiveTabView: View {
         }
     }
 
+    /// Maps a `LiveSection` to its concrete section view.
+    /// - Parameters:
+    ///   - section: Which section to render.
+    ///   - match: The latest match snapshot to feed into the section.
     @ViewBuilder
     private func section(for section: LiveSection, match: LiveStatsDomain.MatchState?) -> some View {
         switch section {

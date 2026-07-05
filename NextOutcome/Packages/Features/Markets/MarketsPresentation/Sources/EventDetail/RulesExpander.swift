@@ -4,11 +4,16 @@ import DesignSystem
 /// Collapsible "Rules" block: event-level description plus each market's resolution
 /// criteria. Collapsed by default, matching the live site's "Show more" pattern.
 public struct RulesExpander: View {
+    /// One market's resolution-criteria entry within the rules block.
     public struct MarketRule: Identifiable {
+        /// Stable identity (usually the market id).
         public let id: String
+        /// The rule's heading (e.g. the market/outcome name).
         public let title: String
+        /// The resolution-criteria text.
         public let text: String
 
+        /// Creates a market rule entry.
         public init(id: String, title: String, text: String) {
             self.id = id
             self.title = title
@@ -16,15 +21,23 @@ public struct RulesExpander: View {
         }
     }
 
+    /// The event-level description shown at the top when expanded.
     private let eventDescription: String?
+    /// The per-market rules listed below the description.
     private let marketRules: [MarketRule]
+    /// Whether the block is expanded.
     @State private var isExpanded = false
 
+    /// Creates the rules expander.
+    /// - Parameters:
+    ///   - eventDescription: The event-level description, if any.
+    ///   - marketRules: The per-market resolution rules.
     public init(eventDescription: String?, marketRules: [MarketRule]) {
         self.eventDescription = eventDescription
         self.marketRules = marketRules
     }
 
+    /// Whether there's any content to show (otherwise the block renders nothing).
     private var hasContent: Bool {
         (eventDescription?.isEmpty == false) || !marketRules.isEmpty
     }

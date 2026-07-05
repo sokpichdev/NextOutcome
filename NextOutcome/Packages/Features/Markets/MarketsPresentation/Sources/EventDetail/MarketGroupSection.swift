@@ -5,7 +5,9 @@ import DesignSystem
 /// The two sides a trader can take on a market. Placeholder for Task 8's trade sheet, which
 /// consumes `MarketGroupSection`'s `onSelect(Market, Side)` hook.
 public enum Side {
+    /// The Yes side.
     case yes
+    /// The No side.
     case no
 }
 
@@ -14,14 +16,24 @@ public enum Side {
 /// and two `PriceButton`s. Tapping a price button fires `onSelect`; tapping the rest
 /// of the row pushes `MarketDetailView` via `NavigationLink(value: market)`.
 public struct MarketGroupSection: View {
+    /// The group (section) this represents (e.g. Moneyline).
     private let group: MarketGroup
+    /// The markets belonging to the group.
     private let markets: [Market]
+    /// The parent event id, threaded into navigation targets.
     private let eventID: String
+    /// Called when a price button is tapped, with the market and chosen side.
     private let onSelect: (Market, Side) -> Void
     /// Resolved (eliminated) outcomes are collapsed behind a toggle to keep the tradeable
     /// list clean — matching the live site's "Hide resolved" section.
     @State private var showResolved = false
 
+    /// Creates the section.
+    /// - Parameters:
+    ///   - group: The market group.
+    ///   - markets: The group's markets.
+    ///   - eventID: The parent event id.
+    ///   - onSelect: Callback for a price-button tap. Defaults to a no-op.
     public init(group: MarketGroup, markets: [Market], eventID: String, onSelect: @escaping (Market, Side) -> Void = { _, _ in }) {
         self.group = group
         self.markets = markets
@@ -72,6 +84,7 @@ public struct MarketGroupSection: View {
         }
     }
 
+    /// The "Show/Hide resolved" toggle row.
     private var resolvedToggle: some View {
         Button {
             withAnimation(.easeInOut(duration: 0.2)) { showResolved.toggle() }
@@ -126,6 +139,9 @@ public struct MarketGroupSection: View {
         market.outcomes.max { $0.price < $1.price }
     }
 
+    /// A tradeable market row: icon + name + chance, with Buy Yes/No price buttons below.
+    /// Tapping the row navigates to detail; tapping a button fires `onSelect`.
+    /// - Parameter market: The market to render.
     @ViewBuilder
     private func row(for market: Market) -> some View {
         VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
@@ -161,6 +177,7 @@ public struct MarketGroupSection: View {
         }
     }
 
+    /// The row's display title: the sports sub-label if present, else the question.
     private func rowTitle(_ market: Market) -> String {
         market.groupItemTitle ?? market.question
     }
