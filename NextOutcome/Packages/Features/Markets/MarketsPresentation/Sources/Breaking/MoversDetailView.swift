@@ -10,15 +10,13 @@ import MarketsDomain
 import DesignSystem
 import SharedDomain
 
-/// The bespoke Breaking movers detail. Two layouts, per `EventLayoutClassifier`:
-/// - `.chart`: the mover's headline chance + 24h delta, a multi-series chart of the parent
-///   event's sibling outcomes (mutually-exclusive candidates resolving on one date), and a
-///   single Buy Yes/No trade row.
-/// - `.dateLadder`: no single headline chance (the event has no one resolution date to
-///   summarize) — just the total volume line and a scrollable list of per-date rows, each
-///   with its own chance and Buy Yes/No (e.g. "GPT-5.6 released by…?").
+/// The bespoke Breaking movers detail — step 2 of the Breaking flow: a listing of every
+/// candidate/deadline in the mover's parent event (the event's total volume, then one row
+/// per candidate with its own chance and Buy Yes/No), matching the web. Buy Yes/No opens the
+/// trade sheet directly; tapping a row instead pushes that specific market's own detail
+/// (step 3), which carries the same Rules/Comments/Top Holders/Positions/Activity treatment.
 public struct MoversDetailView: View {
-    /// The view model, which fetches the parent event and builds the chart.
+    /// The view model, which fetches the parent event and social strip.
     @State private var viewModel: MoversDetailViewModel
     /// The (simulated) trade submitter for the Buy Yes/No sheet.
     @Environment(\.tradeSubmitter) private var tradeSubmitter
@@ -48,7 +46,7 @@ public struct MoversDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSLayout.spacingLarge) {
                 header
-                content
+                listingSection
             }
             .padding(.horizontal, DSLayout.margin)
             .padding(.top, DSLayout.spacing)
@@ -93,8 +91,7 @@ public struct MoversDetailView: View {
 
     /// Category breadcrumb + the parent event's title (matching the web, which always shows
     /// the event's own title here — e.g. "GPT-5.6 released by…?" — never the specific tapped
-    /// market's full question). The headline chance/delta only apply to `.chart` events (a
-    /// date-ladder has no single resolution date to summarize a chance against).
+    /// market's full question).
     private var header: some View {
         VStack(alignment: .leading, spacing: DSLayout.spacingXSmall) {
             if !viewModel.categoryBreadcrumb.isEmpty {
@@ -105,72 +102,29 @@ public struct MoversDetailView: View {
             Text(viewModel.event?.title ?? viewModel.mover.eventTitle)
                 .font(DSFont.headline)
                 .foregroundStyle(DSColor.textPrimary)
-            if viewModel.layout == .chart {
-                HStack(alignment: .firstTextBaseline, spacing: DSLayout.spacingSmall) {
-                    Text(MarketFormatting.percent(viewModel.mover.probability))
-                        .font(DSFont.largeTitle)
-                        .foregroundStyle(DSColor.textPrimary)
-                    delta
-                }
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The chart-and-trade-row body for `.chart` events, or the volume line + date rows for
-    /// `.dateLadder` events, switching once the event has loaded (defaults to the chart's own
-    /// loading placeholder beforehand).
+    /// The listing body: the event's total volume, then one row per candidate/deadline, or a
+    /// loading/error placeholder while the event loads.
     @ViewBuilder
-    private var content: some View {
-        if viewModel.layout == .dateLadder {
-            dateLadderSection
-        } else {
-            chartSection
-            tradeRow
-        }
-    }
-
-    /// The date-ladder body: the event's total volume, then one row per unresolved deadline.
-    /// Tapping a row (outside its Buy Yes/No buttons) pushes that specific date's own
-    /// `MarketDetailView` — same Rules/Comments/Top Holders/Positions/Activity treatment,
-    /// scoped to that one market — while the buttons open the trade sheet directly.
-    @ViewBuilder
-    private var dateLadderSection: some View {
+    private var listingSection: some View {
         if let eventID = viewModel.event?.id {
             VStack(alignment: .leading, spacing: 0) {
                 Text(volumeText)
                     .font(DSFont.caption)
                     .foregroundStyle(DSColor.textSecondary)
                     .padding(.bottom, DSLayout.spacingSmall)
-                ForEach(Array(viewModel.dateLadderMarkets.enumerated()), id: \.element.id) { index, market in
-                    DateLadderRow(market: market, eventID: eventID) { side in
+                ForEach(Array(viewModel.listingMarkets.enumerated()), id: \.element.id) { index, market in
+                    MoverCandidateRow(market: market, eventID: eventID) { side in
                         tradeContext = TradeSheetContext(market: market, side: side)
                     }
-                    if index < viewModel.dateLadderMarkets.count - 1 {
+                    if index < viewModel.listingMarkets.count - 1 {
                         Divider().overlay(DSColor.separator)
                     }
                 }
             }
-        }
-    }
-
-    /// The 24h delta chip beside the headline chance.
-    private var delta: some View {
-        let points = Int((NSDecimalNumber(decimal: viewModel.mover.magnitude).doubleValue * 100).rounded())
-        let color = viewModel.mover.isUp ? DSColor.positive : DSColor.negative
-        return HStack(spacing: 2) {
-            Image(systemName: viewModel.mover.isUp ? "arrow.up.right" : "arrow.down.right")
-            Text("\(points)%")
-        }
-        .font(DSFont.subheadline.bold())
-        .foregroundStyle(color)
-    }
-
-    /// The chart section, or a loading/error placeholder while the event/chart loads.
-    @ViewBuilder
-    private var chartSection: some View {
-        if let chart = viewModel.chart {
-            MoversChartSection(chart: chart, volumeText: volumeText)
         } else if let message = viewModel.errorMessage {
             VStack(spacing: DSLayout.spacingSmall) {
                 Text(message).font(DSFont.subheadline).foregroundStyle(DSColor.textSecondary)
@@ -182,73 +136,9 @@ public struct MoversDetailView: View {
         }
     }
 
-    /// "🏆 $358K Vol." line built from the parent event's total volume.
+    /// "$358K Vol." line built from the parent event's total volume.
     private var volumeText: String {
         let volume = viewModel.event?.volume ?? viewModel.mover.volume24h
         return "\(MarketFormatting.compactUSD(volume)) Vol."
-    }
-
-    /// Buy Yes / Buy No entry into the mock trade sheet for the mover's market.
-    @ViewBuilder
-    private var tradeRow: some View {
-        if let market = viewModel.primaryMarket, let yes = market.yesOutcome, let no = market.noOutcome {
-            HStack(spacing: DSLayout.spacingSmall) {
-                PriceButton(title: "Buy \(yes.title)", price: cents(yes.price), style: .yes) {
-                    tradeContext = TradeSheetContext(market: market, side: .yes)
-                }
-                PriceButton(title: "Buy \(no.title)", price: cents(no.price), style: .no) {
-                    tradeContext = TradeSheetContext(market: market, side: .no)
-                }
-            }
-        }
-    }
-
-    /// Formats a 0…1 price as a cent label.
-    private func cents(_ price: Decimal) -> String {
-        MarketFormatting.percent(price).replacingOccurrences(of: "%", with: "¢")
-    }
-}
-
-/// The chart block: a multi-series line chart of the event's outcomes, a volume line, and a
-/// timeframe picker bound to the chart view model. Split out so it can `@Bindable` the chart.
-private struct MoversChartSection: View {
-    /// The chart view model, bindable so the timeframe picker can drive reloads.
-    @Bindable var chart: EventChartViewModel
-    /// The formatted volume line shown under the chart.
-    let volumeText: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: DSLayout.spacing) {
-            chartBody
-            HStack {
-                Label(volumeText, systemImage: "trophy")
-                    .font(DSFont.caption)
-                    .foregroundStyle(DSColor.textSecondary)
-                Spacer()
-                TimeframePicker(selected: $chart.timeframe)
-            }
-        }
-    }
-
-    /// The chart itself, switching on the chart view model's load state.
-    @ViewBuilder
-    private var chartBody: some View {
-        switch chart.state {
-        case .loaded(let series):
-            MultiSeriesChart(series: series).frame(height: 220)
-        case .idle, .loading:
-            StateView(.loading).frame(height: 220)
-        case .empty:
-            Text("No chart data yet.")
-                .font(DSFont.subheadline)
-                .foregroundStyle(DSColor.textSecondary)
-                .frame(maxWidth: .infinity, minHeight: 220)
-        case .failed(let message):
-            VStack(spacing: DSLayout.spacingSmall) {
-                Text(message).font(DSFont.subheadline).foregroundStyle(DSColor.textSecondary)
-                Button("Retry") { Task { await chart.retry() } }.tint(DSColor.accent)
-            }
-            .frame(maxWidth: .infinity, minHeight: 220)
-        }
     }
 }

@@ -75,19 +75,17 @@ final class AppContainer {
     }
 
     /// A factory for the bespoke movers detail screen. It builds the detail view model when a
-    /// mover row is tapped, wiring in the parent-event fetch, the price-history provider (for
-    /// the multi-series chart), and the social-strip factory (for Comments/Top Holders/
-    /// Positions/Activity) — all built synchronously in `load()` rather than read from the
-    /// view's environment, so the sheet always has real content the moment it's presented.
+    /// mover row is tapped, wiring in the parent-event fetch and the social-strip factory (for
+    /// Comments/Top Holders/Positions/Activity) — built synchronously in `load()` rather than
+    /// read from the view's environment, so the sheet always has real content the moment it's
+    /// presented.
     func makeMoversDetailFactory() -> MoversDetailViewModelFactory {
-        let provider = makePriceHistoryProvider()
         let socialStripFactory = makeSocialStripFactory()
         return MoversDetailViewModelFactory { [repository] mover in
             let fetchEvent = FetchEventUseCase(repository: repository)
             return MoversDetailViewModel(
                 mover: mover,
                 fetchEvent: { try await fetchEvent.execute(slug: $0) },
-                provider: provider,
                 makeSocialStrip: { eventID, conditionId, markets in
                     socialStripFactory(eventID: eventID, conditionId: conditionId, markets: markets)
                 }

@@ -1,5 +1,5 @@
 //
-//  DateLadderRow.swift
+//  MoverCandidateRow.swift
 //  NextOutcome
 //
 //  Created by Sok Pich on 05/07/2026.
@@ -9,13 +9,13 @@ import SwiftUI
 import MarketsDomain
 import DesignSystem
 
-/// One row of a Breaking movers "date ladder" detail (e.g. "GPT-5.6 released by…?"): the
-/// deadline date, that market's volume, its headline chance, and a Buy Yes/No pair. Tapping
-/// the date/volume/chance part pushes that specific date's own `MarketDetailView` (same
-/// Rules/Comments/Top Holders/Positions/Activity treatment, scoped to that one market);
-/// tapping a price button fires `onTrade` directly instead of navigating.
-struct DateLadderRow: View {
-    /// The market this row represents (one "by \<date\>" deadline).
+/// One row of a Breaking movers listing: a candidate/deadline's label, its volume, headline
+/// chance, and a Buy Yes/No pair. Tapping the label/volume/chance part pushes that specific
+/// candidate's own `MarketDetailView` (same Rules/Comments/Top Holders/Positions/Activity
+/// treatment, scoped to that one market); tapping a price button fires `onTrade` directly
+/// instead of navigating.
+struct MoverCandidateRow: View {
+    /// The market this row represents (one candidate/deadline of the parent event).
     let market: Market
     /// The parent event id, threaded into the navigation target.
     let eventID: String
@@ -27,7 +27,7 @@ struct DateLadderRow: View {
             NavigationLink(value: MarketNavigationTarget(market: market, eventID: eventID)) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(dateLabel)
+                        Text(label)
                             .font(DSFont.headline)
                             .foregroundStyle(DSColor.textPrimary)
                         Text("\(MarketFormatting.compactUSD(market.volume)) Vol.")
@@ -48,16 +48,14 @@ struct DateLadderRow: View {
         .padding(.vertical, DSLayout.spacingSmall)
     }
 
-    /// The market's end date formatted as "July 6" (no year — the ladder rows are all within
-    /// one event, so the year adds no information and just clutters the row).
-    private var dateLabel: String {
-        guard let endDate = market.endDate else { return market.question }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM d"
-        return formatter.string(from: endDate)
+    /// The candidate's display label — Gamma already gives these markets a short, display-ready
+    /// `groupItemTitle` (a date like "July 6", a country name, or a special case like "Not
+    /// released before August"), so it's shown verbatim rather than reformatted.
+    private var label: String {
+        market.groupItemTitle ?? market.question
     }
 
-    /// Buy Yes / Buy No for this specific date's market.
+    /// Buy Yes / Buy No for this specific candidate's market.
     @ViewBuilder
     private var tradeRow: some View {
         if let yes = market.yesOutcome, let no = market.noOutcome {
