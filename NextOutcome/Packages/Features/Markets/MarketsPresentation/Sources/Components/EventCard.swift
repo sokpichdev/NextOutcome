@@ -26,27 +26,38 @@ public struct EventCard: View {
             VStack(alignment: .leading, spacing: DSLayout.spacing) {
                 HStack(alignment: .top, spacing: DSLayout.spacing) {
                     icon
-                    Text(event.title)
-                        .font(DSFont.headline)
-                        .foregroundStyle(DSColor.textPrimary)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                
-                if let market = event.markets.first, let yes = market.yesOutcome {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("Yes \(MarketFormatting.percent(yes.price))")
-                                .font(DSFont.priceSmall)
-                                .foregroundStyle(DSColor.positive)
-                            Spacer()
-                            if let countdown = MarketFormatting.countdown(to: market.endDate) {
-                                Text(countdown)
-                                    .font(DSFont.caption)
-                                    .foregroundStyle(DSColor.textSecondary)
-                            }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(event.title)
+                            .font(DSFont.headline)
+                            .foregroundStyle(DSColor.textPrimary)
+                            .lineLimit(2)
+                        if let market = event.markets.first,
+                           let countdown = MarketFormatting.countdown(to: market.endDate) {
+                            Text(countdown)
+                                .font(DSFont.caption)
+                                .foregroundStyle(DSColor.textSecondary)
                         }
-                        ProbabilityBar(yesFraction: MarketFormatting.fraction(yes.price))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if let market = event.markets.first, let yes = market.yesOutcome {
+                        ChanceGauge(
+                            fraction: MarketFormatting.fraction(yes.price),
+                            percentText: MarketFormatting.percent(yes.price)
+                        )
+                    }
+                }
+
+                if let market = event.markets.first, market.yesOutcome != nil {
+                    HStack(spacing: DSLayout.spacingSmall) {
+                        NavigationLink(value: MarketNavigationTarget(market: market, eventID: event.id)) {
+                            Text("Yes").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(DSBuyYesButtonStyle())
+                        NavigationLink(value: MarketNavigationTarget(market: market, eventID: event.id)) {
+                            Text("No").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(DSBuyNoButtonStyle())
                     }
                 }
                 HStack {

@@ -21,7 +21,8 @@ final class TrendingChipSelectionTests: XCTestCase {
         let repo = RecordingMarketRepository(page: Page(items: events, nextCursor: nextCursor))
         let vm = EventListViewModel(
             fetchEvents: FetchEventsUseCase(repository: repo),
-            fetchTags: FetchTagsUseCase(repository: repo)
+            fetchTags: FetchTagsUseCase(repository: repo),
+            searchEvents: SearchEventsUseCase(repository: repo)
         )
         return (vm, repo)
     }
@@ -118,7 +119,7 @@ private final class RecordingMarketRepository: MarketRepository, @unchecked Send
 
     init(page: Page<Event>) { self.page = page }
 
-    func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus) async throws -> Page<Event> {
+    func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod) async throws -> Page<Event> {
         fetchedTagIDs.append(tagID)
         fetchedCursors.append(cursor)
         return page
@@ -130,6 +131,6 @@ private final class RecordingMarketRepository: MarketRepository, @unchecked Send
     func searchMarkets(query: String) async throws -> [Market] { [] }
     func fetchTags() async throws -> [Tag] { [] }
     func holders(conditionId: String) async throws -> [Holder] { [] }
-    func comments(eventID: String) async throws -> [Comment] { [] }
+    func comments(eventID: String, sort: CommentSort, holdersOnly: Bool) async throws -> [Comment] { [] }
     func trades(conditionId: String) async throws -> [ActivityTrade] { [] }
 }

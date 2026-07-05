@@ -24,6 +24,7 @@ public struct HomeCard: View {
         switch kind {
         case .liveUpDown:  LiveUpDownCard(event: event)
         case .news:        NewsCard(event: event)
+        case .game:        GameCard(event: event, result: nil, moneylines: event.markets)
         case .multiOutcome: MultiOutcomeCard(event: event)
         case .hero:        HeroPromoCard(event: event)
         case .standard:    EventCard(event: event)
