@@ -26,7 +26,9 @@ struct MidtermsPromoCard: View {
                     .font(DSFont.title)
                 USStateMapView(colors: viewModel.leanByState(for: .senate).mapValues(\.color))
                     .frame(height: 130)
+                    .frame(maxWidth: .infinity)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
