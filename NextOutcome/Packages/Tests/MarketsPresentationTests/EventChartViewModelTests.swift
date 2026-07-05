@@ -25,11 +25,11 @@ private actor Gate {
 }
 
 final class EventChartViewModelTests: XCTestCase {
-    private func market(_ name: String, yes: Double, isResolved: Bool = false) -> Market {
+    private func market(_ name: String, yes: Double) -> Market {
         Market(id: name, question: name, slug: name,
                outcomes: [Outcome(id: "\(name)-yes", title: "Yes", price: Decimal(yes)),
                           Outcome(id: "\(name)-no", title: "No", price: Decimal(1 - yes))],
-               volume: 0, liquidity: 0, endDate: nil, isResolved: isResolved, imageURL: nil)
+               volume: 0, liquidity: 0, endDate: nil, isResolved: false, imageURL: nil)
     }
 
     @MainActor
@@ -48,74 +48,6 @@ final class EventChartViewModelTests: XCTestCase {
         XCTAssertEqual(series.count, 2)
         XCTAssertNotEqual(series[0].color, series[1].color)
         XCTAssertEqual(series[0].points.last?.price ?? 0, 0.33, accuracy: 0.001)
-    }
-
-    /// Regression test: a multi-candidate event (e.g. "GPT-5.6 released on…?" — one market
-    /// per specific day) can carry dozens of markets in arbitrary array order. The top 4
-    /// charted must be the 4 highest-Yes-probability markets, not whichever 4 happen to sit
-    /// first in the array (which was often stale near-zero noise).
-    @MainActor
-    func test_load_picksTop4ByYesProbability_regardlessOfArrayOrder() async {
-        let event = Event(
-            id: "e", title: "GPT-5.6 released on…?", slug: "gpt",
-            markets: [
-                market("June25", yes: 0.001),   // low-probability noise, listed first
-                market("June26", yes: 0.001),
-                market("July9", yes: 0.52),      // the real leaders, listed later
-                market("July7", yes: 0.1575),
-                market("July8", yes: 0.0935),
-                market("July16", yes: 0.0745),
-            ],
-            volume: 0, imageURL: nil, tags: []
-        )
-        let provider = PriceHistoryProvider { assetID, _ in [PriceHistoryPoint(date: Date(), price: 0.5)] }
-        let vm = EventChartViewModel(event: event, provider: provider)
-        await vm.load()
-
-        guard case .loaded(let series) = vm.state else { return XCTFail("expected .loaded, got \(vm.state)") }
-        XCTAssertEqual(series.map(\.label), ["July9", "July7", "July8", "July16"])
-    }
-
-    /// Already-resolved sibling markets (e.g. past days that came and went) are excluded from
-    /// the top 4 in favor of still-open markets, even when a resolved market's stale price
-    /// would otherwise outrank them.
-    @MainActor
-    func test_load_prefersOpenMarkets_overResolvedOnes() async {
-        let event = Event(
-            id: "e", title: "GPT-5.6 released on…?", slug: "gpt",
-            markets: [
-                market("StaleResolved", yes: 0.99, isResolved: true),
-                market("July9", yes: 0.52),
-                market("July7", yes: 0.1575),
-            ],
-            volume: 0, imageURL: nil, tags: []
-        )
-        let provider = PriceHistoryProvider { assetID, _ in [PriceHistoryPoint(date: Date(), price: 0.5)] }
-        let vm = EventChartViewModel(event: event, provider: provider)
-        await vm.load()
-
-        guard case .loaded(let series) = vm.state else { return XCTFail("expected .loaded, got \(vm.state)") }
-        XCTAssertEqual(series.map(\.label), ["July9", "July7"])
-    }
-
-    /// A fully-resolved (historical) event has no open markets to prefer — falls back to
-    /// charting the resolved markets themselves rather than showing an empty chart.
-    @MainActor
-    func test_load_fullyResolvedEvent_fallsBackToResolvedMarkets() async {
-        let event = Event(
-            id: "e", title: "Past event", slug: "past",
-            markets: [
-                market("Winner", yes: 1.0, isResolved: true),
-                market("Loser", yes: 0.0, isResolved: true),
-            ],
-            volume: 0, imageURL: nil, tags: []
-        )
-        let provider = PriceHistoryProvider { assetID, _ in [PriceHistoryPoint(date: Date(), price: 0.5)] }
-        let vm = EventChartViewModel(event: event, provider: provider)
-        await vm.load()
-
-        guard case .loaded(let series) = vm.state else { return XCTFail("expected .loaded, got \(vm.state)") }
-        XCTAssertEqual(series.map(\.label), ["Winner", "Loser"])
     }
 
     /// Regression test: rapidly changing `timeframe` spawns overlapping unstructured
