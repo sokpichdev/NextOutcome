@@ -24,11 +24,24 @@ public struct MoversDetailView: View {
     @Environment(\.tradeSubmitter) private var tradeSubmitter
     /// The context that presents the mock trade sheet, when a Buy button is tapped.
     @State private var tradeContext: TradeSheetContext?
+    /// Whether the Rules bottom sheet is presented.
+    @State private var showsRulesSheet = false
+    /// Whether the Comments/Top Holders/Positions/Activity bottom sheet is presented.
+    @State private var showsDiscussSheet = false
 
     /// Creates the view.
     /// - Parameter viewModel: The movers-detail view model (built by the factory).
     public init(viewModel: MoversDetailViewModel) {
         self._viewModel = State(initialValue: viewModel)
+    }
+
+    /// The per-market resolution rules to feed the `RulesExpander` (markets without rules are
+    /// skipped), mirroring `EventDetailView`'s equivalent.
+    private var marketRules: [RulesExpander.MarketRule] {
+        (viewModel.event?.markets ?? []).compactMap { market in
+            guard let rules = market.rules, !rules.isEmpty else { return nil }
+            return RulesExpander.MarketRule(id: market.id, title: market.groupItemTitle ?? market.question, text: rules)
+        }
     }
 
     public var body: some View {
@@ -41,11 +54,41 @@ public struct MoversDetailView: View {
             .padding(.top, DSLayout.spacing)
         }
         .background(DSColor.background)
-        .detailToolbar(title: viewModel.mover.eventTitle, iconURL: viewModel.mover.imageURL, actions: [.bookmark, .link])
+        .detailToolbar(
+            title: viewModel.mover.eventTitle, iconURL: viewModel.mover.imageURL,
+            actions: [.rules, .discuss, .bookmark, .link], onAction: handleHeaderAction
+        )
+        .navigationDestination(for: MarketNavigationTarget.self) {
+            MarketDetailView(market: $0.market, eventID: $0.eventID)
+        }
         .sheet(item: $tradeContext) { context in
             TradeSheet(viewModel: TradeSheetViewModel(market: context.market, side: context.side, submitter: tradeSubmitter))
         }
+        .sheet(isPresented: $showsRulesSheet) {
+            ScrollView {
+                RulesExpander(eventDescription: viewModel.event?.description, marketRules: marketRules, startsExpanded: true)
+                    .padding(DSLayout.margin)
+            }
+            .presentationDetents([.medium, .large])
+            .background(DSColor.background)
+        }
+        .sheet(isPresented: $showsDiscussSheet) {
+            ScrollView {
+                if let socialStrip = viewModel.socialStrip {
+                    SocialStripView(viewModel: socialStrip)
+                        .padding(DSLayout.margin)
+                }
+            }
+            .presentationDetents([.medium, .large])
+            .background(DSColor.background)
+        }
         .task { await viewModel.load() }
+    }
+
+    /// Routes a toolbar trailing-action tap: Rules/Comments open their bottom sheets.
+    private func handleHeaderAction(_ action: DetailToolbarActions) {
+        if action.contains(.rules) { showsRulesSheet = true }
+        if action.contains(.discuss) { showsDiscussSheet = true }
     }
 
     /// Category breadcrumb + question title. The headline chance/delta only apply to `.chart`
@@ -86,18 +129,24 @@ public struct MoversDetailView: View {
     }
 
     /// The date-ladder body: the event's total volume, then one row per unresolved deadline.
+    /// Tapping a row (outside its Buy Yes/No buttons) pushes that specific date's own
+    /// `MarketDetailView` — same Rules/Comments/Top Holders/Positions/Activity treatment,
+    /// scoped to that one market — while the buttons open the trade sheet directly.
+    @ViewBuilder
     private var dateLadderSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(volumeText)
-                .font(DSFont.caption)
-                .foregroundStyle(DSColor.textSecondary)
-                .padding(.bottom, DSLayout.spacingSmall)
-            ForEach(Array(viewModel.dateLadderMarkets.enumerated()), id: \.element.id) { index, market in
-                DateLadderRow(market: market) { side in
-                    tradeContext = TradeSheetContext(market: market, side: side)
-                }
-                if index < viewModel.dateLadderMarkets.count - 1 {
-                    Divider().overlay(DSColor.separator)
+        if let eventID = viewModel.event?.id {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(volumeText)
+                    .font(DSFont.caption)
+                    .foregroundStyle(DSColor.textSecondary)
+                    .padding(.bottom, DSLayout.spacingSmall)
+                ForEach(Array(viewModel.dateLadderMarkets.enumerated()), id: \.element.id) { index, market in
+                    DateLadderRow(market: market, eventID: eventID) { side in
+                        tradeContext = TradeSheetContext(market: market, side: side)
+                    }
+                    if index < viewModel.dateLadderMarkets.count - 1 {
+                        Divider().overlay(DSColor.separator)
+                    }
                 }
             }
         }

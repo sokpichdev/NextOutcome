@@ -44,6 +44,8 @@ public struct MarketDetailView: View {
     @State private var portfolioSegment = 0
     /// Task 8's mock trade sheet, opened from the Yes/No buttons next to the order book.
     @State private var tradeContext: TradeSheetContext?
+    /// Whether the Rules bottom sheet is presented.
+    @State private var showsRulesSheet = false
     /// The market being displayed.
     private let market: Market
     /// The parent event's id, used to scope the Comments strip. `nil` when this screen was
@@ -75,10 +77,34 @@ public struct MarketDetailView: View {
             .padding(.top, DSLayout.spacing)
         }
         .background(DSColor.background)
-        .detailToolbar(title: market.question, iconURL: market.imageURL, actions: [.code, .bookmark, .link])
+        .detailToolbar(
+            title: market.question, iconURL: market.imageURL,
+            actions: [.rules, .code, .bookmark, .link], onAction: handleHeaderAction
+        )
         .sheet(item: $tradeContext) { context in
             TradeSheet(viewModel: TradeSheetViewModel(market: context.market, side: context.side, submitter: tradeSubmitter))
         }
+        .sheet(isPresented: $showsRulesSheet) {
+            ScrollView {
+                RulesExpander(eventDescription: nil, marketRules: marketRules, startsExpanded: true)
+                    .padding(DSLayout.margin)
+            }
+            .presentationDetents([.medium, .large])
+            .background(DSColor.background)
+        }
+    }
+
+    /// This screen's single market's resolution rules, if any (skipped when absent) — the
+    /// same `RulesExpander` used by `EventDetailView`/`MoversDetailView`, scoped to just this
+    /// one market since there's no sibling-market group here.
+    private var marketRules: [RulesExpander.MarketRule] {
+        guard let rules = market.rules, !rules.isEmpty else { return [] }
+        return [RulesExpander.MarketRule(id: market.id, title: market.groupItemTitle ?? market.question, text: rules)]
+    }
+
+    /// Routes a toolbar trailing-action tap: Rules opens its bottom sheet.
+    private func handleHeaderAction(_ action: DetailToolbarActions) {
+        if action.contains(.rules) { showsRulesSheet = true }
     }
 
     /// Yes/No entry into the mock trade sheet — Task 8's hook next to the order book.

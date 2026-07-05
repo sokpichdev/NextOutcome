@@ -23,6 +23,8 @@ public final class MoversDetailViewModel {
     public private(set) var event: Event?
     /// The multi-series chart view model, built only when `layout == .chart`.
     public private(set) var chart: EventChartViewModel?
+    /// The Comments/Top Holders/Positions/Activity social strip, built once the event loads.
+    public private(set) var socialStrip: SocialStripViewModel?
     /// Whether the event fetch is in flight.
     public private(set) var isLoading = false
     /// A user-facing error message when the event fetch fails, else `nil`.
@@ -49,20 +51,25 @@ public final class MoversDetailViewModel {
     private let fetchEvent: @Sendable (String) async throws -> Event
     /// Supplies price-history data to the chart.
     private let provider: PriceHistoryProvider
+    /// Builds the social strip view model from an event id, condition id, and markets.
+    private let makeSocialStrip: @MainActor (String, String?, [Market]) -> SocialStripViewModel
 
     /// Creates the view model.
     /// - Parameters:
     ///   - mover: The tapped mover.
     ///   - fetchEvent: Fetches the parent event by slug.
     ///   - provider: The price-history data source for the chart.
+    ///   - makeSocialStrip: Builds the Comments/Top Holders/Positions/Activity social strip.
     public init(
         mover: Mover,
         fetchEvent: @escaping @Sendable (String) async throws -> Event,
-        provider: PriceHistoryProvider
+        provider: PriceHistoryProvider,
+        makeSocialStrip: @escaping @MainActor (String, String?, [Market]) -> SocialStripViewModel
     ) {
         self.mover = mover
         self.fetchEvent = fetchEvent
         self.provider = provider
+        self.makeSocialStrip = makeSocialStrip
     }
 
     /// The market this mover refers to (matched by id within the event), falling back to the
@@ -78,9 +85,9 @@ public final class MoversDetailViewModel {
         (event?.tags.prefix(2).map(\.label) ?? []).joined(separator: " · ")
     }
 
-    /// Loads the parent event and, for chart-layout events, builds/loads the multi-series
-    /// chart (date-ladder events render straight from `dateLadderMarkets` — no chart needed).
-    /// Idempotent: skips if already loaded.
+    /// Loads the parent event, builds the social strip, and — for chart-layout events —
+    /// builds/loads the multi-series chart (date-ladder events render straight from
+    /// `dateLadderMarkets` — no chart needed). Idempotent: skips if already loaded.
     public func load() async {
         guard event == nil, !isLoading else { return }
         isLoading = true
@@ -89,6 +96,8 @@ public final class MoversDetailViewModel {
         do {
             let event = try await fetchEvent(mover.eventSlug)
             self.event = event
+            let conditionId = event.markets.first { $0.id == mover.id }?.conditionId ?? event.markets.first?.conditionId
+            socialStrip = makeSocialStrip(event.id, conditionId, event.markets)
             guard EventLayoutClassifier.classify(event.markets) == .chart else { return }
             let chart = EventChartViewModel(event: event, provider: provider)
             self.chart = chart
