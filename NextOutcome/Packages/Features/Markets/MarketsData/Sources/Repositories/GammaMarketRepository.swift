@@ -25,7 +25,7 @@ public struct GammaMarketRepository: MarketRepository {
     }
 
     /// Page size for cursor pagination (also how the next cursor is derived).
-    private static let pageSize = 20
+    private static let pageSize = 10
 
     /// Fetches one page of events from Gamma `/events`, applying the tag/sort/status filters.
     public func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus) async throws -> Page<Event> {
@@ -67,7 +67,8 @@ public struct GammaMarketRepository: MarketRepository {
             // Search returns a composite envelope — decode markets array only
             struct SearchEnvelope: Decodable { let markets: [MarketDTO] }
             let envelope: SearchEnvelope = try await client.fetch(endpoint)
-            return envelope.markets.map(MarketMapper.market(from:))
+            // No documented `limit` param on /public-search; cap client-side.
+            return envelope.markets.prefix(10).map(MarketMapper.market(from:))
         }
 
     /// Fetches the top holders of a market's condition from Data `/holders`.
@@ -75,7 +76,7 @@ public struct GammaMarketRepository: MarketRepository {
         let endpoint = Endpoint(
             host: .data,
             path: "/holders",
-            query: ["market": conditionId, "limit": "20"]
+            query: ["market": conditionId, "limit": "10"]
         )
         let groups: [HolderGroupDTO] = try await client.fetch(endpoint)
         return MarketMapper.holders(from: groups)
@@ -86,7 +87,7 @@ public struct GammaMarketRepository: MarketRepository {
         let endpoint = Endpoint(
             host: .gamma,
             path: "/comments",
-            query: ["parent_entity_type": "Event", "parent_entity_id": eventID]
+            query: ["parent_entity_type": "Event", "parent_entity_id": eventID, "limit": "10"]
         )
         let dtos: [CommentDTO] = try await client.fetch(endpoint)
         return MarketMapper.comments(from: dtos)
@@ -97,7 +98,7 @@ public struct GammaMarketRepository: MarketRepository {
         let endpoint = Endpoint(
             host: .data,
             path: "/trades",
-            query: ["market": conditionId, "limit": "50"]
+            query: ["market": conditionId, "limit": "10"]
         )
         let dtos: [ActivityTradeDTO] = try await client.fetch(endpoint)
         return MarketMapper.trades(from: dtos)
@@ -170,7 +171,7 @@ public struct GammaMarketRepository: MarketRepository {
         let endpoint = Endpoint(
             host: .gamma,
             path: "/tags",
-            query: ["limit": "50", "is_carousel": "true"]
+            query: ["limit": "10", "is_carousel": "true"]
         )
         let dtos: [TagDTO] = try await client.fetch(endpoint)
         return dtos.map(MarketMapper.tag(from:))
@@ -180,7 +181,7 @@ public struct GammaMarketRepository: MarketRepository {
 /// Pure, testable mapper from domain query params to Gamma API query dictionary.
 public enum GammaEventQuery {
     /// The page size used for the events list query.
-    private static let pageSize = 20
+    private static let pageSize = 10
 
     /// Builds the query dictionary for the paged `/events` list.
     /// - Parameters:
