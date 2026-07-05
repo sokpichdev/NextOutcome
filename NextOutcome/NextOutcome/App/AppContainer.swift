@@ -68,6 +68,27 @@ final class AppContainer {
         )
     }
 
+    /// Builds the view model for the Breaking movers feed (biggest 24h movers).
+    /// - Returns: A view model wired to fetch the ranked movers.
+    func makeBreakingViewModel() -> BreakingViewModel {
+        BreakingViewModel(fetchMovers: FetchMoversUseCase(repository: repository))
+    }
+
+    /// A factory for the bespoke movers detail screen. It builds the detail view model when a
+    /// mover row is tapped, wiring in the parent-event fetch and the price-history provider so
+    /// the multi-series chart can load without the view importing the Data layer.
+    func makeMoversDetailFactory() -> MoversDetailViewModelFactory {
+        let provider = makePriceHistoryProvider()
+        return MoversDetailViewModelFactory { [repository] mover in
+            let fetchEvent = FetchEventUseCase(repository: repository)
+            return MoversDetailViewModel(
+                mover: mover,
+                fetchEvent: { try await fetchEvent.execute(slug: $0) },
+                provider: provider
+            )
+        }
+    }
+
     /// Builds the view model for the World Cup hub screen (bracket, map, results, teams).
     /// - Returns: A view model wired with every use case the hub's sub-tabs need.
     func makeWorldCupHubViewModel() -> WorldCupHubViewModel {

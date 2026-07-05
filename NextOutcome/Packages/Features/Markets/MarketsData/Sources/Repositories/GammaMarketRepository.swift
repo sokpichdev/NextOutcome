@@ -48,6 +48,19 @@ public struct GammaMarketRepository: MarketRepository {
         return Page(items: markets, nextCursor: nextCursor)
     }
 
+    /// Fetches the biggest 24h movers for the Breaking feed from Gamma `/markets`.
+    ///
+    /// Gamma can only sort by `oneDayPriceChange` in one direction at a time, so this pulls the
+    /// biggest *losers* (ascending) and biggest *gainers* (descending) in parallel, then ranks
+    /// them with `MoverRanking` (de-dupe, denoise, sort by move magnitude) — interleaving up
+    /// and down movers like the site.
+    public func movers(tagID: String?) async throws -> [Mover] {
+        async let losers: [MoverDTO] = client.fetch(Endpoint(host: .gamma, path: "/markets", query: GammaMoversQuery.params(tagID: tagID, ascending: true)))
+        async let gainers: [MoverDTO] = client.fetch(Endpoint(host: .gamma, path: "/markets", query: GammaMoversQuery.params(tagID: tagID, ascending: false)))
+        let combined = try await losers + gainers
+        return MoverRanking.rank(combined.map(MarketMapper.mover(from:)))
+    }
+
     /// Fetches a single event by slug, throwing `APIError.badURL` if none matches.
     public func fetchEvent(slug: String) async throws -> Event {
         let endpoint = Endpoint(host: .gamma, path: "/events", query: ["slug": slug])

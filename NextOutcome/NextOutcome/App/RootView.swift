@@ -29,6 +29,8 @@ struct RootView: View {
     @State private var eventListViewModel: EventListViewModel
     /// Drives the World Cup hub shown in the Home tab when that category is selected.
     @State private var worldCupViewModel: WorldCupHubViewModel
+    /// Drives the Breaking movers feed shown in the Home tab when that category is selected.
+    @State private var breakingViewModel: BreakingViewModel
     /// Drives the Search tab.
     @State private var searchViewModel: SearchViewModel
     /// Drives the Portfolio tab.
@@ -51,6 +53,8 @@ struct RootView: View {
     private let marketHoldersFactory: MarketHoldersViewModelFactory
     /// Lazily builds the event detail social strip view model.
     private let socialStripFactory: SocialStripViewModelFactory
+    /// Lazily builds the bespoke movers detail view model when a Breaking row is tapped.
+    private let moversDetailFactory: MoversDetailViewModelFactory
     /// Supplies price-history data to charts without exposing the Data layer.
     private let priceHistoryProvider: PriceHistoryProvider
     /// Lazily builds the BTC 5-minute live screen view model.
@@ -78,6 +82,7 @@ struct RootView: View {
         let portfolio = container.makePortfolioViewModel()
         _eventListViewModel = State(initialValue: container.makeEventListViewModel())
         _worldCupViewModel = State(initialValue: container.makeWorldCupHubViewModel())
+        _breakingViewModel = State(initialValue: container.makeBreakingViewModel())
         _searchViewModel = State(initialValue: container.makeSearchViewModel())
         _portfolioViewModel = State(initialValue: portfolio)
         _activityViewModel = State(initialValue: container.makeActivityViewModel())
@@ -88,6 +93,7 @@ struct RootView: View {
         orderbookFactory = container.makeOrderbookFactory()
         marketHoldersFactory = container.makeMarketHoldersFactory()
         socialStripFactory = container.makeSocialStripFactory()
+        moversDetailFactory = container.makeMoversDetailFactory()
         priceHistoryProvider = container.makePriceHistoryProvider()
         btcLiveFactory = container.makeBTCLiveFactory()
         tradeSubmitter = container.makeTradeSubmitter()
@@ -109,6 +115,7 @@ struct RootView: View {
         .environment(\.orderbookFactory, orderbookFactory)
         .environment(\.marketHoldersFactory, marketHoldersFactory)
         .environment(\.socialStripFactory, socialStripFactory)
+        .environment(\.moversDetailFactory, moversDetailFactory)
         .environment(\.priceHistoryProvider, priceHistoryProvider)
         .environment(\.btcLiveFactory, btcLiveFactory)
         .environment(\.tradeSubmitter, tradeSubmitter)
@@ -127,6 +134,8 @@ struct RootView: View {
                     // reset when users switch tabs.
                     if selectedCategory == .worldCup {
                         WorldCupHubView(viewModel: worldCupViewModel)
+                    } else if selectedCategory == .breaking {
+                        BreakingView(viewModel: breakingViewModel)
                     } else {
                         EventListView(viewModel: eventListViewModel, selectedCategory: selectedCategory)
                     }
