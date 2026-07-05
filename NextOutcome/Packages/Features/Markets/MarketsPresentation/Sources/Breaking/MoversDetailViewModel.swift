@@ -9,22 +9,41 @@ import Foundation
 import MarketsDomain
 import OrderbookPresentation
 
-/// Drives the bespoke movers detail screen. A mover is a single market, but the detail charts
-/// its *sibling* outcomes (the other markets of the same event), so this fetches the full
-/// parent event by slug and hands it to an `EventChartViewModel` for the multi-series chart.
+/// Drives the bespoke movers detail screen. A mover is a single market, but the detail shows
+/// its *sibling* outcomes (the other markets of the same event) — either as a multi-series
+/// chart (mutually-exclusive candidates resolving on one date) or a scrollable list of
+/// per-date rows (a "by \<date\>" cumulative ladder), per `EventLayoutClassifier`. Fetches the
+/// full parent event by slug.
 @MainActor
 @Observable
 public final class MoversDetailViewModel {
     /// The mover that opened this screen — supplies the header (question, chance, delta).
     public let mover: Mover
-    /// The loaded parent event, once fetched. Its markets drive the chart and the trade row.
+    /// The loaded parent event, once fetched. Its markets drive the chart/ladder and trade row.
     public private(set) var event: Event?
-    /// The multi-series chart view model, created once the event is loaded.
+    /// The multi-series chart view model, built only when `layout == .chart`.
     public private(set) var chart: EventChartViewModel?
     /// Whether the event fetch is in flight.
     public private(set) var isLoading = false
     /// A user-facing error message when the event fetch fails, else `nil`.
     public private(set) var errorMessage: String?
+
+    /// Which layout the loaded event's markets call for. `.chart` before the event loads (so
+    /// the loading placeholder renders as a chart-shaped skeleton, matching the common case).
+    public var layout: EventLayout {
+        guard let event else { return .chart }
+        return EventLayoutClassifier.classify(event.markets)
+    }
+
+    /// The date-ladder rows when `layout == .dateLadder`: the event's unresolved markets
+    /// (closed thresholds are old news once the release already happened), soonest deadline
+    /// first. Empty for `.chart` events or before the event loads.
+    public var dateLadderMarkets: [Market] {
+        guard let event, layout == .dateLadder else { return [] }
+        return event.markets
+            .filter { !$0.isResolved }
+            .sorted { ($0.endDate ?? .distantFuture) < ($1.endDate ?? .distantFuture) }
+    }
 
     /// Fetches the full parent event by slug.
     private let fetchEvent: @Sendable (String) async throws -> Event
@@ -59,7 +78,9 @@ public final class MoversDetailViewModel {
         (event?.tags.prefix(2).map(\.label) ?? []).joined(separator: " · ")
     }
 
-    /// Loads the parent event and builds/loads the chart. Idempotent: skips if already loaded.
+    /// Loads the parent event and, for chart-layout events, builds/loads the multi-series
+    /// chart (date-ladder events render straight from `dateLadderMarkets` — no chart needed).
+    /// Idempotent: skips if already loaded.
     public func load() async {
         guard event == nil, !isLoading else { return }
         isLoading = true
@@ -68,6 +89,7 @@ public final class MoversDetailViewModel {
         do {
             let event = try await fetchEvent(mover.eventSlug)
             self.event = event
+            guard EventLayoutClassifier.classify(event.markets) == .chart else { return }
             let chart = EventChartViewModel(event: event, provider: provider)
             self.chart = chart
             await chart.load()
