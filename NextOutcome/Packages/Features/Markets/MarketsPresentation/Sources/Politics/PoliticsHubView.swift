@@ -40,7 +40,12 @@ public struct PoliticsHubView: View {
             .padding(.vertical, DSLayout.spacing)
         }
         .background(DSColor.background)
-        .navigationDestination(for: Event.self) { EventDetailView(event: $0) }
+        // No `.navigationDestination(for: Event.self)` here: this view is always pushed
+        // inside `EventListView`'s `NavigationStack` (via the "2026 Midterms Predictions"
+        // promo card), which already registers that destination. A second registration in
+        // the same stack is ambiguous — SwiftUI only honors the one closest to the stack's
+        // root and warns about the duplicate — and was destabilizing this view's identity
+        // enough to cancel its own in-flight fetch on push.
         .sheet(item: $tradeContext) { context in
             TradeSheet(viewModel: TradeSheetViewModel(market: context.market, side: context.side, submitter: tradeSubmitter))
         }
