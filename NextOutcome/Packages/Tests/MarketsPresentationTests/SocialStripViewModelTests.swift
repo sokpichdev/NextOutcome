@@ -45,6 +45,8 @@ private final class SocialStripStubRepository: MarketRepository {
     private(set) var tradesCallCount = 0
 
     func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus) async throws -> Page<Event> { Page(items: [], nextCursor: nil) }
+    func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] { [] }
+    func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] { [:] }
     func fetchMarkets(cursor: String?) async throws -> Page<Market> { Page(items: [], nextCursor: nil) }
     func fetchEvent(slug: String) async throws -> Event { throw URLError(.unknown) }
     func searchMarkets(query: String) async throws -> [Market] { [] }

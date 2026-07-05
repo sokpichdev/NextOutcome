@@ -28,6 +28,7 @@ enum MarketMapper {
             liquidity: dto.liquidity,
             endDate: DateParsing.parse(dto.endDateIso),
             isResolved: dto.closed,
+            isActive: dto.active,
             imageURL: dto.image.flatMap(URL.init(string:)),
             sportsMarketType: dto.sportsMarketType,
             groupItemTitle: dto.groupItemTitle,

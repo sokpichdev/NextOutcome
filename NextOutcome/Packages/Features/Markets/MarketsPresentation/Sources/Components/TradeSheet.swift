@@ -27,6 +27,8 @@ public struct TradeSheet: View {
                 successView
             } else {
                 amountBlock
+                sideToggle
+                quickAmountRow
                 toWinRow
                 confirmButton
                 keypad
@@ -45,23 +47,65 @@ public struct TradeSheet: View {
 
     private var header: some View {
         HStack(spacing: DSLayout.spacingSmall) {
-            Text(viewModel.market.groupItemTitle ?? viewModel.market.question)
-                .font(DSFont.subheadline)
-                .foregroundStyle(DSColor.textSecondary)
-                .lineLimit(1)
-            sidePill
+            CardIcon(url: viewModel.market.imageURL)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(viewModel.market.groupItemTitle ?? viewModel.market.question)
+                    .font(DSFont.subheadline.bold())
+                    .foregroundStyle(DSColor.textPrimary)
+                    .lineLimit(1)
+                Text("\(viewModel.market.groupItemTitle ?? viewModel.market.question) · \(viewModel.outcomeTitle)")
+                    .font(DSFont.caption)
+                    .foregroundStyle(DSColor.textSecondary)
+                    .lineLimit(1)
+            }
             Spacer()
         }
     }
 
-    private var sidePill: some View {
-        Text(viewModel.outcomeTitle)
-            .font(DSFont.caption.bold())
-            .foregroundStyle(viewModel.side == .yes ? DSColor.positive : DSColor.negative)
-            .padding(.horizontal, DSLayout.spacingMedium)
-            .padding(.vertical, DSLayout.spacingXSmall)
-            .background(viewModel.side == .yes ? DSColor.positiveTint : DSColor.negativeTint)
-            .clipShape(Capsule())
+    /// Segmented Yes/No control — switches the traded side in place, updating the
+    /// payout and subtitle. Selected side takes its green/red tint.
+    private var sideToggle: some View {
+        HStack(spacing: 0) {
+            sideSegment(.yes, title: "Yes", tint: DSColor.positive, fill: DSColor.positiveTint)
+            sideSegment(.no, title: "No", tint: DSColor.negative, fill: DSColor.negativeTint)
+        }
+        .background(DSColor.surfaceElevated)
+        .clipShape(RoundedRectangle(cornerRadius: DSLayout.chipRadius))
+    }
+
+    private func sideSegment(_ side: Side, title: String, tint: Color, fill: Color) -> some View {
+        let selected = viewModel.side == side
+        return Button {
+            viewModel.setSide(side)
+        } label: {
+            Text(title)
+                .font(DSFont.subheadline.bold())
+                .foregroundStyle(selected ? tint : DSColor.textSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DSLayout.spacingSmall)
+                .background(selected ? fill : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: DSLayout.chipRadius))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var quickAmountRow: some View {
+        HStack(spacing: DSLayout.spacingSmall) {
+            ForEach([1, 5, 10, 100], id: \.self) { amount in
+                Button {
+                    viewModel.addAmount(amount)
+                } label: {
+                    Text("+$\(amount)")
+                        .font(DSFont.subheadline.bold())
+                        .foregroundStyle(DSColor.textPrimary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, DSLayout.spacingSmall)
+                        .background(DSColor.surfaceElevated)
+                        .clipShape(RoundedRectangle(cornerRadius: DSLayout.chipRadius))
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     private var amountBlock: some View {
@@ -93,7 +137,7 @@ public struct TradeSheet: View {
                 if viewModel.phase == .submitting {
                     ProgressView().tint(.white)
                 } else {
-                    Text("Confirm")
+                    Text("Trade")
                         .font(DSFont.subheadline.bold())
                 }
             }

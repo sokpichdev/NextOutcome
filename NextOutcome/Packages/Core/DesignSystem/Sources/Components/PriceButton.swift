@@ -2,11 +2,16 @@ import SwiftUI
 
 /// Tinted price button for trading rows: outcome name leading, cent price trailing.
 /// `.yes`/`.no` tint green/red for binary markets; `.team` tints blue for sports rows.
+/// `.solid` fills with a team's brand colour (white text); `.neutral` is the draw slot.
 public struct PriceButton: View {
     public enum Style {
         case yes
         case no
         case team
+        /// Solid fill in the given colour with white text — a sports moneyline pick.
+        case solid(Color)
+        /// Neutral filled slot (the "Draw" outcome).
+        case neutral
     }
 
     private let title: String
@@ -23,20 +28,35 @@ public struct PriceButton: View {
 
     public var body: some View {
         Button(action: action) {
-            HStack(spacing: DSLayout.spacingXSmall) {
-                Text(title)
-                    .font(DSFont.subheadline.bold())
-                Spacer(minLength: DSLayout.spacingXSmall)
-                Text(price)
-                    .font(DSFont.priceSmall)
-            }
-            .foregroundStyle(foregroundColor)
-            .padding(.horizontal, DSLayout.spacingMedium)
-            .padding(.vertical, DSLayout.spacingSmall)
-            .background(backgroundColor)
-            .clipShape(RoundedRectangle(cornerRadius: DSLayout.chipRadius))
+            content
+                .foregroundStyle(foregroundColor)
+                .padding(.horizontal, DSLayout.spacingMedium)
+                .padding(.vertical, DSLayout.spacingSmall)
+                .background(backgroundColor)
+                .clipShape(RoundedRectangle(cornerRadius: DSLayout.chipRadius))
         }
         .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch style {
+        case .solid, .neutral:
+            // Centred "COL 18¢" — matches the sports card's equal-thirds buttons.
+            HStack(spacing: DSLayout.spacingXSmall) {
+                Text(title).font(DSFont.caption.bold())
+                Text(price).font(DSFont.priceSmall.bold())
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .frame(maxWidth: .infinity)
+        default:
+            HStack(spacing: DSLayout.spacingXSmall) {
+                Text(title).font(DSFont.subheadline.bold())
+                Spacer(minLength: DSLayout.spacingXSmall)
+                Text(price).font(DSFont.priceSmall)
+            }
+        }
     }
 
     private var foregroundColor: Color {
@@ -44,6 +64,8 @@ public struct PriceButton: View {
         case .yes: DSColor.positive
         case .no: DSColor.negative
         case .team: DSColor.accent
+        case .solid: .white
+        case .neutral: DSColor.textPrimary
         }
     }
 
@@ -52,6 +74,8 @@ public struct PriceButton: View {
         case .yes: DSColor.positiveTint
         case .no: DSColor.negativeTint
         case .team: DSColor.accentTint
+        case .solid(let color): color
+        case .neutral: DSColor.surfaceElevated
         }
     }
 }

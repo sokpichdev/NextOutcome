@@ -32,4 +32,15 @@ extension Color {
             opacity: opacity
         )
     }
+
+    /// Parses a `#RRGGBB` / `RRGGBB` string (e.g. a team brand colour from the sports feed).
+    /// Returns nil for anything that isn't six hex digits.
+    public init?(hexString: String?) {
+        guard let raw = hexString?.trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: "#", with: ""),
+              raw.count == 6,
+              let value = UInt32(raw, radix: 16)
+        else { return nil }
+        self.init(hex: value)
+    }
 }
