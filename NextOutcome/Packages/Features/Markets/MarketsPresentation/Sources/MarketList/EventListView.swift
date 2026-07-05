@@ -28,7 +28,7 @@ public struct EventListView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            SecondaryFilterRow(viewModel: viewModel)
+            SearchFilterRow(viewModel: viewModel)
             // Outside `content` so the row stays visible while a chip re-query is loading.
             if viewModel.showsTrendingChips {
                 TrendingChipRow(
@@ -36,6 +36,9 @@ public struct EventListView: View {
                     selectedTagID: viewModel.selectedTrendingTagID,
                     onSelect: { id in Task { await viewModel.selectTrendingChip(tagID: id) } }
                 )
+            }
+            if viewModel.filterRowVisible {
+                AdvancedFilterRow(viewModel: viewModel)
             }
             content
         }
@@ -48,16 +51,35 @@ public struct EventListView: View {
         // the view remounts with a different category (e.g. returning from the hub).
         .task { await viewModel.apply(category: selectedCategory) }
         .onChange(of: selectedCategory) { _, new in Task { await viewModel.apply(category: new) } }
+        // Debounced search: SwiftUI cancels and restarts this on every `searchQuery`
+        // keystroke, so only the last one (after the delay) actually calls the API.
+        .task(id: viewModel.searchQuery) {
+            guard viewModel.isSearchActive else { await viewModel.performSearch(); return }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            await viewModel.performSearch()
+        }
     }
 
-    /// Switches on the view model's state to show loading/empty/error states or the feed.
+    /// Switches on the view model's state (or search state, while searching) to show
+    /// loading/empty/error states or the feed.
     @ViewBuilder
     private var content: some View {
-        switch viewModel.state {
-        case .idle, .loading: StateView(.loading)
-        case .empty:          StateView(.empty)
-        case .failed(let m):  StateView(.error(m))
-        case .loaded:         feed
+        if viewModel.isSearchActive {
+            if viewModel.isSearching && viewModel.visibleEvents.isEmpty {
+                StateView(.loading)
+            } else if viewModel.visibleEvents.isEmpty {
+                StateView(.empty)
+            } else {
+                feed
+            }
+        } else {
+            switch viewModel.state {
+            case .idle, .loading: StateView(.loading)
+            case .empty:          StateView(.empty)
+            case .failed(let m):  StateView(.error(m))
+            case .loaded:         feed
+            }
         }
     }
 
@@ -68,7 +90,7 @@ public struct EventListView: View {
             LazyVStack(spacing: DSLayout.spacing) {
                 ForEach(viewModel.visibleEvents) { event in
                     NavigationLink(value: event) {
-                        HomeCard(event: event, kindOverride: heroID == event.id ? .hero : nil)
+                        HomeCard(event: event)
                     }
                     .buttonStyle(.plain)
                     .onAppear { Task { if event.id == viewModel.visibleEvents.last?.id { await viewModel.loadMore() } } }
@@ -78,10 +100,5 @@ public struct EventListView: View {
             .padding(.vertical, DSLayout.spacing)
         }
         .refreshable { await viewModel.refresh() }
-    }
-
-    /// The first sports event in the visible feed becomes the hero slot.
-    private var heroID: String? {
-        viewModel.visibleEvents.first { HomeCardKind.isSports($0) }?.id
     }
 }

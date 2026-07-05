@@ -24,9 +24,10 @@ public struct FetchEventsUseCase: Sendable {
     ///   - tagID: An optional category tag to filter by.
     ///   - sort: The sort order. Defaults to 24-hour volume.
     ///   - status: Which events to include. Defaults to active only.
+    ///   - period: How far back an event must have started to be included. Defaults to no restriction.
     /// - Returns: A page of events plus the next cursor.
-    public func execute(cursor: String? = nil, tagID: String? = nil, sort: EventSort = .volume24h, status: EventStatus = .active) async throws -> Page<Event> {
-        try await repository.fetchEvents(cursor: cursor, tagID: tagID, sort: sort, status: status)
+    public func execute(cursor: String? = nil, tagID: String? = nil, sort: EventSort = .volume24h, status: EventStatus = .active, period: EventPeriod = .all) async throws -> Page<Event> {
+        try await repository.fetchEvents(cursor: cursor, tagID: tagID, sort: sort, status: status, period: period)
     }
 
     /// Returns an instance whose `execute` always returns an empty page. Use in unit tests.

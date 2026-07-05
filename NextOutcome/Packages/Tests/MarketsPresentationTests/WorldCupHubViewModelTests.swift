@@ -162,7 +162,7 @@ private final class WorldCupFakeRepository: MarketRepository, @unchecked Sendabl
         requestedResultIDs.append(eventIDs)
         return results.filter { eventIDs.contains($0.key) }
     }
-    func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus) async throws -> Page<Event> {
+    func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod) async throws -> Page<Event> {
         fetchedTagIDs.append(tagID)
         return Page(items: taggedEvents, nextCursor: nil)
     }
@@ -175,6 +175,6 @@ private final class WorldCupFakeRepository: MarketRepository, @unchecked Sendabl
     func searchMarkets(query: String) async throws -> [Market] { [] }
     func fetchTags() async throws -> [Tag] { [] }
     func holders(conditionId: String) async throws -> [Holder] { [] }
-    func comments(eventID: String) async throws -> [Comment] { [] }
+    func comments(eventID: String, sort: CommentSort, holdersOnly: Bool) async throws -> [Comment] { [] }
     func trades(conditionId: String) async throws -> [ActivityTrade] { [] }
 }
