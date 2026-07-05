@@ -31,8 +31,21 @@ public final class EventChartViewModel {
         self.provider = provider
     }
 
-    /// Top markets (up to 4). Each market's Yes outcome token id drives one series.
-    private var topMarkets: [Market] { Array(event.markets.prefix(4)) }
+    /// The top 4 markets by current Yes probability, preferring still-open markets. Each
+    /// market's Yes outcome token id drives one series.
+    ///
+    /// A multi-candidate event (e.g. "GPT-5.6 released on…?" — one market per specific day,
+    /// all sharing the same settlement date) can carry dozens of sibling markets, most of
+    /// them already-resolved noise from days that came and went. Taking Gamma's raw array
+    /// order picked whichever 4 happened to appear first — often stale closed markets —
+    /// instead of the handful of dates actually still in play. Sorting by Yes price descending
+    /// (over the open markets, falling back to everything if the event is fully resolved)
+    /// surfaces the real leaders, matching the live site's legend.
+    private var topMarkets: [Market] {
+        let open = event.markets.filter { !$0.isResolved }
+        let candidates = open.isEmpty ? event.markets : open
+        return Array(candidates.sorted { ($0.yesOutcome?.price ?? 0) > ($1.yesOutcome?.price ?? 0) }.prefix(4))
+    }
 
     /// Loads one price-history series per top market, in parallel, keeping the previous
     /// chart visible while new data loads. Uses `loadGeneration` to ignore results from a
