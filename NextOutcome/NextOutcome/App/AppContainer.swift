@@ -121,12 +121,6 @@ final class AppContainer {
         )
     }
 
-    /// Builds the view model for the account activity feed (recent trades/transactions).
-    /// - Returns: A view model that loads the user's activity history.
-    func makeActivityViewModel() -> ActivityViewModel {
-        ActivityViewModel(fetchActivity: FetchActivityUseCase(repository: portfolioRepository))
-    }
-
     /// Builds the view model for the leaderboard screen (top traders by profit/volume).
     /// - Returns: A view model that loads leaderboard rankings.
     func makeLeaderboardViewModel() -> LeaderboardViewModel {
