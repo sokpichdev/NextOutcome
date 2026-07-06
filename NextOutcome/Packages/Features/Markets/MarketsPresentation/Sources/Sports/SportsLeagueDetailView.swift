@@ -17,6 +17,10 @@ public struct SportsLeagueDetailView: View {
     @State private var viewModel: SportsLeagueDetailViewModel
     /// Whether the standings sheet (trophy icon) is showing.
     @State private var isStandingsPresented = false
+    /// The team logo tapped, if any — drives the profile push.
+    @State private var selectedTeam: TeamProfileTarget?
+    /// Builds the profile view model when a team logo is tapped.
+    @Environment(\.teamProfileFactory) private var teamProfileFactory
 
     /// Creates the view.
     /// - Parameters:
@@ -37,6 +41,11 @@ public struct SportsLeagueDetailView: View {
         .navigationDestination(for: Event.self) { EventDetailView(event: $0) }
         .navigationDestination(for: MarketNavigationTarget.self) {
             MarketDetailView(market: $0.market, eventID: $0.eventID)
+        }
+        .navigationDestination(item: $selectedTeam) { target in
+            if let teamProfileFactory {
+                TeamProfileView(viewModel: teamProfileFactory(target))
+            }
         }
         .sheet(isPresented: $isStandingsPresented) {
             LeagueStandingsSheet(leagueTitle: viewModel.league.title, event: viewModel.standingsEvent)
@@ -122,7 +131,11 @@ public struct SportsLeagueDetailView: View {
                     LazyVStack(spacing: DSLayout.spacing) {
                         ForEach(viewModel.visibleEvents) { event in
                             NavigationLink(value: event) {
-                                HomeCard(event: event)
+                                HomeCard(
+                                    event: event,
+                                    onTeamTap: { selectedTeam = $0 },
+                                    leagueSlug: viewModel.league.title.lowercased()
+                                )
                             }
                             .buttonStyle(.plain)
                         }
