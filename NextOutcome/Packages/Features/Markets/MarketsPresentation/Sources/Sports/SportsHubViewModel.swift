@@ -38,10 +38,6 @@ public final class SportsHubViewModel {
     /// The general "Sports" tag — same id `EventListViewModel.tagID(for:)` uses for
     /// `.sports`, backing the Live tab's aggregate feed.
     static let sportsTagID = "1"
-    /// How many pages of the general sports feed to sample (the API pages at 10 events each)
-    /// before deriving league/sport chips — enough to surface more than just the highest-volume
-    /// league without an unbounded fetch.
-    static let liveSamplePages = 6
 
     /// League chip keywords (matched as a case-insensitive substring against the sample's
     /// event tags, e.g. "world cup" matches the real tag label "FIFA World Cup") and their
@@ -79,17 +75,22 @@ public final class SportsHubViewModel {
     /// When the hub's data was last refreshed.
     public private(set) var lastUpdated: Date?
 
-    /// Loads a page of events, optionally by tag.
+    /// Loads a page of events, optionally by tag (used for the Futures sport picker).
     private let fetchEvents: FetchEventsUseCase
+    /// Loads every event under a tag, unpaginated (used for the Live tab's sample, so
+    /// league/sport chips can be derived from more than just the highest-volume page).
+    private let fetchAllEvents: FetchAllEventsUseCase
     /// Injectable clock (defaults to `Date()`), for deterministic tests.
     private let now: @Sendable () -> Date
 
     /// Creates the view model with its use cases.
     public init(
         fetchEvents: FetchEventsUseCase,
+        fetchAllEvents: FetchAllEventsUseCase,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.fetchEvents = fetchEvents
+        self.fetchAllEvents = fetchAllEvents
         self.now = now
     }
 
@@ -98,13 +99,14 @@ public final class SportsHubViewModel {
         if case .idle = state { await load() }
     }
 
-    /// Samples several pages of the general sports feed, derives the league/sport chips from
-    /// the sample's own event tags (the tag catalogue endpoint only returns a curated top-nav
-    /// set and never includes league-specific tags — see `TrendingChipDeriver`), groups the
-    /// sample into the Live tab's sections, then kicks off the initial Futures fetch.
+    /// Fetches every event under the general sports tag, derives the league/sport chips from
+    /// their own tags (the tag catalogue endpoint only returns a curated top-nav set and never
+    /// includes league-specific tags — see `TrendingChipDeriver`), groups them into the Live
+    /// tab's sections (highest volume first), then kicks off the initial Futures fetch.
     public func load() async {
         state = .loading
-        let events = await Self.fetchSample(fetchEvents, pages: Self.liveSamplePages)
+        let events = ((try? await fetchAllEvents.execute(tagID: Self.sportsTagID, status: .active)) ?? [])
+            .sorted { $0.volume > $1.volume }
         guard !events.isEmpty else {
             state = .failed("Couldn't load Sports. Pull to refresh.")
             return
@@ -136,24 +138,6 @@ public final class SportsHubViewModel {
     private func loadFutures() async {
         guard let tagID = selectedFuturesSportID else { futuresEvents = []; return }
         futuresEvents = (try? await fetchEvents.execute(tagID: tagID, sort: .volume24h, status: .active))?.items ?? []
-    }
-
-    /// Fetches up to `pages` pages of the general sports feed (each page is small — the API
-    /// pages at a handful of events — so the highest-volume-only first page rarely surfaces
-    /// more than one or two leagues). Stops early once a page comes back empty or without a
-    /// next cursor.
-    static func fetchSample(_ fetchEvents: FetchEventsUseCase, pages: Int) async -> [Event] {
-        var events: [Event] = []
-        var cursor: String?
-        for _ in 0..<pages {
-            guard let page = try? await fetchEvents.execute(cursor: cursor, tagID: sportsTagID, sort: .volume24h, status: .active),
-                  !page.items.isEmpty
-            else { break }
-            events += page.items
-            guard let next = page.nextCursor else { break }
-            cursor = next
-        }
-        return events
     }
 
     /// Matches known (keyword, glyph) pairs against the sample's event tags: the first tag

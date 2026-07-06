@@ -83,7 +83,10 @@ final class AppContainer {
     /// Builds the view model for the Sports hub (Live/Futures modes, league chips).
     /// - Returns: A view model wired to fetch events and the tag catalogue.
     func makeSportsHubViewModel() -> SportsHubViewModel {
-        SportsHubViewModel(fetchEvents: FetchEventsUseCase(repository: repository))
+        SportsHubViewModel(
+            fetchEvents: FetchEventsUseCase(repository: repository),
+            fetchAllEvents: FetchAllEventsUseCase(repository: repository)
+        )
     }
 
     /// The use case shared by Sports league detail screens (built lazily per league, since
