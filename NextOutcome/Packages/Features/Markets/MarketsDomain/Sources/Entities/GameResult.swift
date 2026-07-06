@@ -19,14 +19,17 @@ public struct GameTeam: Hashable, Sendable {
     public let colorHex: String?
     /// "home" or "away" per Gamma's `ordering`.
     public let ordering: String
+    /// The team/fighter's win-loss record (e.g. "27-9-0"), if known.
+    public let record: String?
 
     /// Creates a game team.
-    public init(name: String, abbreviation: String?, logoURL: URL?, colorHex: String?, ordering: String) {
+    public init(name: String, abbreviation: String?, logoURL: URL?, colorHex: String?, ordering: String, record: String? = nil) {
         self.name = name
         self.abbreviation = abbreviation
         self.logoURL = logoURL
         self.colorHex = colorHex
         self.ordering = ordering
+        self.record = record
     }
 }
 

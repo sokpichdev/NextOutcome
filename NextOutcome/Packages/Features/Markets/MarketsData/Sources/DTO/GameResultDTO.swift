@@ -69,6 +69,8 @@ struct GameTeamDTO: Decodable {
     let color: String?
     /// "home" or "away".
     let ordering: String?
+    /// The team's win-loss record, e.g. "27-9-0". Empty string degrades to nil.
+    let record: String?
 
     /// Tolerant decoder; all fields optional.
     init(from decoder: Decoder) throws {
@@ -78,10 +80,11 @@ struct GameTeamDTO: Decodable {
         logo = try? c.decode(String.self, forKey: .logo)
         color = try? c.decode(String.self, forKey: .color)
         ordering = try? c.decode(String.self, forKey: .ordering)
+        record = try? c.decode(String.self, forKey: .record)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, abbreviation, logo, color, ordering
+        case name, abbreviation, logo, color, ordering, record
     }
 
     /// Maps to the domain `GameTeam`, or `nil` for a nameless team. Percent-encodes logo
@@ -98,7 +101,8 @@ struct GameTeamDTO: Decodable {
             abbreviation: abbreviation?.isEmpty == true ? nil : abbreviation?.uppercased(),
             logoURL: url,
             colorHex: color,
-            ordering: ordering ?? ""
+            ordering: ordering ?? "",
+            record: record?.isEmpty == true ? nil : record
         )
     }
 }
