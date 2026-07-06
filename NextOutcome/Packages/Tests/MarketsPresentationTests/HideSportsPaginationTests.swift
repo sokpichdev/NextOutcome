@@ -16,7 +16,7 @@ private final class QueuedPageRepository: MarketRepository {
 
     init(pages: [Page<Event>]) { self.pages = pages }
 
-    func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus) async throws -> Page<Event> {
+    func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod) async throws -> Page<Event> {
         guard index < pages.count else { return Page(items: [], nextCursor: nil) }
         defer { index += 1 }
         return pages[index]
@@ -28,7 +28,7 @@ private final class QueuedPageRepository: MarketRepository {
     func searchMarkets(query: String) async throws -> [Market] { [] }
     func fetchTags() async throws -> [Tag] { [] }
     func holders(conditionId: String) async throws -> [Holder] { [] }
-    func comments(eventID: String) async throws -> [Comment] { [] }
+    func comments(eventID: String, sort: CommentSort, holdersOnly: Bool) async throws -> [Comment] { [] }
     func trades(conditionId: String) async throws -> [ActivityTrade] { [] }
 }
 
@@ -51,7 +51,7 @@ final class HideSportsPaginationTests: XCTestCase {
 
         let repo = QueuedPageRepository(pages: [page2])
         let fetchEvents = FetchEventsUseCase(repository: repo)
-        let vm = EventListViewModel(fetchEvents: fetchEvents, fetchTags: FetchTagsUseCase.stub)
+        let vm = EventListViewModel(fetchEvents: fetchEvents, fetchTags: FetchTagsUseCase.stub, searchEvents: SearchEventsUseCase.stub)
 
         // Seed: page1 already loaded, cursor points to page2, hideSports=true
         vm.seedForTesting(

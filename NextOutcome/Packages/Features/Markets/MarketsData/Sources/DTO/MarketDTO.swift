@@ -31,8 +31,10 @@ struct MarketDTO: Decodable {
     let volume: Decimal
     /// Available liquidity.
     let liquidity: Decimal
-    /// The close date as an ISO string, if present.
-    let endDateIso: String?
+    /// The close date as a full ISO8601 timestamp, if present. Decoded from the wire's
+    /// `endDate` key — Gamma's `endDateIso` key is a bare `"yyyy-MM-dd"` date with no time
+    /// component, which `DateParsing` can't parse (it only accepts full timestamps).
+    let endDate: String?
     /// Whether the market is closed/resolved.
     let closed: Bool
     /// Gamma's tradeable flag. `false` for undetermined placeholder slots
@@ -45,12 +47,17 @@ struct MarketDTO: Decodable {
     let groupItemTitle: String?
     /// Resolution-criteria text. Absent for many markets.
     let description: String?
+    /// A sports market's kickoff time, in Gamma's space-separated form
+    /// (`"2026-06-11 19:00:00+00"`). Absent for non-sports markets. Gamma only carries this
+    /// per-market, never on the parent event — `MarketMapper.event(from:)` promotes the
+    /// earliest one up to the event level.
+    let gameStartTime: String?
 
     /// JSON keys for `MarketDTO`.
     enum CodingKeys: String, CodingKey {
         case id, conditionId, question, slug, outcomes, outcomePrices, clobTokenIds
-        case volume, liquidity, endDateIso, closed, active, image
-        case sportsMarketType, groupItemTitle, description
+        case volume, liquidity, endDate, closed, active, image
+        case sportsMarketType, groupItemTitle, description, gameStartTime
     }
 
     /// Tolerant decoder: missing/odd fields degrade a single market rather than failing the
@@ -66,7 +73,7 @@ struct MarketDTO: Decodable {
         clobTokenIds = DTODecoding.stringArray(c, .clobTokenIds)
         volume = DTODecoding.decimal(c, .volume)
         liquidity = DTODecoding.decimal(c, .liquidity)
-        endDateIso = try? c.decode(String.self, forKey: .endDateIso)
+        endDate = try? c.decode(String.self, forKey: .endDate)
         closed = (try? c.decode(Bool.self, forKey: .closed)) ?? false
         // Default to tradeable when absent so we never hide a real market on a missing
         // field; placeholders explicitly send `active: false`.
@@ -75,6 +82,7 @@ struct MarketDTO: Decodable {
         sportsMarketType = try? c.decode(String.self, forKey: .sportsMarketType)
         groupItemTitle = try? c.decode(String.self, forKey: .groupItemTitle)
         description = try? c.decode(String.self, forKey: .description)
+        gameStartTime = try? c.decode(String.self, forKey: .gameStartTime)
     }
 }
 

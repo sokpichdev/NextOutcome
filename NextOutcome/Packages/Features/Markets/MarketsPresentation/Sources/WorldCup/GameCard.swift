@@ -20,6 +20,27 @@ struct GameCard: View {
     let result: GameResult?
     /// The game's moneyline markets (one per team plus a draw).
     let moneylines: [Market]
+    /// Fired when a team's logo/name is tapped, with a lightweight profile target
+    /// built from whichever team data is available (the loaded `GameResult`'s
+    /// `GameTeam` when live scores are wired up, else the moneyline market's own
+    /// name/image). `nil` (the default) leaves team rows non-interactive — tapping
+    /// anywhere on the card still opens the event, same as today.
+    let onTeamTap: ((TeamProfileTarget) -> Void)?
+    /// The Gamma `/teams` league slug (e.g. "ufc", "mlb", "fifwc") used to enrich
+    /// the tapped team's profile with its record. `nil` skips that lookup.
+    let leagueSlug: String?
+    /// The Sports hub's chosen odds display format (defaults to `.price` outside the hub).
+    @Environment(\.oddsFormat) private var oddsFormat
+    /// Whether to also show spread/total markets (Sports hub only).
+    @Environment(\.showSpreadsAndTotals) private var showSpreadsAndTotals
+
+    init(event: Event, result: GameResult? = nil, moneylines: [Market], onTeamTap: ((TeamProfileTarget) -> Void)? = nil, leagueSlug: String? = nil) {
+        self.event = event
+        self.result = result
+        self.moneylines = moneylines
+        self.onTeamTap = onTeamTap
+        self.leagueSlug = leagueSlug
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: DSLayout.spacing) {
@@ -27,6 +48,7 @@ struct GameCard: View {
             teamRow(side: .home)
             teamRow(side: .away)
             priceRow
+            if showSpreadsAndTotals { spreadsAndTotalsSection }
         }
         .padding(DSLayout.margin)
         .background(DSColor.surface.opacity(0.6))
@@ -99,7 +121,8 @@ struct GameCard: View {
     /// Which side of the game a team row represents.
     private enum Side { case home, away }
 
-    /// Builds a team row: optional score, logo, and name for one side.
+    /// Builds a team row: optional score, then a tappable logo+name (when
+    /// `onTeamTap` is set) for one side.
     /// - Parameter side: Home or away.
     private func teamRow(side: Side) -> some View {
         let index = side == .home ? 0 : 1
@@ -118,12 +141,36 @@ struct GameCard: View {
                     .background(DSColor.surfaceElevated)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
-            teamLogo(url: team?.logoURL, name: name)
+            teamTapArea(index: index, name: name, team: team)
+            Spacer()
+        }
+    }
+
+    /// The logo+name portion of a team row. Wrapped in a `Button` (instead of
+    /// nesting a second `NavigationLink` inside the card's own outer one, which
+    /// SwiftUI doesn't handle reliably) when `onTeamTap` is set.
+    /// - Parameters:
+    ///   - index: 0 for home, 1 for away — used to fall back to the moneyline
+    ///     market's own name/image when no `GameResult` team loaded.
+    ///   - name: The resolved display name.
+    ///   - team: The `GameResult` team, if loaded.
+    @ViewBuilder
+    private func teamTapArea(index: Int, name: String, team: GameTeam?) -> some View {
+        let logoURL = team?.logoURL ?? (teamMarkets.indices.contains(index) ? teamMarkets[index].imageURL : nil)
+        let content = HStack(spacing: DSLayout.spacingMedium) {
+            teamLogo(url: logoURL, name: name)
             Text(name)
                 .font(DSFont.subheadline.bold())
                 .foregroundStyle(DSColor.textPrimary)
                 .lineLimit(1)
-            Spacer()
+        }
+        if let onTeamTap {
+            Button {
+                onTeamTap(TeamProfileTarget(name: name, logoURL: logoURL, colorHex: team?.colorHex, league: leagueSlug))
+            } label: { content }
+            .buttonStyle(.plain)
+        } else {
+            content
         }
     }
 
@@ -159,11 +206,46 @@ struct GameCard: View {
             ForEach(ordered.compactMap { $0 }) { market in
                 PriceButton(
                     title: shortLabel(for: market),
-                    price: MarketFormatting.centsWhole(market.yesOutcome?.price ?? 0),
+                    price: oddsFormat.format(market.yesOutcome?.price ?? 0),
                     style: style(for: market),
                     action: {}
                 )
                 .frame(maxWidth: .infinity) // equal thirds
+            }
+        }
+    }
+
+    // MARK: spreads & totals (Sports hub's "Show Spreads + Totals" toggle)
+
+    /// One compact row per spread/total market: its sub-label plus a price button per
+    /// outcome, formatted in the hub's chosen odds format.
+    private var spreadsAndTotalsSection: some View {
+        let groups = MarketGroupClassifier.groups(for: event.markets)
+            .filter { $0.group == .spreads || $0.group == .totals }
+        return Group {
+            if !groups.isEmpty {
+                Divider().overlay(DSColor.surfaceElevated)
+                VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
+                    ForEach(groups, id: \.group) { group in
+                        ForEach(group.markets) { market in
+                            spreadOrTotalRow(market)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// "Argentina -2.5" + a price button per outcome (Yes/No), in the hub's odds format.
+    private func spreadOrTotalRow(_ market: Market) -> some View {
+        HStack(spacing: DSLayout.spacingSmall) {
+            Text(market.groupItemTitle ?? market.question)
+                .font(DSFont.caption)
+                .foregroundStyle(DSColor.textSecondary)
+                .lineLimit(1)
+            Spacer()
+            ForEach(market.outcomes) { outcome in
+                PriceButton(title: outcome.title, price: oddsFormat.format(outcome.price), style: .neutral, action: {})
             }
         }
     }

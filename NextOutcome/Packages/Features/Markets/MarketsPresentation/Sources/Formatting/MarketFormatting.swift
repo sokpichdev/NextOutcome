@@ -54,6 +54,16 @@ public enum MarketFormatting {
         }
     }
 
+    /// Compact share count. 2_465_264 → "2.5M", 911_600 → "911.6K", 42 → "42".
+    public static func compactShares(_ amount: Decimal) -> String {
+        let value = NSDecimalNumber(decimal: amount).doubleValue
+        switch value {
+        case 1_000_000...: return "\(trimmed(value / 1_000_000))M"
+        case 1_000...:     return "\(trimmed(value / 1_000))K"
+        default:           return "\(Int(value.rounded()))"
+        }
+    }
+
     /// Relative countdown. Future → "Ends in 20d" / "Ends in 4h"; past → "Ended"; nil → nil.
     public static func countdown(to date: Date?, now: Date = Date()) -> String? {
         guard let date else { return nil }
@@ -65,6 +75,15 @@ public enum MarketFormatting {
         if hours >= 1 { return "Ends in \(hours)h" }
         let minutes = Int(interval / 60)
         return "Ends in \(minutes)m"
+    }
+
+    /// "Trade $100 → $X" — what a flat $100 stake at this price pays out if correct.
+    /// Falls back to plain "Trade" when the price can't support the math (0 or 1, i.e. no
+    /// real market left to quote).
+    public static func tradeLabel(price: Decimal) -> String {
+        guard price > 0, price < 1 else { return "Trade" }
+        let payout = NSDecimalNumber(decimal: 100 / price).doubleValue
+        return "Trade $100 → $\(Int(payout.rounded()))"
     }
 
     /// One decimal, trailing ".0" removed. 3.0 → "3", 3.2 → "3.2".

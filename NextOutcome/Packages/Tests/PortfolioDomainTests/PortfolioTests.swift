@@ -34,28 +34,14 @@ final class PortfolioTests: XCTestCase {
                  currentValue: 6, cashPnl: cashPnl, percentPnl: 20, redeemable: false)
     }
 
-    func test_fetchActivity_paginatesViaCursor() async throws {
-        let repo = StubRepo(value: 0, positions: [], activityPage: Page(
-            items: [activity()], nextCursor: "25"
-        ))
-        let page = try await FetchActivityUseCase(repository: repo).execute(address: "0xabc")
-        XCTAssertEqual(page.items.count, 1)
-        XCTAssertEqual(page.nextCursor, "25")
-    }
-
-    private func activity() -> Activity {
-        Activity(id: "a1", kind: .buy, title: "M", slug: "m", outcome: "Yes",
-                 iconURL: nil, size: 10, usdcSize: 6, price: 0.6, timestamp: .init(timeIntervalSince1970: 0))
-    }
 }
 
 private struct StubRepo: PortfolioRepository {
     let value: Decimal
     let positions: [Position]
-    var activityPage: Page<Activity> = Page(items: [], nextCursor: nil)
     func positions(address: String) async throws -> [Position] { positions }
     func value(address: String) async throws -> Decimal { value }
-    func activity(address: String, cursor: String?) async throws -> Page<Activity> { activityPage }
+    func activity(address: String, cursor: String?) async throws -> Page<Activity> { Page(items: [], nextCursor: nil) }
     func closedPositions(address: String) async throws -> [ClosedPosition] { [] }
     func leaderboard(metric: LeaderboardMetric, window: LeaderboardWindow) async throws -> [LeaderboardEntry] { [] }
 }

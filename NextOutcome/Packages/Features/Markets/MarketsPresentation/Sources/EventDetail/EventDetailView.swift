@@ -53,8 +53,6 @@ public struct EventDetailView: View {
     private let event: Event
     /// Callback fired when a price button is tapped (also opens the trade sheet).
     private let onSelect: (Market, Side) -> Void
-    /// Dismisses this screen.
-    @Environment(\.dismiss) private var dismiss
     /// Supplies chart price-history data.
     @Environment(\.priceHistoryProvider) private var priceHistoryProvider
     /// Factory for the social strip view model.
@@ -73,6 +71,10 @@ public struct EventDetailView: View {
     @State private var showsStickyHeader = false
     /// Task 8's mock trade sheet, opened from `onSelect`/the sticky-header Trade button.
     @State private var tradeContext: TradeSheetContext?
+    /// Whether the Rules bottom sheet is presented.
+    @State private var showsRulesSheet = false
+    /// Whether the Comments/Top Holders/Positions/Activity bottom sheet is presented.
+    @State private var showsDiscussSheet = false
 
     /// `onSelect` is the trade-sheet hook Task 8 wires up; no-op until then.
     public init(event: Event, onSelect: @escaping (Market, Side) -> Void = { _, _ in }) {
@@ -112,8 +114,6 @@ public struct EventDetailView: View {
         ZStack(alignment: .top) {
             ScrollView {
                 VStack(alignment: .leading, spacing: DSLayout.spacing) {
-                    DetailHeader(title: .breadcrumb(breadcrumb), actions: [.bookmark, .link],
-                                 onBack: { dismiss() })
                     header
 
                     if showsLive {
@@ -136,18 +136,13 @@ public struct EventDetailView: View {
                         }
                         marketGroupSections
                     }
-
-                    RulesExpander(eventDescription: event.description, marketRules: marketRules)
-                    socialStripSection
                 }
                 .padding(.horizontal, DSLayout.margin)
                 .padding(.top, DSLayout.spacing)
             }
             .coordinateSpace(name: "eventDetailScroll")
             .background(DSColor.background)
-            #if os(iOS)
-            .toolbar(.hidden, for: .navigationBar)
-            #endif
+            .detailToolbar(title: breadcrumb, actions: [.rules, .discuss, .bookmark, .link], onAction: handleHeaderAction)
             .task(id: event.id) {
                 guard let provider = priceHistoryProvider else { return }
                 let vm = EventChartViewModel(event: event, provider: provider)
@@ -164,7 +159,7 @@ public struct EventDetailView: View {
             }
             .task(id: event.id) {
                 guard let factory = socialStripFactory else { return }
-                socialStrip = factory(eventID: event.id, conditionId: topMarket?.conditionId)
+                socialStrip = factory(eventID: event.id, conditionId: topMarket?.conditionId, markets: event.markets)
             }
             .onChange(of: timeframe) { _, new in chart?.timeframe = new }
             .onPreferenceChange(HeroScrollOffsetKey.self) { offset in
@@ -183,6 +178,31 @@ public struct EventDetailView: View {
         .sheet(item: $tradeContext) { context in
             TradeSheet(viewModel: TradeSheetViewModel(market: context.market, side: context.side, submitter: tradeSubmitter))
         }
+        .sheet(isPresented: $showsRulesSheet) {
+            ScrollView {
+                RulesExpander(eventDescription: event.description, marketRules: marketRules, startsExpanded: true)
+                    .padding(DSLayout.margin)
+            }
+            .presentationDetents([.medium, .large])
+            .background(DSColor.background)
+        }
+        .sheet(isPresented: $showsDiscussSheet) {
+            ScrollView {
+                if let socialStrip {
+                    SocialStripView(viewModel: socialStrip)
+                        .padding(DSLayout.margin)
+                }
+            }
+            .presentationDetents([.medium, .large])
+            .background(DSColor.background)
+        }
+    }
+
+    /// Routes a toolbar trailing-action tap: Rules/Comments open their bottom sheets;
+    /// bookmark/link/embed are no-ops for now (unchanged from before).
+    private func handleHeaderAction(_ action: DetailToolbarActions) {
+        if action.contains(.rules) { showsRulesSheet = true }
+        if action.contains(.discuss) { showsDiscussSheet = true }
     }
 
     /// Opens the mock trade sheet for `market`/`side` and still forwards to the
@@ -251,14 +271,6 @@ public struct EventDetailView: View {
     private var marketGroupSections: some View {
         ForEach(groups, id: \.group) { entry in
             MarketGroupSection(group: entry.group, markets: entry.markets, eventID: event.id, onSelect: presentTrade)
-        }
-    }
-
-    /// The comments/holders social strip, shown once its view model is built.
-    @ViewBuilder
-    private var socialStripSection: some View {
-        if let socialStrip {
-            SocialStripView(viewModel: socialStrip)
         }
     }
 

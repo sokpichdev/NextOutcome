@@ -23,7 +23,7 @@ private final class StubMarketRepository: MarketRepository {
     let eventsPage: Page<Event>
     init(eventsPage: Page<Event>) { self.eventsPage = eventsPage }
 
-    func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus) async throws -> Page<Event> { eventsPage }
+    func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod) async throws -> Page<Event> { eventsPage }
     func fetchMarkets(cursor: String?) async throws -> Page<Market> { Page(items: [], nextCursor: nil) }
     func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] { [] }
     func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] { [:] }
@@ -31,6 +31,6 @@ private final class StubMarketRepository: MarketRepository {
     func searchMarkets(query: String) async throws -> [Market] { [] }
     func fetchTags() async throws -> [Tag] { [] }
     func holders(conditionId: String) async throws -> [Holder] { [] }
-    func comments(eventID: String) async throws -> [Comment] { [] }
+    func comments(eventID: String, sort: CommentSort, holdersOnly: Bool) async throws -> [Comment] { [] }
     func trades(conditionId: String) async throws -> [ActivityTrade] { [] }
 }

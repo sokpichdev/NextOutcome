@@ -17,10 +17,13 @@ public struct FetchCommentsUseCase: Sendable {
     }
 
     /// Fetches an event's comments.
-    /// - Parameter eventID: The event to fetch comments for.
+    /// - Parameters:
+    ///   - eventID: The event to fetch comments for.
+    ///   - sort: How to order the comments. Defaults to newest first.
+    ///   - holdersOnly: Restrict to commenters holding a position. Defaults to `false`.
     /// - Returns: The comments.
-    public func execute(eventID: String) async throws -> [Comment] {
-        try await repository.comments(eventID: eventID)
+    public func execute(eventID: String, sort: CommentSort = .newest, holdersOnly: Bool = false) async throws -> [Comment] {
+        try await repository.comments(eventID: eventID, sort: sort, holdersOnly: holdersOnly)
     }
 
     /// A stub instance (backed by an empty repository) for previews/tests.
