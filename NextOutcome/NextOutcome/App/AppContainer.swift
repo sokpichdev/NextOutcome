@@ -114,6 +114,17 @@ final class AppContainer {
         }
     }
 
+    /// A factory for the team/fighter profile screen, opened when a `GameCard`'s
+    /// team logo is tapped. Reuses the same event sample + team directory use
+    /// cases the Sports hub and World Cup hub already have.
+    func makeTeamProfileFactory() -> TeamProfileViewModelFactory {
+        let fetchAllEvents = makeFetchAllEventsUseCase()
+        let fetchTeams = FetchTeamsUseCase(repository: repository)
+        return TeamProfileViewModelFactory { target in
+            TeamProfileViewModel(target: target, fetchAllEvents: fetchAllEvents, fetchTeams: fetchTeams)
+        }
+    }
+
     /// Builds the view model for the World Cup hub screen (bracket, map, results, teams).
     /// - Returns: A view model wired with every use case the hub's sub-tabs need.
     func makeWorldCupHubViewModel() -> WorldCupHubViewModel {
