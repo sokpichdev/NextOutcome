@@ -2,6 +2,7 @@ import SwiftUI
 import MarketsDomain
 import DesignSystem
 
+/// Renders the correct Home card variant for an event.
 public struct HomeCard: View {
     /// The event to render.
     private let event: Event
