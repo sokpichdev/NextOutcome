@@ -7,6 +7,7 @@
 
 import SwiftUI
 import DesignSystem
+import MarketsDomain
 import MarketsPresentation
 import OrderbookPresentation
 import LiveStatsDomain
@@ -33,6 +34,10 @@ struct RootView: View {
     @State private var breakingViewModel: BreakingViewModel
     /// Drives the Politics hub shown in the Home tab when that category is selected.
     @State private var politicsHubViewModel: PoliticsHubViewModel
+    /// Drives the Sports hub shown in the Home tab when that category is selected.
+    @State private var sportsHubViewModel: SportsHubViewModel
+    /// Shared use case for building Sports league detail screens on demand.
+    private let fetchEventsUseCase: FetchEventsUseCase
     /// Drives the Search tab.
     @State private var searchViewModel: SearchViewModel
     /// Drives the Portfolio tab.
@@ -89,6 +94,8 @@ struct RootView: View {
         // fetch survives category/navigation churn — it isn't tied to any view's presence in
         // the hierarchy and can't be cancelled by scrolling, tab switches, or re-renders.
         Task { await politics.loadIfNeeded() }
+        _sportsHubViewModel = State(initialValue: container.makeSportsHubViewModel())
+        fetchEventsUseCase = container.makeFetchEventsUseCase()
         _searchViewModel = State(initialValue: container.makeSearchViewModel())
         _portfolioViewModel = State(initialValue: portfolio)
         _shellViewModel = State(initialValue: ShellViewModel(portfolio: portfolio))
@@ -141,6 +148,12 @@ struct RootView: View {
                         WorldCupHubView(viewModel: worldCupViewModel)
                     } else if selectedCategory == .breaking {
                         BreakingView(viewModel: breakingViewModel)
+                    } else if selectedCategory == .sports {
+                        SportsHubView(
+                            viewModel: sportsHubViewModel,
+                            worldCupViewModel: worldCupViewModel,
+                            fetchEvents: fetchEventsUseCase
+                        )
                     } else {
                         EventListView(
                             viewModel: eventListViewModel,
