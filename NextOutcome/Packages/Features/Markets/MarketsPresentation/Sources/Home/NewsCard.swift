@@ -20,8 +20,10 @@ public struct NewsCard: View {
                             .foregroundStyle(DSColor.textPrimary).lineLimit(3)
                         if let market = event.markets.first, let yes = market.yesOutcome {
                             HStack {
-                                OutcomePill(.yes, value: "Yes \(MarketFormatting.percent(yes.price))")
-                                OutcomePill(.no, value: "No")
+                                Text(MarketFormatting.percent(yes.price))
+                                    .font(DSFont.priceSmall).foregroundStyle(DSColor.textPrimary)
+                                OutcomePill(.yes)
+                                OutcomePill(.no)
                             }
                         }
                     }

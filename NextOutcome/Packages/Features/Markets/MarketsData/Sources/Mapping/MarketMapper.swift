@@ -34,7 +34,7 @@ enum MarketMapper {
             outcomes: outcomes,
             volume: dto.volume,
             liquidity: dto.liquidity,
-            endDate: DateParsing.parse(dto.endDateIso),
+            endDate: DateParsing.parse(dto.endDate),
             isResolved: dto.closed,
             isActive: dto.active,
             imageURL: dto.image.flatMap(URL.init(string:)),
@@ -46,6 +46,26 @@ enum MarketMapper {
     /// Maps a `TagDTO` to a domain `Tag`.
     static func tag(from dto: TagDTO) -> Tag {
         Tag(id: dto.id, label: dto.label, slug: dto.slug)
+    }
+
+    /// Maps a `MoverDTO` to a domain `Mover`, resolving the current probability (first outcome
+    /// price, falling back to the last trade) and pulling the parent event's slug/title/icon.
+    /// - Parameter dto: The decoded `/markets` row.
+    /// - Returns: The domain mover.
+    static func mover(from dto: MoverDTO) -> Mover {
+        let parent = dto.events.first
+        let probability = dto.outcomePrices.first ?? dto.lastTradePrice ?? 0
+        let imageString = parent?.image ?? parent?.icon ?? dto.image ?? dto.icon
+        return Mover(
+            id: dto.id,
+            question: dto.question,
+            eventSlug: parent?.slug ?? "",
+            eventTitle: parent?.title ?? dto.question,
+            imageURL: imageString.flatMap(URL.init(string:)),
+            probability: probability,
+            dayChange: dto.oneDayPriceChange,
+            volume24h: dto.volume24hr
+        )
     }
 
     /// Flattens the grouped holder DTOs into a single list of domain `Holder`s, sorted by
@@ -92,8 +112,20 @@ enum MarketMapper {
                 authorName: commentAuthorName(dto.profile),
                 avatarURL: dto.profile?.profileImage.flatMap { $0.isEmpty ? nil : URL(string: $0) },
                 createdAt: DateParsing.parse(dto.createdAt),
-                body: dto.body
+                body: dto.body,
+                likeCount: dto.reactionCount,
+                proxyWallet: dto.profile?.proxyWallet.flatMap { $0.isEmpty ? nil : $0 }
             )
+        }
+    }
+
+    /// Maps comment-holding DTOs to domain `CommentHolding`s, dropping rows with no
+    /// resolvable condition id (malformed/partial data).
+    /// - Parameter dtos: The decoded positions.
+    /// - Returns: The domain holdings.
+    static func commentHoldings(from dtos: [CommentHoldingDTO]) -> [CommentHolding] {
+        dtos.filter { !$0.conditionId.isEmpty }.map {
+            CommentHolding(conditionId: $0.conditionId, outcome: $0.outcome, size: $0.size)
         }
     }
 
@@ -131,18 +163,29 @@ enum MarketMapper {
     }
 
     /// Maps an `EventDTO` to a domain `Event`, recursively mapping its markets and tags.
+    ///
+    /// Gamma's `/events` responses never actually carry `gameStartTime` on the event itself —
+    /// only on its embedded markets. `dto.gameStartTime` decodes tolerantly and stays nil in
+    /// practice, so every sports event falls back to the earliest kickoff among its markets.
+    /// Without this, `Event.gameStartTime` is nil for every event fetched by tag (the Sports
+    /// hub's Live feed and every league detail screen), so `WorldCupEventSplitter.split`
+    /// (which requires a kickoff to classify something as a schedulable "game") buckets real
+    /// games — MLB, UFC, etc. — as props instead, leaving the Games tab empty.
     /// - Parameter dto: The decoded event.
     /// - Returns: The domain event.
     static func event(from dto: EventDTO) -> Event {
-        Event(
+        let markets = dto.markets.map(market(from:))
+        let eventKickoff = DateParsing.parse(dto.gameStartTime)
+        let earliestMarketKickoff = dto.markets.compactMap { DateParsing.parse($0.gameStartTime) }.min()
+        return Event(
             id: dto.id,
             title: dto.title,
             slug: dto.slug,
-            markets: dto.markets.map(market(from:)),
+            markets: markets,
             volume: dto.volume,
             imageURL: dto.image.flatMap(URL.init(string:)),
             tags: dto.tags.map(tag(from:)),
-            gameStartTime: DateParsing.parse(dto.gameStartTime),
+            gameStartTime: eventKickoff ?? earliestMarketKickoff,
             description: dto.description
         )
     }

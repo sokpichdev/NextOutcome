@@ -49,4 +49,18 @@ final class GammaEventQueryTests: XCTestCase {
         XCTAssertEqual(params["offset"], "100")
         XCTAssertNil(params["closed"])
     }
+
+    func test_tagParams_active_boundsByClosedOnly() {
+        let params = GammaEventQuery.tagParams(tagID: "102289", offset: 0, status: .active)
+        XCTAssertEqual(params["tag_id"], "102289")
+        XCTAssertEqual(params["limit"], "100")
+        XCTAssertEqual(params["offset"], "0")
+        XCTAssertEqual(params["closed"], "false")
+    }
+
+    func test_tagParams_statusAll_omitsClosed() {
+        let params = GammaEventQuery.tagParams(tagID: "102289", offset: 100, status: .all)
+        XCTAssertEqual(params["offset"], "100")
+        XCTAssertNil(params["closed"])
+    }
 }

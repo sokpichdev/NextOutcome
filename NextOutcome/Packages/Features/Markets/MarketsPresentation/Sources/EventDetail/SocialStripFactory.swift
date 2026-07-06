@@ -1,26 +1,30 @@
 import SwiftUI
+import MarketsDomain
 
-/// App-provided builder for a `SocialStripViewModel` given an event id and (optionally)
-/// its top market's condition id. Lets Event Detail load the social strip without
-/// importing the Data layer.
+/// App-provided builder for a `SocialStripViewModel` given an event id, its top market's
+/// condition id, and (for multi-candidate events) the full market list so the Top
+/// Holders/Positions/Activity tabs can offer a per-candidate picker. Lets Event Detail load
+/// the social strip without importing the Data layer.
 public struct SocialStripViewModelFactory: Sendable {
     /// The closure (supplied by `AppContainer`) that builds the view model.
-    private let make: @Sendable @MainActor (String, String?) -> SocialStripViewModel
+    private let make: @Sendable @MainActor (String, String?, [Market]) -> SocialStripViewModel
 
     /// Wraps a builder closure.
-    /// - Parameter make: Builds a `SocialStripViewModel` from an event id and condition id.
-    public init(_ make: @escaping @Sendable @MainActor (String, String?) -> SocialStripViewModel) {
+    /// - Parameter make: Builds a `SocialStripViewModel` from an event id, condition id, and markets.
+    public init(_ make: @escaping @Sendable @MainActor (String, String?, [Market]) -> SocialStripViewModel) {
         self.make = make
     }
 
-    /// Calls the factory like a function: `factory(eventID:conditionId:)`.
+    /// Calls the factory like a function: `factory(eventID:conditionId:markets:)`.
     /// - Parameters:
     ///   - eventID: The event whose comments to load.
     ///   - conditionId: The top market's condition id, or `nil`.
+    ///   - markets: The event's markets, for the candidate picker. Defaults to empty
+    ///     (single-market screens like Market Detail, where there's no candidate to pick).
     /// - Returns: A ready-to-use `SocialStripViewModel`.
     @MainActor
-    public func callAsFunction(eventID: String, conditionId: String?) -> SocialStripViewModel {
-        make(eventID, conditionId)
+    public func callAsFunction(eventID: String, conditionId: String?, markets: [Market] = []) -> SocialStripViewModel {
+        make(eventID, conditionId, markets)
     }
 }
 

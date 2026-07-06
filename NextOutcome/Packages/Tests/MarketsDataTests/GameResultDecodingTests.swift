@@ -57,4 +57,19 @@ final class GameResultDecodingTests: XCTestCase {
         XCTAssertNil(result.homeScore)
         XCTAssertNil(result.awayScore)
     }
+
+    func test_decode_recordDegradesEmptyStringToNil() throws {
+        let dtos = try JSONDecoder().decode([GameResultDTO].self, from: finishedJSON)
+        let result = try XCTUnwrap(dtos.first).toDomain(fallbackEventID: "fallback")
+        XCTAssertNil(result.homeTeam?.record) // "" degrades to nil
+    }
+
+    func test_decode_recordKeepsNonEmptyValue() throws {
+        let json = Data("""
+        [{"id":"1","teams":[{"name":"Max Holloway","record":"27-9-0","ordering":"home"}]}]
+        """.utf8)
+        let dtos = try JSONDecoder().decode([GameResultDTO].self, from: json)
+        let result = try XCTUnwrap(dtos.first).toDomain(fallbackEventID: "e1")
+        XCTAssertEqual(result.homeTeam?.record, "27-9-0")
+    }
 }

@@ -16,7 +16,7 @@ import SharedDomain
 /// maps DTOs into domain types.
 public struct DataPortfolioRepository: PortfolioRepository {
     /// Page size for the activity feed's cursor pagination.
-    private static let pageSize = 25
+    private static let pageSize = 10
     /// The shared API client used for all requests.
     private let client: APIClient
 
@@ -91,7 +91,7 @@ public struct DataPortfolioRepository: PortfolioRepository {
         let endpoint = Endpoint(
             host: .data,
             path: "/v1/leaderboard",
-            query: ["rankBy": metric.rawValue, "window": window.rawValue, "limit": "50"]
+            query: ["rankBy": metric.rawValue, "window": window.rawValue, "limit": "10"]
         )
         let dtos: [LeaderboardEntryDTO] = try await client.fetch(endpoint)
         return dtos.enumerated().map { LeaderboardMapper.entry(from: $1, rank: $0 + 1) }

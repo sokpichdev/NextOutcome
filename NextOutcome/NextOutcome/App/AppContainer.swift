@@ -63,8 +63,66 @@ final class AppContainer {
     func makeEventListViewModel() -> EventListViewModel {
         EventListViewModel(
             fetchEvents: FetchEventsUseCase(repository: repository),
-            fetchTags: FetchTagsUseCase(repository: repository)
+            fetchTags: FetchTagsUseCase(repository: repository),
+            searchEvents: SearchEventsUseCase(repository: repository)
         )
+    }
+
+    /// Builds the view model for the Breaking movers feed (biggest 24h movers).
+    /// - Returns: A view model wired to fetch the ranked movers.
+    func makeBreakingViewModel() -> BreakingViewModel {
+        BreakingViewModel(fetchMovers: FetchMoversUseCase(repository: repository))
+    }
+
+    /// Builds the view model for the Politics hub (2026 Midterms).
+    /// - Returns: A view model wired to fetch the midterms + referendums tags.
+    func makePoliticsHubViewModel() -> PoliticsHubViewModel {
+        PoliticsHubViewModel(fetchAllEvents: FetchAllEventsUseCase(repository: repository))
+    }
+
+    /// Builds the view model for the Sports hub (Live/Futures modes, league chips).
+    /// - Returns: A view model wired to fetch events and the tag catalogue.
+    func makeSportsHubViewModel() -> SportsHubViewModel {
+        SportsHubViewModel(
+            fetchEvents: FetchEventsUseCase(repository: repository),
+            fetchAllEvents: FetchAllEventsUseCase(repository: repository)
+        )
+    }
+
+    /// The use case shared by Sports league detail screens (built lazily per league, since
+    /// each screen owns its own view model).
+    func makeFetchAllEventsUseCase() -> FetchAllEventsUseCase {
+        FetchAllEventsUseCase(repository: repository)
+    }
+
+    /// A factory for the bespoke movers detail screen. It builds the detail view model when a
+    /// mover row is tapped, wiring in the parent-event fetch and the social-strip factory (for
+    /// Comments/Top Holders/Positions/Activity) — built synchronously in `load()` rather than
+    /// read from the view's environment, so the sheet always has real content the moment it's
+    /// presented.
+    func makeMoversDetailFactory() -> MoversDetailViewModelFactory {
+        let socialStripFactory = makeSocialStripFactory()
+        return MoversDetailViewModelFactory { [repository] mover in
+            let fetchEvent = FetchEventUseCase(repository: repository)
+            return MoversDetailViewModel(
+                mover: mover,
+                fetchEvent: { try await fetchEvent.execute(slug: $0) },
+                makeSocialStrip: { eventID, conditionId, markets in
+                    socialStripFactory(eventID: eventID, conditionId: conditionId, markets: markets)
+                }
+            )
+        }
+    }
+
+    /// A factory for the team/fighter profile screen, opened when a `GameCard`'s
+    /// team logo is tapped. Reuses the same event sample + team directory use
+    /// cases the Sports hub and World Cup hub already have.
+    func makeTeamProfileFactory() -> TeamProfileViewModelFactory {
+        let fetchAllEvents = makeFetchAllEventsUseCase()
+        let fetchTeams = FetchTeamsUseCase(repository: repository)
+        return TeamProfileViewModelFactory { target in
+            TeamProfileViewModel(target: target, fetchAllEvents: fetchAllEvents, fetchTeams: fetchTeams)
+        }
     }
 
     /// Builds the view model for the World Cup hub screen (bracket, map, results, teams).
@@ -93,12 +151,6 @@ final class AppContainer {
             fetchPortfolio: FetchPortfolioUseCase(repository: portfolioRepository),
             fetchClosed: FetchClosedPositionsUseCase(repository: portfolioRepository)
         )
-    }
-
-    /// Builds the view model for the account activity feed (recent trades/transactions).
-    /// - Returns: A view model that loads the user's activity history.
-    func makeActivityViewModel() -> ActivityViewModel {
-        ActivityViewModel(fetchActivity: FetchActivityUseCase(repository: portfolioRepository))
     }
 
     /// Builds the view model for the leaderboard screen (top traders by profit/volume).
@@ -137,13 +189,15 @@ final class AppContainer {
     /// A factory for the event detail social strip (comments, holders, trades, etc.).
     /// It creates the social strip view model when the screen knows the event details.
     func makeSocialStripFactory() -> SocialStripViewModelFactory {
-        SocialStripViewModelFactory { [repository] eventID, conditionId in
+        SocialStripViewModelFactory { [repository] eventID, conditionId, markets in
             SocialStripViewModel(
                 eventID: eventID,
                 conditionId: conditionId,
+                markets: markets,
                 fetchComments: FetchCommentsUseCase(repository: repository),
                 fetchHolders: FetchHoldersUseCase(repository: repository),
-                fetchActivity: FetchActivityTradesUseCase(repository: repository)
+                fetchActivity: FetchActivityTradesUseCase(repository: repository),
+                fetchCommenterPositions: FetchCommenterPositionsUseCase(repository: repository)
             )
         }
     }

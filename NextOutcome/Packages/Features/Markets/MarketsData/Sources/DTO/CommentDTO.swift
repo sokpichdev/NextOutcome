@@ -17,10 +17,13 @@ struct CommentProfileDTO: Decodable {
     let pseudonym: String?
     /// The author's avatar URL string.
     let profileImage: String?
+    /// The author's proxy (trading) wallet — the address `/positions?user=` expects, not
+    /// the base `userAddress` on the comment itself.
+    let proxyWallet: String?
 
     /// JSON keys for `CommentProfileDTO`.
     enum CodingKeys: String, CodingKey {
-        case name, pseudonym, profileImage
+        case name, pseudonym, profileImage, proxyWallet
     }
 
     /// Tolerant decoder (all fields optional for anonymous/deleted accounts).
@@ -29,6 +32,7 @@ struct CommentProfileDTO: Decodable {
         name = try? c.decode(String.self, forKey: .name)
         pseudonym = try? c.decode(String.self, forKey: .pseudonym)
         profileImage = try? c.decode(String.self, forKey: .profileImage)
+        proxyWallet = try? c.decode(String.self, forKey: .proxyWallet)
     }
 }
 
@@ -42,10 +46,12 @@ struct CommentDTO: Decodable {
     let createdAt: String?
     /// The nested author profile, if present.
     let profile: CommentProfileDTO?
+    /// The number of reactions ("likes") on the comment.
+    let reactionCount: Int
 
     /// JSON keys for `CommentDTO`.
     enum CodingKeys: String, CodingKey {
-        case id, body, createdAt, profile
+        case id, body, createdAt, profile, reactionCount
     }
 
     /// Tolerant decoder that never fails a row on missing fields.
@@ -55,5 +61,6 @@ struct CommentDTO: Decodable {
         body = (try? c.decode(String.self, forKey: .body)) ?? ""
         createdAt = try? c.decode(String.self, forKey: .createdAt)
         profile = try? c.decode(CommentProfileDTO.self, forKey: .profile)
+        reactionCount = (try? c.decode(Int.self, forKey: .reactionCount)) ?? 0
     }
 }

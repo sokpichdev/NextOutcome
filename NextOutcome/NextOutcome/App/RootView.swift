@@ -7,6 +7,7 @@
 
 import SwiftUI
 import DesignSystem
+import MarketsDomain
 import MarketsPresentation
 import OrderbookPresentation
 import LiveStatsDomain
@@ -29,12 +30,18 @@ struct RootView: View {
     @State private var eventListViewModel: EventListViewModel
     /// Drives the World Cup hub shown in the Home tab when that category is selected.
     @State private var worldCupViewModel: WorldCupHubViewModel
+    /// Drives the Breaking movers feed shown in the Home tab when that category is selected.
+    @State private var breakingViewModel: BreakingViewModel
+    /// Drives the Politics hub shown in the Home tab when that category is selected.
+    @State private var politicsHubViewModel: PoliticsHubViewModel
+    /// Drives the Sports hub shown in the Home tab when that category is selected.
+    @State private var sportsHubViewModel: SportsHubViewModel
+    /// Shared use case for building Sports league detail screens on demand.
+    private let fetchAllEventsUseCase: FetchAllEventsUseCase
     /// Drives the Search tab.
     @State private var searchViewModel: SearchViewModel
     /// Drives the Portfolio tab.
     @State private var portfolioViewModel: PortfolioViewModel
-    /// Drives the Breaking/activity tab.
-    @State private var activityViewModel: ActivityViewModel
     /// Provides shell-level state such as the balance label shown on the Portfolio tab.
     @State private var shellViewModel: ShellViewModel
 
@@ -51,6 +58,10 @@ struct RootView: View {
     private let marketHoldersFactory: MarketHoldersViewModelFactory
     /// Lazily builds the event detail social strip view model.
     private let socialStripFactory: SocialStripViewModelFactory
+    /// Lazily builds the bespoke movers detail view model when a Breaking row is tapped.
+    private let moversDetailFactory: MoversDetailViewModelFactory
+    /// Builds the team-profile view model when a game card's team logo is tapped.
+    private let teamProfileFactory: TeamProfileViewModelFactory
     /// Supplies price-history data to charts without exposing the Data layer.
     private let priceHistoryProvider: PriceHistoryProvider
     /// Lazily builds the BTC 5-minute live screen view model.
@@ -78,9 +89,17 @@ struct RootView: View {
         let portfolio = container.makePortfolioViewModel()
         _eventListViewModel = State(initialValue: container.makeEventListViewModel())
         _worldCupViewModel = State(initialValue: container.makeWorldCupHubViewModel())
+        _breakingViewModel = State(initialValue: container.makeBreakingViewModel())
+        let politics = container.makePoliticsHubViewModel()
+        _politicsHubViewModel = State(initialValue: politics)
+        // Kicked off here (an unstructured Task, not a SwiftUI `.task` view modifier) so the
+        // fetch survives category/navigation churn — it isn't tied to any view's presence in
+        // the hierarchy and can't be cancelled by scrolling, tab switches, or re-renders.
+        Task { await politics.loadIfNeeded() }
+        _sportsHubViewModel = State(initialValue: container.makeSportsHubViewModel())
+        fetchAllEventsUseCase = container.makeFetchAllEventsUseCase()
         _searchViewModel = State(initialValue: container.makeSearchViewModel())
         _portfolioViewModel = State(initialValue: portfolio)
-        _activityViewModel = State(initialValue: container.makeActivityViewModel())
         _shellViewModel = State(initialValue: ShellViewModel(portfolio: portfolio))
 
         leaderboardViewModel = container.makeLeaderboardViewModel()
@@ -88,6 +107,8 @@ struct RootView: View {
         orderbookFactory = container.makeOrderbookFactory()
         marketHoldersFactory = container.makeMarketHoldersFactory()
         socialStripFactory = container.makeSocialStripFactory()
+        moversDetailFactory = container.makeMoversDetailFactory()
+        teamProfileFactory = container.makeTeamProfileFactory()
         priceHistoryProvider = container.makePriceHistoryProvider()
         btcLiveFactory = container.makeBTCLiveFactory()
         tradeSubmitter = container.makeTradeSubmitter()
@@ -109,6 +130,8 @@ struct RootView: View {
         .environment(\.orderbookFactory, orderbookFactory)
         .environment(\.marketHoldersFactory, marketHoldersFactory)
         .environment(\.socialStripFactory, socialStripFactory)
+        .environment(\.moversDetailFactory, moversDetailFactory)
+        .environment(\.teamProfileFactory, teamProfileFactory)
         .environment(\.priceHistoryProvider, priceHistoryProvider)
         .environment(\.btcLiveFactory, btcLiveFactory)
         .environment(\.tradeSubmitter, tradeSubmitter)
@@ -127,42 +150,57 @@ struct RootView: View {
                     // reset when users switch tabs.
                     if selectedCategory == .worldCup {
                         WorldCupHubView(viewModel: worldCupViewModel)
+                    } else if selectedCategory == .breaking {
+                        BreakingView(viewModel: breakingViewModel)
+                    } else if selectedCategory == .sports {
+                        SportsHubView(
+                            viewModel: sportsHubViewModel,
+                            worldCupViewModel: worldCupViewModel,
+                            fetchAllEvents: fetchAllEventsUseCase
+                        )
                     } else {
-                        EventListView(viewModel: eventListViewModel, selectedCategory: selectedCategory)
+                        EventListView(
+                            viewModel: eventListViewModel,
+                            selectedCategory: selectedCategory,
+                            politicsHubViewModel: selectedCategory == .politics ? politicsHubViewModel : nil
+                        )
                     }
                 }
             }
             .tabItem { Label("Home", systemImage: "house") }
 
             NavigationStack {
-                chrome { SearchView(viewModel: searchViewModel) }
+                chrome(showsCategoryRail: false) { SearchView(viewModel: searchViewModel) }
             }
             .tabItem { Label("Search", systemImage: "magnifyingglass") }
 
             NavigationStack {
-                chrome { ActivityView(viewModel: activityViewModel) }
+                chrome(showsCategoryRail: false) { BreakingView(viewModel: breakingViewModel) }
             }
-            .tabItem { Label("Breaking", systemImage: "circle.dashed") }
+            .tabItem { Label("Breaking", systemImage: "bolt.fill") }
 
             NavigationStack {
-                chrome { PortfolioView(viewModel: portfolioViewModel) }
+                chrome(showsCategoryRail: false) { PortfolioView(viewModel: portfolioViewModel) }
             }
             .tabItem { Label(shellViewModel.balanceLabel, systemImage: "chart.line.uptrend.xyaxis") }
         }
     }
 
-    /// Wraps a screen in the shared chrome (category rail + avatar button).
-    ///
-    /// Using one helper for every tab keeps the top bar and drawer trigger identical
-    /// across the app.
-    /// - Parameter content: The tab's screen content to embed inside the chrome.
+    /// Wraps a screen in the shared chrome (top bar + avatar button, optionally the category
+    /// rail). Only the Home tab's content responds to the category rail, so every other tab
+    /// hides it by passing `showsCategoryRail: false`.
+    /// - Parameters:
+    ///   - showsCategoryRail: Whether to show the Trending/World Cup/Breaking/… rail below the
+    ///     top bar. Defaults to `true` (the Home tab).
+    ///   - content: The tab's screen content to embed inside the chrome.
     /// - Returns: The content wrapped in `ShellChrome` with the navigation bar hidden.
     @ViewBuilder
-    private func chrome<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+    private func chrome<C: View>(showsCategoryRail: Bool = true, @ViewBuilder _ content: () -> C) -> some View {
         // Wrap each screen in the shared chrome UI used across tabs.
-        // This adds the category rail and the avatar button that opens the drawer.
+        // This adds the top bar (+ category rail, for Home) and the avatar button that opens the drawer.
         ShellChrome(
             selectedCategory: $selectedCategory,
+            showsCategoryRail: showsCategoryRail,
             onAvatar: { isDrawerOpen = true }
         ) { content() }
         .toolbar(.hidden, for: .navigationBar)

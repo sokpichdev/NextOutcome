@@ -102,10 +102,6 @@ import SwiftUI
 
 #Preview("Detail — header + chart") {
     VStack(spacing: 16) {
-        DetailHeader(title: .breadcrumb("Sports · World Cup"),
-                     actions: [.bookmark, .link], onBack: {})
-        DetailHeader(title: .text("France", iconURL: nil),
-                     actions: [.code, .bookmark, .link], onBack: {})
         MultiSeriesChart(series: [
             PriceSeries(id: "fr", label: "France", color: DSColor.accent,
                         points: (0..<8).map { PricePoint(date: Date().addingTimeInterval(Double($0) * 3600), price: 0.2 + Double($0) * 0.02) }),
