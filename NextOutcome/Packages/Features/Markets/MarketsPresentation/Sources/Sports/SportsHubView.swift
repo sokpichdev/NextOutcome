@@ -21,7 +21,7 @@ public struct SportsHubView: View {
     /// (the same instance shown when the rail selects World Cup directly).
     private let worldCupViewModel: WorldCupHubViewModel
     /// The use case used to build a league detail screen's view model on demand.
-    private let fetchEvents: FetchEventsUseCase
+    private let fetchAllEvents: FetchAllEventsUseCase
     /// Whether the Live tab's league search field is shown.
     @State private var isSearchActive = false
     /// The Live tab's league search text.
@@ -31,11 +31,11 @@ public struct SportsHubView: View {
     /// - Parameters:
     ///   - viewModel: The Sports hub view model.
     ///   - worldCupViewModel: The shared World Cup hub view model.
-    ///   - fetchEvents: The use case for building league detail screens.
-    public init(viewModel: SportsHubViewModel, worldCupViewModel: WorldCupHubViewModel, fetchEvents: FetchEventsUseCase) {
+    ///   - fetchAllEvents: The use case for building league detail screens.
+    public init(viewModel: SportsHubViewModel, worldCupViewModel: WorldCupHubViewModel, fetchAllEvents: FetchAllEventsUseCase) {
         self._viewModel = State(initialValue: viewModel)
         self.worldCupViewModel = worldCupViewModel
-        self.fetchEvents = fetchEvents
+        self.fetchAllEvents = fetchAllEvents
     }
 
     public var body: some View {
@@ -51,7 +51,7 @@ public struct SportsHubView: View {
             if league.title == "World Cup" {
                 WorldCupHubView(viewModel: worldCupViewModel)
             } else {
-                SportsLeagueDetailView(league: league, fetchEvents: fetchEvents)
+                SportsLeagueDetailView(league: league, fetchAllEvents: fetchAllEvents)
             }
         }
         .navigationDestination(for: Event.self) { EventDetailView(event: $0) }
@@ -61,9 +61,9 @@ public struct SportsHubView: View {
         .task { await viewModel.loadIfNeeded() }
     }
 
-    /// Title + search toggle for the Live tab.
+    /// Title + search/sort toggles for the Live tab; Futures shows the title only.
     private var header: some View {
-        HStack {
+        HStack(spacing: DSLayout.spacing) {
             Text(viewModel.mode == .live ? "Sports Live" : "Sports Futures")
                 .font(DSFont.largeTitle)
                 .foregroundStyle(DSColor.textPrimary)
@@ -74,6 +74,19 @@ public struct SportsHubView: View {
                     if !isSearchActive { searchQuery = "" }
                 } label: {
                     Image(systemName: isSearchActive ? "xmark.circle.fill" : "magnifyingglass")
+                        .foregroundStyle(DSColor.textPrimary)
+                }
+                Menu {
+                    ForEach(SportsSort.allCases, id: \.self) { sort in
+                        Button {
+                            viewModel.setLiveSort(sort)
+                        } label: {
+                            if sort == viewModel.liveSort { Label(sort.title, systemImage: "checkmark") }
+                            else { Text(sort.title) }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
                         .foregroundStyle(DSColor.textPrimary)
                 }
             }

@@ -37,7 +37,7 @@ struct RootView: View {
     /// Drives the Sports hub shown in the Home tab when that category is selected.
     @State private var sportsHubViewModel: SportsHubViewModel
     /// Shared use case for building Sports league detail screens on demand.
-    private let fetchEventsUseCase: FetchEventsUseCase
+    private let fetchAllEventsUseCase: FetchAllEventsUseCase
     /// Drives the Search tab.
     @State private var searchViewModel: SearchViewModel
     /// Drives the Portfolio tab.
@@ -95,7 +95,7 @@ struct RootView: View {
         // the hierarchy and can't be cancelled by scrolling, tab switches, or re-renders.
         Task { await politics.loadIfNeeded() }
         _sportsHubViewModel = State(initialValue: container.makeSportsHubViewModel())
-        fetchEventsUseCase = container.makeFetchEventsUseCase()
+        fetchAllEventsUseCase = container.makeFetchAllEventsUseCase()
         _searchViewModel = State(initialValue: container.makeSearchViewModel())
         _portfolioViewModel = State(initialValue: portfolio)
         _shellViewModel = State(initialValue: ShellViewModel(portfolio: portfolio))
@@ -152,7 +152,7 @@ struct RootView: View {
                         SportsHubView(
                             viewModel: sportsHubViewModel,
                             worldCupViewModel: worldCupViewModel,
-                            fetchEvents: fetchEventsUseCase
+                            fetchAllEvents: fetchAllEventsUseCase
                         )
                     } else {
                         EventListView(
