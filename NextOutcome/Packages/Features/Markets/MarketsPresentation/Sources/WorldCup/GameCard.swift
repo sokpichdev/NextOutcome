@@ -20,6 +20,15 @@ struct GameCard: View {
     let result: GameResult?
     /// The game's moneyline markets (one per team plus a draw).
     let moneylines: [Market]
+    /// Fired when a team's logo/name is tapped, with a lightweight profile target
+    /// built from whichever team data is available (the loaded `GameResult`'s
+    /// `GameTeam` when live scores are wired up, else the moneyline market's own
+    /// name/image). `nil` (the default) leaves team rows non-interactive — tapping
+    /// anywhere on the card still opens the event, same as today.
+    let onTeamTap: ((TeamProfileTarget) -> Void)? = nil
+    /// The Gamma `/teams` league slug (e.g. "ufc", "mlb", "fifwc") used to enrich
+    /// the tapped team's profile with its record. `nil` skips that lookup.
+    let leagueSlug: String? = nil
     /// The Sports hub's chosen odds display format (defaults to `.price` outside the hub).
     @Environment(\.oddsFormat) private var oddsFormat
     /// Whether to also show spread/total markets (Sports hub only).
@@ -104,7 +113,8 @@ struct GameCard: View {
     /// Which side of the game a team row represents.
     private enum Side { case home, away }
 
-    /// Builds a team row: optional score, logo, and name for one side.
+    /// Builds a team row: optional score, then a tappable logo+name (when
+    /// `onTeamTap` is set) for one side.
     /// - Parameter side: Home or away.
     private func teamRow(side: Side) -> some View {
         let index = side == .home ? 0 : 1
@@ -123,12 +133,36 @@ struct GameCard: View {
                     .background(DSColor.surfaceElevated)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
-            teamLogo(url: team?.logoURL, name: name)
+            teamTapArea(index: index, name: name, team: team)
+            Spacer()
+        }
+    }
+
+    /// The logo+name portion of a team row. Wrapped in a `Button` (instead of
+    /// nesting a second `NavigationLink` inside the card's own outer one, which
+    /// SwiftUI doesn't handle reliably) when `onTeamTap` is set.
+    /// - Parameters:
+    ///   - index: 0 for home, 1 for away — used to fall back to the moneyline
+    ///     market's own name/image when no `GameResult` team loaded.
+    ///   - name: The resolved display name.
+    ///   - team: The `GameResult` team, if loaded.
+    @ViewBuilder
+    private func teamTapArea(index: Int, name: String, team: GameTeam?) -> some View {
+        let logoURL = team?.logoURL ?? (teamMarkets.indices.contains(index) ? teamMarkets[index].imageURL : nil)
+        let content = HStack(spacing: DSLayout.spacingMedium) {
+            teamLogo(url: logoURL, name: name)
             Text(name)
                 .font(DSFont.subheadline.bold())
                 .foregroundStyle(DSColor.textPrimary)
                 .lineLimit(1)
-            Spacer()
+        }
+        if let onTeamTap {
+            Button {
+                onTeamTap(TeamProfileTarget(name: name, logoURL: logoURL, colorHex: team?.colorHex, league: leagueSlug))
+            } label: { content }
+            .buttonStyle(.plain)
+        } else {
+            content
         }
     }
 
