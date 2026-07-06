@@ -131,4 +131,52 @@ final class NextOutcomeUITests: XCTestCase {
         mlbAttachment.lifetime = .keepAlways
         add(mlbAttachment)
     }
+
+    /// Tapping a team's logo/name on a World Cup game card opens its team profile in
+    /// place of the event detail — the whole card is already wrapped in a NavigationLink
+    /// pushing the event, so this exercises the nested-Button tap-target mechanism
+    /// GameCard uses instead of a second NavigationLink. Tapping the card away from the
+    /// logo must still open the event detail as before.
+    @MainActor
+    func testWorldCupGameCard_tapTeamLogo_opensProfile_tapElsewhere_opensEvent() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        app.buttons["Sports"].tap()
+        let worldCupChip = app.buttons["World Cup"]
+        XCTAssertTrue(worldCupChip.waitForExistence(timeout: 45))
+        worldCupChip.tap()
+
+        let teamButton = app.buttons["United States"]
+        XCTAssertTrue(teamButton.waitForExistence(timeout: 30), "Expected a 'United States vs. Belgium' game card with a tappable team logo")
+        teamButton.tap()
+
+        // The team profile screen shows the team's name as a heading.
+        XCTAssertTrue(app.staticTexts["United States"].waitForExistence(timeout: 15), "Expected TeamProfileView to open showing the team's name")
+
+        let profileAttachment = XCTAttachment(screenshot: app.screenshot())
+        profileAttachment.name = "TeamProfileView — United States"
+        profileAttachment.lifetime = .keepAlways
+        add(profileAttachment)
+
+        // Go back to the Games list, then tap the card away from the logo — it should
+        // still open the event detail (the outer NavigationLink still works).
+        if app.navigationBars.buttons.matching(identifier: "Back").firstMatch.exists {
+            app.navigationBars.buttons.matching(identifier: "Back").firstMatch.tap()
+        } else {
+            app.swipeRight() // interactive-pop gesture fallback
+        }
+        XCTAssertTrue(app.buttons["United States"].waitForExistence(timeout: 15), "Expected to be back on the Games list")
+
+        let volLabel = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "Vol")).firstMatch
+        XCTAssertTrue(volLabel.waitForExistence(timeout: 10), "Expected the card's volume label (part of the card, not the team button) to exist")
+        volLabel.tap()
+
+        // Tapping the card away from the team logo pushed the event detail — a nav-bar
+        // back button now exists, proving the outer NavigationLink still fires normally.
+        XCTAssertTrue(
+            app.navigationBars.buttons.matching(identifier: "Back").firstMatch.waitForExistence(timeout: 15),
+            "Expected tapping the card body to push the event detail, same as before this feature was added"
+        )
+    }
 }
