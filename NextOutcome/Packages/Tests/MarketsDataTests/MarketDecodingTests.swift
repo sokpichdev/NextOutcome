@@ -126,6 +126,57 @@ final class MarketDecodingTests: XCTestCase {
         XCTAssertEqual(dto.groupItemTitle, "Spain")
     }
 
+    /// Regression test: Gamma's `/events` responses never carry `gameStartTime` on the event
+    /// itself — only on the embedded markets (captured from a real `/events?series_id=38`
+    /// (UFC) response: "UFC 329: Max Holloway vs. Conor McGregor"). Before `MarketMapper.
+    /// event(from:)` promoted the earliest market kickoff, `Event.gameStartTime` was nil for
+    /// every event fetched by tag, so `WorldCupEventSplitter.split` bucketed every real MLB/
+    /// UFC game as a prop instead of a schedulable game — the Games tab showed "No results"
+    /// for every league except World Cup (which used a separate, now-removed workaround).
+    func test_eventDTO_promotesEarliestMarketKickoff_whenEventLevelKickoffIsAbsent() throws {
+        let json = """
+        {
+          "id": "496873",
+          "title": "UFC 329: Max Holloway vs. Conor McGregor (Welterweight, Main Card)",
+          "slug": "ufc-max1-con-2026-07-11",
+          "markets": [
+            {
+              "id": "2289164",
+              "question": "UFC 329: Max Holloway vs. Conor McGregor (Welterweight, Main Card)",
+              "slug": "ufc-max1-con-2026-07-11",
+              "outcomes": ["Max Holloway", "Conor McGregor"],
+              "outcomePrices": ["0.665", "0.335"],
+              "sportsMarketType": "moneyline",
+              "groupItemTitle": "Max Holloway vs. Conor McGregor",
+              "gameStartTime": "2026-07-11 22:00:00+00"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let dto = try JSONDecoder.polymarket.decode(EventDTO.self, from: json)
+        XCTAssertNil(dto.gameStartTime) // confirms the event level really is absent
+
+        let event = MarketMapper.event(from: dto)
+        XCTAssertNotNil(event.gameStartTime)
+    }
+
+    /// When the event *does* carry its own kickoff, that value wins over any market kickoff.
+    func test_eventDTO_prefersEventLevelKickoff_overMarketKickoff() throws {
+        let json = """
+        {
+          "id": "e1", "title": "T", "slug": "t",
+          "gameStartTime": "2026-01-01 00:00:00+00",
+          "markets": [{ "id": "m1", "question": "Q", "slug": "q", "gameStartTime": "2026-06-01 00:00:00+00" }]
+        }
+        """.data(using: .utf8)!
+
+        let dto = try JSONDecoder.polymarket.decode(EventDTO.self, from: json)
+        let event = MarketMapper.event(from: dto)
+
+        XCTAssertEqual(event.gameStartTime, DateParsing.parse("2026-01-01 00:00:00+00"))
+    }
+
     func test_marketDTO_sportsFields_toleratesMissingOrMistyped() throws {
         let missing = #"{"id": "x", "question": "Q", "slug": "q"}"#.data(using: .utf8)!
         let missingDTO = try JSONDecoder.polymarket.decode(MarketDTO.self, from: missing)

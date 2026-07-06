@@ -150,14 +150,14 @@ public struct GammaMarketRepository: MarketRepository {
     /// Fetches all events of a series (tournament), walking up to 3 pages of 100.
     public func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] {
         // A series (tournament) is bounded but can exceed one page; walk a few pages.
-        var all: [SeriesEventDTO] = []
+        var all: [EventDTO] = []
         for page in 0..<3 {
             let query = GammaEventQuery.seriesParams(seriesID: seriesID, offset: page * 100, status: status)
-            let dtos: [SeriesEventDTO] = try await client.fetch(Endpoint(host: .gamma, path: "/events", query: query))
+            let dtos: [EventDTO] = try await client.fetch(Endpoint(host: .gamma, path: "/events", query: query))
             all += dtos
             if dtos.count < 100 { break }
         }
-        return all.map { $0.toDomain() }
+        return all.map(MarketMapper.event(from:))
     }
 
     /// Fetches all events under a tag (e.g. the Politics hub's "midterms" tag), walking up to
@@ -211,8 +211,8 @@ public struct GammaMarketRepository: MarketRepository {
             "series_id": seriesID, "closed": "true",
             "order": "endDate", "ascending": "false", "limit": "\(limit)",
         ]
-        let dtos: [SeriesEventDTO] = try await client.fetch(Endpoint(host: .gamma, path: "/events", query: query))
-        return dtos.map { $0.toDomain() }
+        let dtos: [EventDTO] = try await client.fetch(Endpoint(host: .gamma, path: "/events", query: query))
+        return dtos.map(MarketMapper.event(from:))
     }
 
     /// Fetches team reference data for a league from Gamma `/teams`.

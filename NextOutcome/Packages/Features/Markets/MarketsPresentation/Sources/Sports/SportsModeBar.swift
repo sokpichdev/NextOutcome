@@ -9,28 +9,31 @@ import SwiftUI
 import DesignSystem
 
 /// The Sports hub's top chip row: Live / Futures mode toggles plus league chips (World Cup,
-/// Wimbledon, MLB, …). Mode chips update `mode`; league chips are `NavigationLink`s pushing
-/// `SportsLeague` values onto the enclosing stack.
+/// Wimbledon, MLB, …). Every chip selects its content in place on the same screen — mode
+/// chips update `mode`, league chips update `selectedLeague` — none of them navigate.
 struct SportsModeBar: View {
     /// The selected top-level mode (Live/Futures), two-way bound.
     @Binding var mode: SportsHubViewModel.Mode
     /// The league chips to show after the mode toggles.
     let leagues: [SportsLeague]
+    /// The selected league chip, if any. Selecting Live/Futures clears this.
+    @Binding var selectedLeague: SportsLeague?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                modeChip(title: "Live", glyph: "dot.radiowaves.left.and.right", isActive: mode == .live) {
+                modeChip(title: "Live", glyph: "dot.radiowaves.left.and.right", isActive: mode == .live && selectedLeague == nil) {
                     mode = .live
+                    selectedLeague = nil
                 }
-                modeChip(title: "Futures", glyph: "chart.bar.fill", isActive: mode == .futures) {
+                modeChip(title: "Futures", glyph: "chart.bar.fill", isActive: mode == .futures && selectedLeague == nil) {
                     mode = .futures
+                    selectedLeague = nil
                 }
                 ForEach(leagues) { league in
-                    NavigationLink(value: league) {
-                        chipLabel(title: league.title, glyph: league.glyph, isActive: false)
+                    modeChip(title: league.title, glyph: league.glyph, isActive: selectedLeague?.id == league.id) {
+                        selectedLeague = league
                     }
-                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, DSLayout.margin)
