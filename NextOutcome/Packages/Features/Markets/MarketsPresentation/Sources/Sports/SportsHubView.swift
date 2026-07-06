@@ -29,6 +29,10 @@ public struct SportsHubView: View {
     /// The league chip selected in the mode bar, if any. Non-nil replaces the Live/Futures
     /// content with that league's detail, in place — no navigation push.
     @State private var selectedLeague: SportsLeague?
+    /// The team logo tapped in the Live tab, if any — drives the profile push.
+    @State private var selectedTeam: TeamProfileTarget?
+    /// Builds the profile view model when a team logo is tapped.
+    @Environment(\.teamProfileFactory) private var teamProfileFactory
 
     /// Creates the view.
     /// - Parameters:
@@ -146,6 +150,11 @@ public struct SportsHubView: View {
                 .navigationDestination(for: MarketNavigationTarget.self) {
                     MarketDetailView(market: $0.market, eventID: $0.eventID)
                 }
+                .navigationDestination(item: $selectedTeam) { target in
+                    if let teamProfileFactory {
+                        TeamProfileView(viewModel: teamProfileFactory(target))
+                    }
+                }
         }
     }
 
@@ -184,7 +193,11 @@ public struct SportsHubView: View {
                                 .foregroundStyle(DSColor.textSecondary)
                             ForEach(group.events) { event in
                                 NavigationLink(value: event) {
-                                    HomeCard(event: event)
+                                    HomeCard(
+                                        event: event,
+                                        onTeamTap: { selectedTeam = $0 },
+                                        leagueSlug: group.league.title.lowercased()
+                                    )
                                 }
                                 .buttonStyle(.plain)
                             }
