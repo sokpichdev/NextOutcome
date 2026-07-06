@@ -80,6 +80,18 @@ final class AppContainer {
         PoliticsHubViewModel(fetchAllEvents: FetchAllEventsUseCase(repository: repository))
     }
 
+    /// Builds the view model for the Sports hub (Live/Futures modes, league chips).
+    /// - Returns: A view model wired to fetch events and the tag catalogue.
+    func makeSportsHubViewModel() -> SportsHubViewModel {
+        SportsHubViewModel(fetchEvents: FetchEventsUseCase(repository: repository))
+    }
+
+    /// The use case shared by Sports league detail screens (built lazily per league, since
+    /// each screen owns its own view model).
+    func makeFetchEventsUseCase() -> FetchEventsUseCase {
+        FetchEventsUseCase(repository: repository)
+    }
+
     /// A factory for the bespoke movers detail screen. It builds the detail view model when a
     /// mover row is tapped, wiring in the parent-event fetch and the social-strip factory (for
     /// Comments/Top Holders/Positions/Activity) — built synchronously in `load()` rather than
