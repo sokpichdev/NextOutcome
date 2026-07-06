@@ -2,29 +2,41 @@ import SwiftUI
 import MarketsDomain
 import DesignSystem
 
-/// Renders the correct Home card variant for an event.
-/// Renders the correct Home card variant for an event.
 public struct HomeCard: View {
     /// The event to render.
     private let event: Event
     /// The chosen card variant (from `kindOverride` or classification).
     private let kind: HomeCardKind
+    /// Forwarded to `GameCard` for the `.game` case; see `GameCard.onTeamTap`.
+    private let onTeamTap: ((TeamProfileTarget) -> Void)?
+    /// Forwarded to `GameCard` for the `.game` case; see `GameCard.leagueSlug`.
+    private let leagueSlug: String?
 
     /// Creates the card.
     /// - Parameters:
     ///   - event: The event to display.
     ///   - kindOverride: Force a specific variant (e.g. `.hero` for a feed slot); otherwise
     ///     the kind is derived from the event via `HomeCardKind.classify`.
-    public init(event: Event, kindOverride: HomeCardKind? = nil) {
+    ///   - onTeamTap: Forwarded to `GameCard` when this event renders as `.game`; `nil`
+    ///     (the default) leaves team logos non-interactive.
+    ///   - leagueSlug: Forwarded to `GameCard` when this event renders as `.game`.
+    public init(
+        event: Event,
+        kindOverride: HomeCardKind? = nil,
+        onTeamTap: ((TeamProfileTarget) -> Void)? = nil,
+        leagueSlug: String? = nil
+    ) {
         self.event = event
         self.kind = kindOverride ?? HomeCardKind.classify(event)
+        self.onTeamTap = onTeamTap
+        self.leagueSlug = leagueSlug
     }
 
     public var body: some View {
         switch kind {
         case .liveUpDown:  LiveUpDownCard(event: event)
         case .news:        NewsCard(event: event)
-        case .game:        GameCard(event: event, result: nil, moneylines: event.markets)
+        case .game:        GameCard(event: event, result: nil, moneylines: event.markets, onTeamTap: onTeamTap, leagueSlug: leagueSlug)
         case .multiOutcome: MultiOutcomeCard(event: event)
         case .hero:        HeroPromoCard(event: event)
         case .standard:    EventCard(event: event)
