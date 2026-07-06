@@ -91,8 +91,8 @@ final class AppContainer {
 
     /// The use case shared by Sports league detail screens (built lazily per league, since
     /// each screen owns its own view model).
-    func makeFetchEventsUseCase() -> FetchEventsUseCase {
-        FetchEventsUseCase(repository: repository)
+    func makeFetchAllEventsUseCase() -> FetchAllEventsUseCase {
+        FetchAllEventsUseCase(repository: repository)
     }
 
     /// A factory for the bespoke movers detail screen. It builds the detail view model when a

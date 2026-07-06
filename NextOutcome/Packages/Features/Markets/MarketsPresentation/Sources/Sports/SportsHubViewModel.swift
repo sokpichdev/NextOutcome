@@ -64,8 +64,13 @@ public final class SportsHubViewModel {
     /// League chips resolved from the live sample's event tags, for navigation into
     /// per-league detail.
     public private(set) var leagues: [SportsLeague] = []
+    /// The Live tab's sort, chosen via its filter icon.
+    public private(set) var liveSort: SportsSort = .volume
     /// Live events grouped by league, in `leagues` order; leagues with no live events are omitted.
     public private(set) var liveGroups: [(league: SportsLeague, events: [Event])] = []
+    /// The raw Live sample (unsorted, ungrouped), kept so changing `liveSort` doesn't require
+    /// a refetch.
+    private var sampleEvents: [Event] = []
     /// Sport chips for the Futures picker (NBA/EPL), resolved from the same sample.
     public private(set) var futuresSports: [SportsLeague] = []
     /// The selected Futures sport's tag id.
@@ -105,18 +110,18 @@ public final class SportsHubViewModel {
     /// tab's sections (highest volume first), then kicks off the initial Futures fetch.
     public func load() async {
         state = .loading
-        let events = ((try? await fetchAllEvents.execute(tagID: Self.sportsTagID, status: .active)) ?? [])
-            .sorted { $0.volume > $1.volume }
+        let events = (try? await fetchAllEvents.execute(tagID: Self.sportsTagID, status: .active)) ?? []
         guard !events.isEmpty else {
             state = .failed("Couldn't load Sports. Pull to refresh.")
             return
         }
+        sampleEvents = events
         leagues = Self.resolve(Self.knownLeagues, in: events)
         futuresSports = Self.resolve(Self.knownFuturesSports, in: events)
         if selectedFuturesSportID == nil || !futuresSports.contains(where: { $0.id == selectedFuturesSportID }) {
             selectedFuturesSportID = futuresSports.first?.id
         }
-        liveGroups = Self.grouped(events, into: leagues)
+        applyLiveSort()
         state = .loaded
         lastUpdated = now()
         await loadFutures()
@@ -127,11 +132,23 @@ public final class SportsHubViewModel {
         await load()
     }
 
+    /// Changes the Live tab's sort and regroups the already-fetched sample — no refetch.
+    public func setLiveSort(_ sort: SportsSort) {
+        guard sort != liveSort else { return }
+        liveSort = sort
+        applyLiveSort()
+    }
+
     /// Selects a Futures sport chip and reloads its markets, unless already selected.
     public func selectFuturesSport(_ tagID: String) async {
         guard tagID != selectedFuturesSportID else { return }
         selectedFuturesSportID = tagID
         await loadFutures()
+    }
+
+    /// Re-sorts `sampleEvents` by `liveSort` and regroups into `liveGroups`.
+    private func applyLiveSort() {
+        liveGroups = Self.grouped(liveSort.apply(to: sampleEvents), into: leagues)
     }
 
     /// Fetches the selected Futures sport's markets, highest volume first.

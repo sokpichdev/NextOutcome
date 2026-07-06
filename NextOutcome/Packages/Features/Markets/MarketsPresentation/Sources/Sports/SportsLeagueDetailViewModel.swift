@@ -8,8 +8,9 @@
 import Foundation
 import MarketsDomain
 
-/// Drives a single league's detail screen (e.g. Wimbledon, MLB, UFC): its full market list
-/// plus a client-side title search.
+/// Drives a single league's detail screen (e.g. Wimbledon, MLB, UFC): its Games/Props split,
+/// a client-side title search, a Volume/Soonest sort, and the standings sheet (the league's
+/// highest-volume "champion"-style market, ranked).
 @MainActor
 @Observable
 public final class SportsLeagueDetailViewModel {
@@ -25,30 +26,62 @@ public final class SportsLeagueDetailViewModel {
         case failed(String)
     }
 
+    /// Which sub-tab is showing: schedulable games, or everything else (futures, props).
+    public enum Tab: CaseIterable {
+        case games
+        case props
+
+        /// The chip label for this tab.
+        public var title: String {
+            switch self {
+            case .games: return "Games"
+            case .props: return "Props"
+            }
+        }
+    }
+
     /// The league this screen shows.
     public let league: SportsLeague
     /// The current load state.
     public private(set) var state: State = .idle
-    /// The league's markets, highest volume first.
-    public private(set) var events: [Event] = []
+    /// The selected Games/Props tab.
+    public var selectedTab: Tab = .games
+    /// The list's sort, chosen via the filter icon.
+    public private(set) var sort: SportsSort = .volume
     /// Whether the search field is shown.
     public var isSearchActive = false
     /// The current search text.
     public var searchQuery = ""
 
-    /// Loads a page of events by tag.
-    private let fetchEvents: FetchEventsUseCase
+    /// All of the league's fetched events, unsplit.
+    private var events: [Event] = []
+
+    /// Loads every event under the league's tag, unpaginated.
+    private let fetchAllEvents: FetchAllEventsUseCase
 
     /// Creates the view model.
-    public init(league: SportsLeague, fetchEvents: FetchEventsUseCase) {
+    public init(league: SportsLeague, fetchAllEvents: FetchAllEventsUseCase) {
         self.league = league
-        self.fetchEvents = fetchEvents
+        self.fetchAllEvents = fetchAllEvents
     }
 
-    /// `events` filtered by `searchQuery` (title match, case-insensitive) when non-empty.
+    /// Schedulable games: kickoff time + moneyline market.
+    private var gameEvents: [Event] { WorldCupEventSplitter.split(events).games }
+    /// Everything else: season winners, awards, player props.
+    private var propEvents: [Event] { WorldCupEventSplitter.split(events).props }
+
+    /// The selected tab's events, sorted by `sort` and filtered by `searchQuery`.
     public var visibleEvents: [Event] {
-        guard !searchQuery.isEmpty else { return events }
-        return events.filter { $0.title.localizedCaseInsensitiveContains(searchQuery) }
+        let base = selectedTab == .games ? gameEvents : propEvents
+        let sorted = sort.apply(to: base)
+        guard !searchQuery.isEmpty else { return sorted }
+        return sorted.filter { $0.title.localizedCaseInsensitiveContains(searchQuery) }
+    }
+
+    /// The highest-volume props event (e.g. "Wimbledon Champion"), backing the standings
+    /// sheet opened from the trophy icon. `nil` when the league has no props events.
+    public var standingsEvent: Event? {
+        propEvents.max { $0.volume < $1.volume }
     }
 
     /// Loads on first appearance only (no-op once loaded/loading).
@@ -59,18 +92,22 @@ public final class SportsLeagueDetailViewModel {
     /// Fetches the league's markets.
     public func load() async {
         state = .loading
-        guard let page = try? await fetchEvents.execute(tagID: league.id, sort: .volume24h, status: .active),
-              !page.items.isEmpty
-        else {
+        let fetched = (try? await fetchAllEvents.execute(tagID: league.id, status: .active)) ?? []
+        guard !fetched.isEmpty else {
             state = .failed("Couldn't load \(league.title). Pull to refresh.")
             return
         }
-        events = page.items
+        events = fetched
         state = .loaded
     }
 
     /// Reloads (pull-to-refresh).
     public func refresh() async {
         await load()
+    }
+
+    /// Changes the list's sort.
+    public func setSort(_ sort: SportsSort) {
+        self.sort = sort
     }
 }

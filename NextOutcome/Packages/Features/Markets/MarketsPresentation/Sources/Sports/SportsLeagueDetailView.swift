@@ -10,23 +10,27 @@ import MarketsDomain
 import DesignSystem
 
 /// A single league's detail screen, pushed from a Sports hub chip (e.g. Wimbledon, MLB,
-/// UFC): its markets, with a toggleable title search.
+/// UFC): a Games/Props toggle, a Volume/Soonest sort, a toggleable title search, and a
+/// trophy-icon standings sheet.
 public struct SportsLeagueDetailView: View {
-    /// The view model driving this league's markets and search state.
+    /// The view model driving this league's markets, tab, sort, and search state.
     @State private var viewModel: SportsLeagueDetailViewModel
+    /// Whether the standings sheet (trophy icon) is showing.
+    @State private var isStandingsPresented = false
 
     /// Creates the view.
     /// - Parameters:
     ///   - league: The league this screen shows.
-    ///   - fetchEvents: The use case used to load the league's markets.
-    public init(league: SportsLeague, fetchEvents: FetchEventsUseCase) {
-        self._viewModel = State(initialValue: SportsLeagueDetailViewModel(league: league, fetchEvents: fetchEvents))
+    ///   - fetchAllEvents: The use case used to load the league's markets.
+    public init(league: SportsLeague, fetchAllEvents: FetchAllEventsUseCase) {
+        self._viewModel = State(initialValue: SportsLeagueDetailViewModel(league: league, fetchAllEvents: fetchAllEvents))
     }
 
     public var body: some View {
         VStack(spacing: 0) {
             header
             if viewModel.isSearchActive { searchField }
+            tabRow
             content
         }
         .background(DSColor.background)
@@ -34,10 +38,13 @@ public struct SportsLeagueDetailView: View {
         .navigationDestination(for: MarketNavigationTarget.self) {
             MarketDetailView(market: $0.market, eventID: $0.eventID)
         }
+        .sheet(isPresented: $isStandingsPresented) {
+            LeagueStandingsSheet(leagueTitle: viewModel.league.title, event: viewModel.standingsEvent)
+        }
         .task { await viewModel.loadIfNeeded() }
     }
 
-    /// The screen's own title row (the app hides the system nav bar), with a search toggle.
+    /// The screen's own title row (the app hides the system nav bar): search + standings icons.
     private var header: some View {
         HStack {
             Text(viewModel.league.title)
@@ -50,6 +57,9 @@ public struct SportsLeagueDetailView: View {
             } label: {
                 Image(systemName: viewModel.isSearchActive ? "xmark.circle.fill" : "magnifyingglass")
                     .foregroundStyle(DSColor.textPrimary)
+            }
+            Button { isStandingsPresented = true } label: {
+                Image(systemName: "trophy").foregroundStyle(DSColor.textPrimary)
             }
         }
         .padding(.horizontal, DSLayout.margin)
@@ -67,10 +77,36 @@ public struct SportsLeagueDetailView: View {
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(DSColor.surface).clipShape(RoundedRectangle(cornerRadius: DSLayout.chipRadius))
         .padding(.horizontal, DSLayout.margin)
+        .padding(.top, DSLayout.spacing)
+    }
+
+    /// The Games/Props toggle chips plus the sort filter icon.
+    private var tabRow: some View {
+        HStack(spacing: DSLayout.spacing) {
+            HStack(spacing: 8) {
+                ForEach(SportsLeagueDetailViewModel.Tab.allCases, id: \.self) { tab in
+                    DSChip(tab.title, isActive: viewModel.selectedTab == tab) { viewModel.selectedTab = tab }
+                }
+            }
+            Spacer()
+            Menu {
+                ForEach(SportsSort.allCases, id: \.self) { sort in
+                    Button {
+                        viewModel.setSort(sort)
+                    } label: {
+                        if sort == viewModel.sort { Label(sort.title, systemImage: "checkmark") }
+                        else { Text(sort.title) }
+                    }
+                }
+            } label: {
+                Image(systemName: "slider.horizontal.3").foregroundStyle(DSColor.textPrimary)
+            }
+        }
+        .padding(.horizontal, DSLayout.margin)
         .padding(.vertical, DSLayout.spacing)
     }
 
-    /// The league's market list, or a loading/empty/error placeholder.
+    /// The selected tab's market list, or a loading/empty/error placeholder.
     @ViewBuilder
     private var content: some View {
         switch viewModel.state {
