@@ -163,18 +163,29 @@ enum MarketMapper {
     }
 
     /// Maps an `EventDTO` to a domain `Event`, recursively mapping its markets and tags.
+    ///
+    /// Gamma's `/events` responses never actually carry `gameStartTime` on the event itself —
+    /// only on its embedded markets. `dto.gameStartTime` decodes tolerantly and stays nil in
+    /// practice, so every sports event falls back to the earliest kickoff among its markets.
+    /// Without this, `Event.gameStartTime` is nil for every event fetched by tag (the Sports
+    /// hub's Live feed and every league detail screen), so `WorldCupEventSplitter.split`
+    /// (which requires a kickoff to classify something as a schedulable "game") buckets real
+    /// games — MLB, UFC, etc. — as props instead, leaving the Games tab empty.
     /// - Parameter dto: The decoded event.
     /// - Returns: The domain event.
     static func event(from dto: EventDTO) -> Event {
-        Event(
+        let markets = dto.markets.map(market(from:))
+        let eventKickoff = DateParsing.parse(dto.gameStartTime)
+        let earliestMarketKickoff = dto.markets.compactMap { DateParsing.parse($0.gameStartTime) }.min()
+        return Event(
             id: dto.id,
             title: dto.title,
             slug: dto.slug,
-            markets: dto.markets.map(market(from:)),
+            markets: markets,
             volume: dto.volume,
             imageURL: dto.image.flatMap(URL.init(string:)),
             tags: dto.tags.map(tag(from:)),
-            gameStartTime: DateParsing.parse(dto.gameStartTime),
+            gameStartTime: eventKickoff ?? earliestMarketKickoff,
             description: dto.description
         )
     }

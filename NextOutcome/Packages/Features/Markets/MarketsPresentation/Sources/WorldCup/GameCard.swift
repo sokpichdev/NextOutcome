@@ -20,6 +20,10 @@ struct GameCard: View {
     let result: GameResult?
     /// The game's moneyline markets (one per team plus a draw).
     let moneylines: [Market]
+    /// The Sports hub's chosen odds display format (defaults to `.price` outside the hub).
+    @Environment(\.oddsFormat) private var oddsFormat
+    /// Whether to also show spread/total markets (Sports hub only).
+    @Environment(\.showSpreadsAndTotals) private var showSpreadsAndTotals
 
     var body: some View {
         VStack(alignment: .leading, spacing: DSLayout.spacing) {
@@ -27,6 +31,7 @@ struct GameCard: View {
             teamRow(side: .home)
             teamRow(side: .away)
             priceRow
+            if showSpreadsAndTotals { spreadsAndTotalsSection }
         }
         .padding(DSLayout.margin)
         .background(DSColor.surface.opacity(0.6))
@@ -159,11 +164,46 @@ struct GameCard: View {
             ForEach(ordered.compactMap { $0 }) { market in
                 PriceButton(
                     title: shortLabel(for: market),
-                    price: MarketFormatting.centsWhole(market.yesOutcome?.price ?? 0),
+                    price: oddsFormat.format(market.yesOutcome?.price ?? 0),
                     style: style(for: market),
                     action: {}
                 )
                 .frame(maxWidth: .infinity) // equal thirds
+            }
+        }
+    }
+
+    // MARK: spreads & totals (Sports hub's "Show Spreads + Totals" toggle)
+
+    /// One compact row per spread/total market: its sub-label plus a price button per
+    /// outcome, formatted in the hub's chosen odds format.
+    private var spreadsAndTotalsSection: some View {
+        let groups = MarketGroupClassifier.groups(for: event.markets)
+            .filter { $0.group == .spreads || $0.group == .totals }
+        return Group {
+            if !groups.isEmpty {
+                Divider().overlay(DSColor.surfaceElevated)
+                VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
+                    ForEach(groups, id: \.group) { group in
+                        ForEach(group.markets) { market in
+                            spreadOrTotalRow(market)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// "Argentina -2.5" + a price button per outcome (Yes/No), in the hub's odds format.
+    private func spreadOrTotalRow(_ market: Market) -> some View {
+        HStack(spacing: DSLayout.spacingSmall) {
+            Text(market.groupItemTitle ?? market.question)
+                .font(DSFont.caption)
+                .foregroundStyle(DSColor.textSecondary)
+                .lineLimit(1)
+            Spacer()
+            ForEach(market.outcomes) { outcome in
+                PriceButton(title: outcome.title, price: oddsFormat.format(outcome.price), style: .neutral, action: {})
             }
         }
     }

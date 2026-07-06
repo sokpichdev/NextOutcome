@@ -47,12 +47,17 @@ struct MarketDTO: Decodable {
     let groupItemTitle: String?
     /// Resolution-criteria text. Absent for many markets.
     let description: String?
+    /// A sports market's kickoff time, in Gamma's space-separated form
+    /// (`"2026-06-11 19:00:00+00"`). Absent for non-sports markets. Gamma only carries this
+    /// per-market, never on the parent event — `MarketMapper.event(from:)` promotes the
+    /// earliest one up to the event level.
+    let gameStartTime: String?
 
     /// JSON keys for `MarketDTO`.
     enum CodingKeys: String, CodingKey {
         case id, conditionId, question, slug, outcomes, outcomePrices, clobTokenIds
         case volume, liquidity, endDate, closed, active, image
-        case sportsMarketType, groupItemTitle, description
+        case sportsMarketType, groupItemTitle, description, gameStartTime
     }
 
     /// Tolerant decoder: missing/odd fields degrade a single market rather than failing the
@@ -77,6 +82,7 @@ struct MarketDTO: Decodable {
         sportsMarketType = try? c.decode(String.self, forKey: .sportsMarketType)
         groupItemTitle = try? c.decode(String.self, forKey: .groupItemTitle)
         description = try? c.decode(String.self, forKey: .description)
+        gameStartTime = try? c.decode(String.self, forKey: .gameStartTime)
     }
 }
 

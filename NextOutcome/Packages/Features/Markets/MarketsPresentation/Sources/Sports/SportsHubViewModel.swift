@@ -66,6 +66,11 @@ public final class SportsHubViewModel {
     public private(set) var leagues: [SportsLeague] = []
     /// The Live tab's sort, chosen via its filter icon.
     public private(set) var liveSort: SportsSort = .volume
+    /// The hub-wide odds display format, chosen via the mode bar's Odds Format menu. Applies
+    /// to every `GameCard` the hub shows (Live, Futures, and any embedded league content).
+    public var oddsFormat: OddsFormat = .price
+    /// Whether `GameCard`s across the hub also show spread/total markets.
+    public var showSpreadsAndTotals = false
     /// Live events grouped by league, in `leagues` order; leagues with no live events are omitted.
     public private(set) var liveGroups: [(league: SportsLeague, events: [Event])] = []
     /// The raw Live sample (unsorted, ungrouped), kept so changing `liveSort` doesn't require

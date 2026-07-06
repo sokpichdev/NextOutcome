@@ -26,6 +26,9 @@ public struct SportsHubView: View {
     @State private var isSearchActive = false
     /// The Live tab's league search text.
     @State private var searchQuery = ""
+    /// The league chip selected in the mode bar, if any. Non-nil replaces the Live/Futures
+    /// content with that league's detail, in place — no navigation push.
+    @State private var selectedLeague: SportsLeague?
 
     /// Creates the view.
     /// - Parameters:
@@ -40,28 +43,48 @@ public struct SportsHubView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            header
-            SportsModeBar(mode: $viewModel.mode, leagues: viewModel.leagues)
+            SportsModeBar(mode: $viewModel.mode, leagues: viewModel.leagues, selectedLeague: $selectedLeague)
                 .padding(.vertical, DSLayout.spacingSmall)
-            if isSearchActive, viewModel.mode == .live { searchField }
+            if selectedLeague == nil { header }
+            if isSearchActive, selectedLeague == nil, viewModel.mode == .live { searchField }
             content
         }
         .background(DSColor.background)
-        .navigationDestination(for: SportsLeague.self) { league in
-            if league.title == "World Cup" {
-                WorldCupHubView(viewModel: worldCupViewModel)
-            } else {
-                SportsLeagueDetailView(league: league, fetchAllEvents: fetchAllEvents)
-            }
-        }
-        .navigationDestination(for: Event.self) { EventDetailView(event: $0) }
-        .navigationDestination(for: MarketNavigationTarget.self) {
-            MarketDetailView(market: $0.market, eventID: $0.eventID)
-        }
+        .environment(\.oddsFormat, viewModel.oddsFormat)
+        .environment(\.showSpreadsAndTotals, viewModel.showSpreadsAndTotals)
         .task { await viewModel.loadIfNeeded() }
     }
 
-    /// Title + search/sort toggles for the Live tab; Futures shows the title only.
+    /// The Odds Format menu icon: Odds Format plus Show Spreads + Totals (no sort — Volume/
+    /// Soonest sort was removed from this menu). Lives in `header`, alongside the "Sports
+    /// Live"/"Sports Futures" title and search icon, so it's only reachable when no league
+    /// chip is selected (the embedded league/World Cup content isn't affected by it).
+    private var oddsFormatMenu: some View {
+        Menu {
+            Section("Odds Format") {
+                ForEach(OddsFormat.allCases, id: \.self) { format in
+                    Button {
+                        viewModel.oddsFormat = format
+                    } label: {
+                        if format == viewModel.oddsFormat { Label(format.title, systemImage: "checkmark") }
+                        else { Text(format.title) }
+                    }
+                }
+            }
+            Button {
+                viewModel.showSpreadsAndTotals.toggle()
+            } label: {
+                if viewModel.showSpreadsAndTotals { Label("Show Spreads + Totals", systemImage: "checkmark") }
+                else { Text("Show Spreads + Totals") }
+            }
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .foregroundStyle(DSColor.textPrimary)
+        }
+        .accessibilityLabel("Odds Format")
+    }
+
+    /// Title + search toggle + Odds Format menu, all on one row.
     private var header: some View {
         HStack(spacing: DSLayout.spacing) {
             Text(viewModel.mode == .live ? "Sports Live" : "Sports Futures")
@@ -76,20 +99,8 @@ public struct SportsHubView: View {
                     Image(systemName: isSearchActive ? "xmark.circle.fill" : "magnifyingglass")
                         .foregroundStyle(DSColor.textPrimary)
                 }
-                Menu {
-                    ForEach(SportsSort.allCases, id: \.self) { sort in
-                        Button {
-                            viewModel.setLiveSort(sort)
-                        } label: {
-                            if sort == viewModel.liveSort { Label(sort.title, systemImage: "checkmark") }
-                            else { Text(sort.title) }
-                        }
-                    }
-                } label: {
-                    Image(systemName: "slider.horizontal.3")
-                        .foregroundStyle(DSColor.textPrimary)
-                }
             }
+            oddsFormatMenu
         }
         .padding(.horizontal, DSLayout.margin)
         .padding(.top, DSLayout.spacing)
@@ -109,9 +120,38 @@ public struct SportsHubView: View {
         .padding(.top, DSLayout.spacingSmall)
     }
 
-    /// The selected mode's content, or a loading/error placeholder.
+    /// The selected league's detail (if a league chip is active), else the selected mode's
+    /// content, or a loading/error placeholder.
+    ///
+    /// `WorldCupHubView` and `SportsLeagueDetailView` each declare their own
+    /// `navigationDestination(for:)` for `Event`/`MarketNavigationTarget` (needed since
+    /// `WorldCupHubView` is also reachable standalone, outside this hub). Declaring the same
+    /// destinations again here — around the *entire* `content`, embedded children included —
+    /// would register two handlers for the same type in one `NavigationStack` at once, which
+    /// SwiftUI doesn't support (surfaces as a broken/reparented view hierarchy at runtime).
+    /// So these destinations are scoped to `ownModeContent` only; the embedded branches rely
+    /// entirely on their own.
     @ViewBuilder
     private var content: some View {
+        if let selectedLeague {
+            if selectedLeague.title == "World Cup" {
+                WorldCupHubView(viewModel: worldCupViewModel)
+            } else {
+                SportsLeagueDetailView(league: selectedLeague, fetchAllEvents: fetchAllEvents)
+                    .id(selectedLeague.id)
+            }
+        } else {
+            ownModeContent
+                .navigationDestination(for: Event.self) { EventDetailView(event: $0) }
+                .navigationDestination(for: MarketNavigationTarget.self) {
+                    MarketDetailView(market: $0.market, eventID: $0.eventID)
+                }
+        }
+    }
+
+    /// The selected mode's content (Live/Futures), or a loading/error placeholder.
+    @ViewBuilder
+    private var ownModeContent: some View {
         switch viewModel.state {
         case .idle, .loading:
             StateView(.loading).frame(maxHeight: .infinity)
