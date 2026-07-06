@@ -25,14 +25,22 @@ struct GameCard: View {
     /// `GameTeam` when live scores are wired up, else the moneyline market's own
     /// name/image). `nil` (the default) leaves team rows non-interactive — tapping
     /// anywhere on the card still opens the event, same as today.
-    let onTeamTap: ((TeamProfileTarget) -> Void)? = nil
+    let onTeamTap: ((TeamProfileTarget) -> Void)?
     /// The Gamma `/teams` league slug (e.g. "ufc", "mlb", "fifwc") used to enrich
     /// the tapped team's profile with its record. `nil` skips that lookup.
-    let leagueSlug: String? = nil
+    let leagueSlug: String?
     /// The Sports hub's chosen odds display format (defaults to `.price` outside the hub).
     @Environment(\.oddsFormat) private var oddsFormat
     /// Whether to also show spread/total markets (Sports hub only).
     @Environment(\.showSpreadsAndTotals) private var showSpreadsAndTotals
+
+    init(event: Event, result: GameResult? = nil, moneylines: [Market], onTeamTap: ((TeamProfileTarget) -> Void)? = nil, leagueSlug: String? = nil) {
+        self.event = event
+        self.result = result
+        self.moneylines = moneylines
+        self.onTeamTap = onTeamTap
+        self.leagueSlug = leagueSlug
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: DSLayout.spacing) {
