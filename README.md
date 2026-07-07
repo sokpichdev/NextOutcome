@@ -26,6 +26,28 @@
 
 ---
 
+## Table of Contents
+
+- [Why NextOutcome](#why-nextoutcome)
+- [App Screenshots](#app-screenshots)
+- [Demo GIF / Video](#demo-gif--video)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Architecture](#architecture)
+- [Folder Structure](#folder-structure)
+- [Getting Started](#getting-started)
+- [Testing](#testing)
+- [Privacy & Permissions](#privacy--permissions)
+- [Project Status](#project-status)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [Security](#security)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
+- [Author](#author)
+
+---
+
 ## Why NextOutcome
 
 [Polymarket](https://polymarket.com) lives in a browser. NextOutcome brings its markets, order
@@ -75,15 +97,17 @@ watch-only today, with on-chain trading actively on the roadmap.
 
 ## Tech Stack
 
-- **Language:** Swift 5.9
-- **UI:** SwiftUI, Swift Charts, SceneKit (3D globe)
-- **Concurrency:** Swift Concurrency — `async/await`, actors, `AsyncStream` / `AsyncThrowingStream`
-- **State:** Observation (`@Observable`), MVVM view models
-- **Networking:** `URLSession` for REST **and** WebSockets (order book + sports feeds)
-- **Persistence / security:** Keychain (session token), `UserDefaults` (watched wallet)
-- **Modularization:** Swift Package Manager (one umbrella package, ~18 targets)
-- **Logging:** `os.Logger`
-- **Backend:** Polymarket public APIs — **Gamma** (markets/events/tags/comments), **Data** (positions/holders/trades/leaderboard/geoblock), **CLOB** (order book, price history, server time), and the sports/market WebSocket channels.
+| Layer | Choice |
+|---|---|
+| **Language** | Swift 5.9 |
+| **UI** | SwiftUI, Swift Charts, SceneKit (3D globe) |
+| **Concurrency** | Swift Concurrency — `async/await`, actors, `AsyncStream` / `AsyncThrowingStream` |
+| **State** | Observation (`@Observable`), MVVM view models |
+| **Networking** | `URLSession` for REST **and** WebSockets (order book + sports feeds) |
+| **Persistence / security** | Keychain (session token), `UserDefaults` (watched wallet) |
+| **Modularization** | Swift Package Manager (one umbrella package, ~18 targets) |
+| **Logging** | `os.Logger` |
+| **Backend** | Polymarket public APIs — **Gamma** (markets/events/tags/comments), **Data** (positions/holders/trades/leaderboard/geoblock), **CLOB** (order book, price history, server time), and the sports/market WebSocket channels |
 
 ---
 
@@ -96,6 +120,19 @@ watch-only today, with on-chain trading actively on the roadmap.
 - **Presentation** — `@Observable` view models and SwiftUI views. Dependencies are injected via protocols and environment-provided factories, so views never import the Data layer.
 
 The app is a **thin composition root**: [`AppContainer`](NextOutcome/NextOutcome/App/AppContainer.swift) wires concrete implementations once and vends ready-made view models and factories to [`RootView`](NextOutcome/NextOutcome/App/RootView.swift). Each feature is a **vertical slice** with its own `*Domain` / `*Data` / `*Presentation` modules. The Trading modules are deliberately quarantined — the read-only app never links them.
+
+```mermaid
+graph TD
+    UI["Presentation<br/>(SwiftUI Views / @Observable ViewModels)"] --> Domain["Domain<br/>(Use Cases / Entities / Repository protocols)"]
+    Domain --> Data["Data<br/>(DTOs, mappers, repository implementations)"]
+    Data --> Remote["Remote<br/>(Gamma / Data / CLOB REST + WebSocket)"]
+    Data --> Local["Local<br/>(SwiftData-style caches, Keychain, UserDefaults)"]
+```
+
+**Key decisions**
+- Presentation depends only on Domain's Use Case protocols — it never imports a feature's `Data` module; the App composition root wires the concrete repository in.
+- `SharedDomain` holds cross-feature primitives (`LoadState`, `Page`) so features don't import each other directly.
+- The Trading feature (order signing + proxy) is a separate, optional module the read-only app never links — see [`docs/phase-4-wallet-proxy-design.md`](docs/phase-4-wallet-proxy-design.md).
 
 ---
 
@@ -165,6 +202,25 @@ swift build
 
 ---
 
+## Testing
+
+```bash
+cd NextOutcome/Packages
+swift test
+```
+
+Each feature slice (Markets, Orderbook, Portfolio, LiveStats, Trading) has its own `*DomainTests` and `*DataTests` targets — Domain tests exercise Use Cases against stub repositories, Data tests exercise DTO decoding against fixture JSON. `Networking` and `DesignSystem` have their own test targets too. There's no CI wiring yet, so `swift test` is run locally before merging; a formal coverage target hasn't been set (see [Roadmap](#roadmap)).
+
+---
+
+## Privacy & Permissions
+
+- **No permissions requested** — no camera, location, or notification usage descriptions in `Info.plist` today.
+- **No analytics or crash reporting** — zero third-party dependencies in `Package.swift`; the only instrumentation is `os.Logger`.
+- **Data entered:** a wallet address (`0x…`) to watch a portfolio, stored locally in `UserDefaults` and used only to query Polymarket's own public Data API directly. Nothing is sent to a first-party backend today.
+
+---
+
 ## Project Status
 
 🚧 **In active development.** Browsing, live order books, live sports/World Cup, and the watch-only portfolio are implemented. Trading is **mock/simulated** pending wallet + proxy integration and funding.
@@ -173,18 +229,45 @@ swift build
 
 ## Roadmap
 
+- [x] Markets feed, search, event/market detail with live charts
+- [x] Live order book over WebSocket with reconnect/back-off
+- [x] Live sports stats and the World Cup hub (schedule, props, bracket, 3D globe map)
+- [x] Watch-only portfolio (positions, activity, leaderboard) by wallet address
 - [ ] Real on-chain trading — vetted EIP-712 signer + backend proxy (currently simulated)
 - [ ] Wallet connect & session auth
 - [ ] Portfolio funding and real positions on market detail
 - [ ] Push notifications for price moves and market resolutions
 - [ ] Polished screenshots, demo video, and App Store assets
-- [ ] Expanded test coverage across feature slices
+- [ ] Expanded test coverage across feature slices, and CI wiring
+
+---
+
+## Contributing
+
+This is currently a solo project, but contributions are welcome:
+
+1. Fork and create a feature branch (`git checkout -b feat/thing`)
+2. Keep changes scoped to a feature's vertical slice (`Domain`/`Data`/`Presentation`) per the [Architecture](#architecture) rules
+3. Make sure `swift test` passes from `NextOutcome/Packages`
+4. Open a PR against `main`
+
+---
+
+## Security
+
+The app is read-only and non-custodial today — no wallet keys, no funds at risk. If you find a security issue, please open a GitHub issue or reach out to the author directly rather than disclosing it publicly.
 
 ---
 
 ## License
 
 To be determined. <!-- TODO: choose a license (e.g. MIT) and add a LICENSE file. -->
+
+---
+
+## Acknowledgments
+
+- [Polymarket](https://polymarket.com) — the public Gamma, Data, and CLOB APIs this app is built entirely on.
 
 ---
 
