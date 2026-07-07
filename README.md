@@ -24,13 +24,15 @@
 
 ## App Screenshots
 
-> 📸 **Not yet available.** Screenshots will be added here once captured.
+> Captured from the current dev build in the simulator — not a final/curated set.
 
-<!--
-| Home feed | Market detail | World Cup hub | Portfolio |
-|-----------|---------------|---------------|-----------|
-| ![Home](docs/assets/home.png) | ![Detail](docs/assets/detail.png) | ![WorldCup](docs/assets/worldcup.png) | ![Portfolio](docs/assets/portfolio.png) |
--->
+| | | |
+|---|---|---|
+| <img src="screenshots/home_trending.png" width="200"/><br/>Home feed — Trending | <img src="screenshots/home_politics.png" width="200"/><br/>Home feed — Politics | <img src="screenshots/home_breaking.png" width="200"/><br/>Home feed — Breaking |
+| <img src="screenshots/home_trending_worldcup_winners.png" width="200"/><br/>Trending — World Cup winner odds | <img src="screenshots/worldcup_franch_winner.png" width="200"/><br/>France-to-win market | <img src="screenshots/home_sports_live.png" width="200"/><br/>Sports hub — Live feed |
+| <img src="screenshots/home_sports_futures.png" width="200"/><br/>Sports hub — Futures | <img src="screenshots/home_sports_mlb.png" width="200"/><br/>Sports hub — MLB league | <img src="screenshots/home_sports_wimbledon.png" width="200"/><br/>Sports hub — Wimbledon league |
+| <img src="screenshots/home_sports_worldcup.png" width="200"/><br/>Sports hub — World Cup league | <img src="screenshots/home_worldcup_game.png" width="200"/><br/>World Cup hub — Games schedule | <img src="screenshots/home_worldcup_bracket.png" width="200"/><br/>World Cup hub — Bracket |
+| <img src="screenshots/home_worldcup_props.png" width="200"/><br/>World Cup hub — Props | <img src="screenshots/home_worldcup_map.png" width="200"/><br/>World Cup hub — Map (SceneKit globe) | |
 
 ---
 
@@ -51,9 +53,9 @@
 
 ## Demo GIF / Video
 
-> 🎬 **Not yet available.** A demo GIF / screen recording will be added here.
-
-<!-- ![Demo](docs/assets/demo.gif) -->
+| World Cup hub navigation | World Cup Map — SceneKit globe |
+|---|---|
+| <img src="screenshots/home_world_cup.gif" width="220"/> | <img src="screenshots/home_worldcup_map.gif" width="220"/> |
 
 ---
 
