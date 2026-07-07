@@ -6,11 +6,11 @@
 
 <h1 align="center">NextOutcome</h1>
 
-<!-- Short Description -->
 <p align="center">
-  A native iOS prediction-market app for browsing <a href="https://polymarket.com">Polymarket</a> events,
-  live order books, and sports markets — with real-time price charts, a World Cup hub, and a
-  watch-only portfolio. Read-only today; on-chain trading is on the roadmap.
+  <b>Polymarket, built native for iOS.</b><br/>
+  Browse live prediction markets, watch order books move in real time, and follow a full
+  World Cup hub — complete with a spinning 3D globe of nation odds. Read-only today,
+  on-chain trading is next.
 </p>
 
 <p align="center">
@@ -19,6 +19,20 @@
   <img alt="UI" src="https://img.shields.io/badge/UI-SwiftUI-green"/>
   <img alt="Status" src="https://img.shields.io/badge/status-in%20development-yellow"/>
 </p>
+
+<p align="center">
+  ⭐ If you like what you see, star the repo — clone instructions are below.
+</p>
+
+---
+
+## Why NextOutcome
+
+[Polymarket](https://polymarket.com) lives in a browser. NextOutcome brings its markets, order
+books, and live sports data to a proper native iOS app — smooth scrolling feeds, real-time
+WebSocket order books, live-updating charts, and a World Cup hub with an interactive 3D globe.
+No wallet required to explore: browsing, order books, live stats, and portfolio tracking are all
+watch-only today, with on-chain trading actively on the roadmap.
 
 ---
 
@@ -36,6 +50,14 @@
 
 ---
 
+## Demo GIF / Video
+
+| World Cup hub navigation | World Cup Map — SceneKit globe |
+|---|---|
+| <img src="screenshots/home_world_cup.gif" width="220"/> | <img src="screenshots/home_worldcup_map.gif" width="220"/> |
+
+---
+
 ## Features
 
 - **Markets feed** — trending, category rail (Politics, Sports, Breaking, World Cup), sort/status filters, and hide-sports toggle, with infinite scroll.
@@ -48,14 +70,6 @@
 - **Portfolio (watch-only)** — track any wallet's open/closed positions, activity feed, and the trader leaderboard. No keys, no custody.
 - **Social strip** — comments, top holders, and recent activity per event.
 - **Mock trade sheet** — keypad amount entry with a live "to win" payout. **Simulated only** — sends nothing, stores nothing — until real trading lands.
-
----
-
-## Demo GIF / Video
-
-| World Cup hub navigation | World Cup Map — SceneKit globe |
-|---|---|
-| <img src="screenshots/home_world_cup.gif" width="220"/> | <img src="screenshots/home_worldcup_map.gif" width="220"/> |
 
 ---
 
@@ -113,6 +127,8 @@ NextOutcome/
 
 ## Getting Started
 
+Clone it, open it, run it — no API keys, no signup.
+
 ### Requirements
 
 - **macOS** with **Xcode 15+** (Swift 5.9 toolchain)
@@ -161,7 +177,7 @@ swift build
 - [ ] Wallet connect & session auth
 - [ ] Portfolio funding and real positions on market detail
 - [ ] Push notifications for price moves and market resolutions
-- [ ] Screenshots, demo GIF/video, and App Store assets
+- [ ] Polished screenshots, demo video, and App Store assets
 - [ ] Expanded test coverage across feature slices
 
 ---
@@ -175,3 +191,5 @@ To be determined. <!-- TODO: choose a license (e.g. MIT) and add a LICENSE file.
 ## Author
 
 **Sok Pich** — [@sokpichdev](https://github.com/sokpichdev)
+
+If you're building something similar or want to talk iOS/prediction markets, open an issue or reach out on GitHub.
