@@ -105,7 +105,10 @@ public struct CryptoHubView: View {
             HStack {
                 Text("Crypto").font(DSFont.title).foregroundStyle(DSColor.textPrimary)
                 Spacer()
-                Button { isSearching.toggle() } label: {
+                Button {
+                    isSearching.toggle()
+                    if !isSearching { viewModel.searchQuery = "" }
+                } label: {
                     Image(systemName: "magnifyingglass").foregroundStyle(DSColor.textPrimary)
                 }
                 .buttonStyle(.plain)

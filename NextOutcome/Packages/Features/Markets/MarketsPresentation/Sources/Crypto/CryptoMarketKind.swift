@@ -35,7 +35,7 @@ public enum CryptoMarketKind: Equatable {
            event.markets.allSatisfy({ isBareNumberGroupItemTitle($0.groupItemTitle) }) {
             return .aboveBelow
         }
-        if titleLower.hasPrefix("what price will") {
+        if !event.markets.isEmpty, titleLower.hasPrefix("what price will") {
             return .hitPrice
         }
         return .other
