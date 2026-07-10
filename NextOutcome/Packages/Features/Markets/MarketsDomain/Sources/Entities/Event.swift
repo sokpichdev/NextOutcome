@@ -28,6 +28,12 @@ public struct Event: Identifiable, Hashable {
     public let gameStartTime: Date?
     /// Event-level context/description shown in the "Market Context" rules tab. Absent for many events.
     public let description: String?
+    /// The recurring-market series slug this event belongs to (e.g. `"btc-up-or-down-5m"`),
+    /// from Gamma's `series[0].slug`. `nil` for non-recurring events. Raw passthrough —
+    /// interpreting the cadence from the slug's suffix is a Presentation-layer concern (see
+    /// `CryptoHubViewModel.Timeframe`), matching the existing `groupItemTitle`/
+    /// `sportsMarketType` pattern of Domain carrying the raw signal unchanged.
+    public let recurrence: String?
 
     /// Creates an event. Usually built by the mapping layer from a DTO.
     public init(
@@ -39,7 +45,8 @@ public struct Event: Identifiable, Hashable {
         imageURL: URL?,
         tags: [Tag] = [],
         gameStartTime: Date? = nil,
-        description: String? = nil
+        description: String? = nil,
+        recurrence: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -50,6 +57,7 @@ public struct Event: Identifiable, Hashable {
         self.tags = tags
         self.gameStartTime = gameStartTime
         self.description = description
+        self.recurrence = recurrence
     }
 
     /// True when at least one market carries a sports section hint (moneyline/spreads/totals/…),

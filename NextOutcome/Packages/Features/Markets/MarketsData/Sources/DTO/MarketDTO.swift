@@ -107,10 +107,13 @@ struct EventDTO: Decodable {
     let gameStartTime: String?
     /// Event-level context/description. Absent for many events.
     let description: String?
+    /// The recurring-market series this event belongs to, if any. Real payloads carry at
+    /// most one entry; absent for non-recurring events.
+    let series: [SeriesDTO]
 
     /// JSON keys for `EventDTO`.
     enum CodingKeys: String, CodingKey {
-        case id, title, slug, markets, volume, image, tags, gameStartTime, description
+        case id, title, slug, markets, volume, image, tags, gameStartTime, description, series
     }
 
     /// Tolerant decoder falling back to the slug for a missing title and to empty
@@ -127,6 +130,7 @@ struct EventDTO: Decodable {
         tags = (try? c.decode([TagDTO].self, forKey: .tags)) ?? []
         gameStartTime = try? c.decode(String.self, forKey: .gameStartTime)
         description = try? c.decode(String.self, forKey: .description)
+        series = (try? c.decode([SeriesDTO].self, forKey: .series)) ?? []
     }
 }
 
@@ -137,6 +141,15 @@ struct TagDTO: Decodable {
     /// The display label.
     let label: String
     /// The tag's URL slug.
+    let slug: String
+}
+
+/// Gamma series row — identifies a recurring market family (e.g. "BTC Up or Down 5m").
+/// Only `slug` is needed: it encodes the recurrence cadence as a suffix (`-5m`, `-15m`,
+/// `-hourly`, `-4h`, `-daily`), which is more reliable than the JSON `recurrence` field
+/// (verified against live data: a "4h"-cadence series reports `"daily"` there).
+struct SeriesDTO: Decodable {
+    /// The series slug, e.g. `"btc-up-or-down-5m"`.
     let slug: String
 }
 
