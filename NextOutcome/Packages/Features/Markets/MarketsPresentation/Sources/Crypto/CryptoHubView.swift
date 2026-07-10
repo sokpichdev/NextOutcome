@@ -1,6 +1,7 @@
 import SwiftUI
 import MarketsDomain
 import DesignSystem
+import OrderbookPresentation
 
 /// The Crypto hub: sort/period menus, sub-tabs (All/Up-Down/Above-Below/Price Range/Hit
 /// Price), and the matching card per event. Reached by tapping the Crypto chip in the home
@@ -41,7 +42,17 @@ public struct CryptoHubView: View {
         .navigationDestination(for: MarketNavigationTarget.self) {
             MarketDetailView(market: $0.market, eventID: $0.eventID)
         }
+        .navigationDestination(for: CryptoUpDownNavigationTarget.self) { target in
+            if let btcLiveFactory {
+                BTCLiveView(viewModel: btcLiveFactory(target.liveContext) { side in
+                    tradeContext = TradeSheetContext(market: target.market, side: side == .up ? .yes : .no)
+                })
+            }
+        }
         .sheet(isPresented: $showsMoreSheet) { CryptoMoreSheetPlaceholder() }
+        .sheet(item: $tradeContext) { context in
+            TradeSheet(viewModel: TradeSheetViewModel(market: context.market, side: context.side, submitter: tradeSubmitter))
+        }
         .task {
             if let tagID { await viewModel.loadIfNeeded(tagID: tagID) }
         }
@@ -57,6 +68,13 @@ public struct CryptoHubView: View {
     /// filter icon. Starts hidden, matching the collapsed-by-default `AdvancedFilterRow`
     /// pattern used elsewhere in the app (`EventListViewModel.filterRowVisible`).
     @State private var showsSortPeriodRow = false
+    /// Builds the BTC-live view model when a Crypto Up/Down card is tapped.
+    @Environment(\.btcLiveFactory) private var btcLiveFactory
+    /// The (simulated) trade submitter for the trade sheet opened from a live quick-bet.
+    @Environment(\.tradeSubmitter) private var tradeSubmitter
+    /// The context that presents the mock trade sheet, when a quick-bet is tapped on the
+    /// live BTC screen. Same pattern as `EventDetailView.tradeContext`.
+    @State private var tradeContext: TradeSheetContext?
 
     // MARK: - Timeframe chip row
 
@@ -268,7 +286,7 @@ public struct CryptoHubView: View {
     @ViewBuilder
     private func card(for event: Event, kind: CryptoMarketKind) -> some View {
         if kind == .upDown {
-            LiveUpDownCard(event: event)
+            CryptoUpDownCard(event: event)
         } else {
             CryptoStrikeCard(event: event, kind: kind)
         }
