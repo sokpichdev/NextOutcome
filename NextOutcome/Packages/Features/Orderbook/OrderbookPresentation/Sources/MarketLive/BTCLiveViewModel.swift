@@ -42,8 +42,6 @@ public final class BTCLiveViewModel {
     /// The latest order book, used for the live Up/Down cents.
     public private(set) var book: OrderBook?
 
-    /// Candle interval within the window (seconds).
-    public let candleInterval: TimeInterval = 60
     /// The rolling window used to pick the price-to-beat (5 minutes).
     public let windowInterval: TimeInterval = 300
 
@@ -128,12 +126,28 @@ public final class BTCLiveViewModel {
 
     // MARK: Derived
 
-    /// Dollar OHLC candles bucketed from the loaded spot-price series (the "Candles"
-    /// chart mode — matches web, which has no probability-candle view).
+    /// Dollar OHLC candles built from the loaded spot-price series (the "Candles" chart
+    /// mode — matches web, which has no probability-candle view).
+    ///
+    /// Unlike the probability series, `spotPriceHistory` only ever returns ~1 sample per
+    /// minute for this round (it's a checkpointed oracle price, not tick data), so
+    /// bucketing by a fixed time interval (`CandleAggregator`'s usual approach) puts at
+    /// most one sample per bucket — every candle degenerates to a flat dot with no
+    /// visible body or wick. Instead, each *consecutive pair* of real samples becomes its
+    /// own candle (open = the earlier sample, close = the later one, high/low = their
+    /// span), so every candle reflects an actual price move.
     public var candles: [Candle] {
-        guard case let .loaded(points) = spotState else { return [] }
-        let pricePoints = points.map { PricePoint(date: $0.date, price: $0.price) }
-        return CandleAggregator.candles(from: pricePoints, interval: candleInterval)
+        guard case let .loaded(points) = spotState, points.count >= 2 else { return [] }
+        let sorted = points.sorted { $0.date < $1.date }
+        return zip(sorted, sorted.dropFirst()).map { previous, current in
+            Candle(
+                open: previous.price,
+                high: max(previous.price, current.price),
+                low: min(previous.price, current.price),
+                close: current.price,
+                start: previous.date
+            )
+        }
     }
 
     /// The dollar "price to beat" — the window's open price. Before the first
