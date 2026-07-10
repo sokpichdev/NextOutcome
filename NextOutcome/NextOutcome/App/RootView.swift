@@ -44,6 +44,8 @@ struct RootView: View {
     @State private var portfolioViewModel: PortfolioViewModel
     /// Provides shell-level state such as the balance label shown on the Portfolio tab.
     @State private var shellViewModel: ShellViewModel
+    /// Resolves the home rail's curated additional categories to live tag ids.
+    @State private var hubTabsViewModel: HubTabsViewModel
 
     // Factories and services below are handed to child views through the SwiftUI
     // environment. They aren't `@State` because they're immutable and don't drive UI.
@@ -101,6 +103,9 @@ struct RootView: View {
         _searchViewModel = State(initialValue: container.makeSearchViewModel())
         _portfolioViewModel = State(initialValue: portfolio)
         _shellViewModel = State(initialValue: ShellViewModel(portfolio: portfolio))
+        let hubTabs = container.makeHubTabsViewModel()
+        _hubTabsViewModel = State(initialValue: hubTabs)
+        Task { await hubTabs.loadDynamicTabsIfNeeded() }
 
         leaderboardViewModel = container.makeLeaderboardViewModel()
         marketLiveFactory = container.makeMarketLiveFactory()
@@ -144,7 +149,7 @@ struct RootView: View {
         // A tab view with its own navigation stack for each section.
         TabView {
             NavigationStack {
-                chrome {
+                chrome(tabs: hubTabsViewModel.tabs) {
                     // Home tab content changes depending on the selected shell category.
                     // The view models here are kept at root so the feed state does not
                     // reset when users switch tabs.
@@ -190,15 +195,18 @@ struct RootView: View {
     /// rail). Only the Home tab's content responds to the category rail, so every other tab
     /// hides it by passing `showsCategoryRail: false`.
     /// - Parameters:
+    ///   - tabs: The tabs to show in the category rail. Defaults to the 5 pinned tabs; the
+    ///     Home tab passes `hubTabsViewModel.tabs`, which grows once curated categories resolve.
     ///   - showsCategoryRail: Whether to show the Trending/World Cup/Breaking/… rail below the
     ///     top bar. Defaults to `true` (the Home tab).
     ///   - content: The tab's screen content to embed inside the chrome.
     /// - Returns: The content wrapped in `ShellChrome` with the navigation bar hidden.
     @ViewBuilder
-    private func chrome<C: View>(showsCategoryRail: Bool = true, @ViewBuilder _ content: () -> C) -> some View {
+    private func chrome<C: View>(tabs: [HubTab] = HubTab.pinned, showsCategoryRail: Bool = true, @ViewBuilder _ content: () -> C) -> some View {
         // Wrap each screen in the shared chrome UI used across tabs.
         // This adds the top bar (+ category rail, for Home) and the avatar button that opens the drawer.
         ShellChrome(
+            tabs: tabs,
             selectedCategory: $selectedCategory,
             showsCategoryRail: showsCategoryRail,
             onAvatar: { isDrawerOpen = true }
