@@ -232,6 +232,16 @@ public struct GammaMarketRepository: MarketRepository {
         let dtos: [TagDTO] = try await client.fetch(endpoint)
         return dtos.map(MarketMapper.tag(from:))
     }
+
+    /// Fetches a single tag by its URL slug from Gamma `/tags/slug/{slug}` (a single JSON
+    /// object, unlike the array-returning `/tags`). Used to resolve a curated home-rail
+    /// category to its live tag id at runtime. Propagates any transport/HTTP error (e.g.
+    /// a 404 for an unknown slug) — callers decide whether to swallow it.
+    public func fetchTag(slug: String) async throws -> Tag? {
+        let endpoint = Endpoint(host: .gamma, path: "/tags/slug/\(slug)")
+        let dto: TagDTO = try await client.fetch(endpoint)
+        return MarketMapper.tag(from: dto)
+    }
 }
 
 /// Pure, testable mapper from domain query params to Gamma API query dictionary.
