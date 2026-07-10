@@ -187,7 +187,11 @@ enum MarketMapper {
             tags: dto.tags.map(tag(from:)),
             gameStartTime: eventKickoff ?? earliestMarketKickoff,
             description: dto.description,
-            recurrence: dto.series.first?.slug
+            recurrence: dto.series.first?.slug,
+            volume24hr: dto.volume24hr,
+            liquidity: dto.liquidity,
+            competitive: dto.competitive,
+            creationDate: DateParsing.parse(dto.creationDate)
         )
     }
 }
