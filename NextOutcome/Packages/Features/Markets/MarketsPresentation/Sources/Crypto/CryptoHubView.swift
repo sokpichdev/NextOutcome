@@ -150,8 +150,13 @@ public struct CryptoHubView: View {
 
     private var sortMenu: some View {
         Menu {
-            Button("Volume") { viewModel.sortOption = .totalVolume }
+            Button("24hr Volume") { viewModel.sortOption = .volume24hr }
+            Button("Total Volume") { viewModel.sortOption = .totalVolume }
+            Button("Liquidity") { viewModel.sortOption = .liquidity }
+            Button("Newest") { viewModel.sortOption = .newest }
             Button("Ending Soon") { viewModel.sortOption = .endingSoon }
+            Button("Competitive") { viewModel.sortOption = .competitive }
+            Button("Earn 3.25%") {}.disabled(true)
         } label: {
             menuLabel(sortLabel)
         }
@@ -182,8 +187,8 @@ public struct CryptoHubView: View {
 
     private var sortLabel: String {
         switch viewModel.sortOption {
-        case .volume24hr: return "Volume (24hr)"
-        case .totalVolume: return "Volume"
+        case .volume24hr: return "24hr Volume"
+        case .totalVolume: return "Total Volume"
         case .liquidity: return "Liquidity"
         case .newest: return "Newest"
         case .endingSoon: return "Ending Soon"
