@@ -83,9 +83,15 @@ import SwiftUI
     return Demo()
 }
 
-#Preview("Shell — Drawer") {
-    SideMenuDrawer(addressShort: "0xd8C7e8F2…", onSelect: { _ in })
+#Preview("Shell — Drawer (Dark)") {
+    SideMenuDrawer(addressShort: "0xd8C7e8F2…", isDarkMode: true, onSelect: { _ in })
         .frame(width: 320)
+}
+
+#Preview("Shell — Drawer (Light)") {
+    SideMenuDrawer(addressShort: "0xd8C7e8F2…", isDarkMode: false, onSelect: { _ in })
+        .frame(width: 320)
+        .preferredColorScheme(.light)
 }
 
 #Preview("Shell — Chrome") {
