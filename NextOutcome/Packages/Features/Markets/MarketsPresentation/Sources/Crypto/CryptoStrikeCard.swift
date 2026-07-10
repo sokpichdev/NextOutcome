@@ -52,22 +52,21 @@ public struct CryptoStrikeCard: View {
         }
     }
 
-    /// Formats a market's row label per its `CryptoMarketKind`. `.aboveBelow`/`.priceRange`
-    /// show the market's `groupItemTitle` as-is; `.hitPrice` prefixes it with a direction
-    /// arrow — `↑` if the event title suggests an upward target, `↓` if it suggests
-    /// downward ("or lower"/"dip to"/"below"), defaulting to `↑` when neither phrase is
-    /// present (best-effort; see the design spec's "Risks / notes"). Falls back to the
-    /// market's `question` when `groupItemTitle` is `nil`.
+    /// Formats a market's row label. Every `CryptoMarketKind` shows the market's
+    /// `groupItemTitle` as-is — including `.hitPrice`, whose real Gamma data already
+    /// embeds a per-row direction arrow (e.g. `"↑ 100,000"` or `"↓ 60,000"`), sometimes
+    /// mixing both directions within the same event (e.g. a long-dated "what price will
+    /// X hit" market with strikes both above and below the current price). Falls back to
+    /// the market's `question` when `groupItemTitle` is `nil`.
     /// - Parameters:
     ///   - market: The market whose row is being labeled.
-    ///   - kind: The event's classified kind.
-    ///   - eventTitle: The event's title, used only for `.hitPrice`'s direction heuristic.
+    ///   - kind: The event's classified kind. Currently unused in the body — every kind
+    ///     formats identically — but kept in the signature since it's part of the public
+    ///     call contract established across Tasks 3/4, and a future kind-specific format
+    ///     may need it again.
+    ///   - eventTitle: Unused; kept for API stability with existing call sites.
     public static func rowLabel(for market: Market, kind: CryptoMarketKind, eventTitle: String) -> String {
-        let raw = market.groupItemTitle ?? market.question
-        guard kind == .hitPrice else { return raw }
-        let lower = eventTitle.lowercased()
-        let isDown = lower.contains("or lower") || lower.contains("dip to") || lower.contains("below")
-        return (isDown ? "↓ " : "↑ ") + raw
+        market.groupItemTitle ?? market.question
     }
 
     /// Known coin tag slugs, mapped to their display label, matched against `event.tags`.
