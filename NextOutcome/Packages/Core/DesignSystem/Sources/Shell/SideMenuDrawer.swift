@@ -49,29 +49,40 @@ public struct SideMenuDrawer: View {
 
     /// The shortened wallet address shown in the drawer header (e.g. "0xAbC1234…").
     private let addressShort: String
+    /// Whether the app is currently in Dark mode. Drives which icon (moon/sun)
+    /// the header's theme-toggle button shows.
+    private let isDarkMode: Bool
     /// Called with an item's `id` when the user taps a primary or secondary row.
     private let onSelect: (String) -> Void
     /// Called when the user taps the "Logout" button at the bottom.
     private let onLogout: () -> Void
     /// Called when the user taps the gear/settings icon in the header.
     private let onSettings: () -> Void
+    /// Called when the user taps the moon/sun theme-toggle icon in the header.
+    private let onToggleTheme: () -> Void
 
     /// Creates the side menu drawer.
     /// - Parameters:
     ///   - addressShort: The already-shortened wallet address to display in the header.
+    ///   - isDarkMode: Whether the app is currently in Dark mode. Defaults to `true`.
     ///   - onSelect: Called with the tapped item's `id` when a menu row is selected.
     ///   - onLogout: Action to run when "Logout" is tapped. Defaults to a no-op.
     ///   - onSettings: Action to run when the settings gear is tapped. Defaults to a no-op.
+    ///   - onToggleTheme: Action to run when the moon/sun icon is tapped. Defaults to a no-op.
     public init(
         addressShort: String,
+        isDarkMode: Bool = true,
         onSelect: @escaping (String) -> Void,
         onLogout: @escaping () -> Void = {},
-        onSettings: @escaping () -> Void = {}
+        onSettings: @escaping () -> Void = {},
+        onToggleTheme: @escaping () -> Void = {}
     ) {
         self.addressShort = addressShort
+        self.isDarkMode = isDarkMode
         self.onSelect = onSelect
         self.onLogout = onLogout
         self.onSettings = onSettings
+        self.onToggleTheme = onToggleTheme
     }
 
     public var body: some View {
@@ -98,7 +109,7 @@ public struct SideMenuDrawer: View {
     }
 
     /// The drawer's top section: a circular avatar placeholder, the shortened
-    /// wallet address, and a settings gear icon.
+    /// wallet address, a moon/sun theme-toggle icon, and a settings gear icon.
     private var header: some View {
         HStack(spacing: 12) {
             Circle().fill(DSGradient.accent).frame(width: 40, height: 40)
@@ -106,12 +117,26 @@ public struct SideMenuDrawer: View {
                 .font(DSFont.headline)
                 .foregroundStyle(DSColor.textPrimary)
             Spacer()
+            Button(action: onToggleTheme) {
+                Image(systemName: Self.themeToggleGlyph(isDarkMode: isDarkMode))
+                    .foregroundStyle(DSColor.textSecondary)
+            }
+            .buttonStyle(.plain)
             Button(action: onSettings) {
                 Image(systemName: "gearshape").foregroundStyle(DSColor.textSecondary)
             }
             .buttonStyle(.plain)
         }
         .padding(.bottom, 24)
+    }
+
+    /// Returns the SF Symbol name for the header's theme-toggle button. The icon
+    /// shows the mode tapping it would switch *to* — a moon while in Light mode
+    /// invites switching to Dark, and a sun while in Dark mode invites switching
+    /// to Light.
+    /// - Parameter isDarkMode: Whether the app is currently in Dark mode.
+    public static func themeToggleGlyph(isDarkMode: Bool) -> String {
+        isDarkMode ? "sun.max.fill" : "moon.fill"
     }
 
     /// Builds a single tappable row for a menu item. Text-only items (no `glyph`)
