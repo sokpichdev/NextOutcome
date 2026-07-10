@@ -50,9 +50,13 @@ public struct CryptoHubView: View {
 
     /// Whether the row-2 search field is currently revealed.
     @State private var isSearching = false
-    /// Whether the shared "More filters" placeholder sheet is presented (opened by either
-    /// the timeframe row's "•••More" chip or row 2's filter icon).
+    /// Whether the shared "More filters" placeholder sheet is presented (opened by the
+    /// timeframe row's "•••More" chip).
     @State private var showsMoreSheet = false
+    /// Whether the sort/period menu row is currently revealed, toggled by the header's
+    /// filter icon. Starts hidden, matching the collapsed-by-default `AdvancedFilterRow`
+    /// pattern used elsewhere in the app (`EventListViewModel.filterRowVisible`).
+    @State private var showsSortPeriodRow = false
 
     // MARK: - Timeframe chip row
 
@@ -112,15 +116,17 @@ public struct CryptoHubView: View {
                     Image(systemName: "magnifyingglass").foregroundStyle(DSColor.textPrimary)
                 }
                 .buttonStyle(.plain)
-                Button { showsMoreSheet = true } label: {
+                Button { showsSortPeriodRow.toggle() } label: {
                     Image(systemName: "slider.horizontal.3").foregroundStyle(DSColor.textPrimary)
                 }
                 .buttonStyle(.plain)
             }
-            HStack(spacing: DSLayout.spacingSmall) {
-                sortMenu
-                periodMenu
-                Spacer()
+            if showsSortPeriodRow {
+                HStack(spacing: DSLayout.spacingSmall) {
+                    sortMenu
+                    periodMenu
+                    Spacer()
+                }
             }
         }
     }
