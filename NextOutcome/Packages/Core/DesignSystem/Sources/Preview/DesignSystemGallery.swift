@@ -71,7 +71,7 @@ import SwiftUI
 
 #Preview("Shell — Top bar + rail") {
     struct Demo: View {
-        @State var category: ShellCategory = .worldCup
+        @State var category: HubTab = .worldCup
         var body: some View {
             VStack(spacing: 0) {
                 NOTopBar()
@@ -90,7 +90,7 @@ import SwiftUI
 
 #Preview("Shell — Chrome") {
     struct Demo: View {
-        @State var category: ShellCategory = .trending
+        @State var category: HubTab = .trending
         var body: some View {
             ShellChrome(selectedCategory: $category, onAvatar: {}) {
                 ScrollView { Text("Content").foregroundStyle(DSColor.textPrimary).padding() }

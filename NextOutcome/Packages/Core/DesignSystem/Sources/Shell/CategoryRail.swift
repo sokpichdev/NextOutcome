@@ -2,27 +2,33 @@ import SwiftUI
 
 /// Horizontally scrolling top-level category rail pinned under the top bar.
 ///
-/// Renders one tappable "chip" per `ShellCategory` case (Trending, World Cup,
-/// Breaking, Politics, Sports). Tapping a chip updates the `selected` binding,
-/// which the parent view uses to switch which content feed is shown below.
+/// Renders one tappable "chip" per tab in `tabs` — the 5 pinned tabs (Trending, World
+/// Cup, Breaking, Politics, Sports) plus any curated categories that have resolved to a
+/// live tag id. Tapping a chip updates the `selected` binding, which the parent view
+/// uses to switch which content feed is shown below.
 public struct CategoryRail: View {
-    /// The currently active category. Changing this from outside (e.g. via deep
-    /// link) updates which chip is highlighted; tapping a chip updates this binding
-    /// so the parent screen can react.
-    @Binding private var selected: ShellCategory
+    /// The tabs to render, in order.
+    private let tabs: [HubTab]
+    /// The currently active tab. Changing this from outside (e.g. via deep link)
+    /// updates which chip is highlighted; tapping a chip updates this binding so the
+    /// parent screen can react.
+    @Binding private var selected: HubTab
 
     /// Creates the category rail.
-    /// - Parameter selected: A binding to the currently selected category, shared
-    ///   with the parent view that decides what content to show.
-    public init(selected: Binding<ShellCategory>) {
+    /// - Parameters:
+    ///   - tabs: The tabs to render, in order. Defaults to the 5 pinned tabs.
+    ///   - selected: A binding to the currently selected tab, shared with the parent view
+    ///     that decides what content to show.
+    public init(tabs: [HubTab] = HubTab.pinned, selected: Binding<HubTab>) {
+        self.tabs = tabs
         self._selected = selected
     }
 
     public var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 20) {
-                ForEach(ShellCategory.allCases, id: \.self) { category in
-                    chip(category)
+                ForEach(tabs) { tab in
+                    chip(tab)
                 }
             }
             .padding(.horizontal, 16)
@@ -30,26 +36,26 @@ public struct CategoryRail: View {
         }
     }
 
-    /// Builds a single tappable chip for one category, styled differently
-    /// depending on whether it's the currently active one (bold text and the
-    /// category's accent color vs. plain secondary text).
-    /// - Parameter category: The category this chip represents.
-    /// - Returns: A button that selects `category` when tapped.
+    /// Builds a single tappable chip for one tab, styled differently depending on
+    /// whether it's the currently active one (bold text and the tab's accent color vs.
+    /// plain secondary text).
+    /// - Parameter tab: The tab this chip represents.
+    /// - Returns: A button that selects `tab` when tapped.
     @ViewBuilder
-    private func chip(_ category: ShellCategory) -> some View {
-        let isActive = category == selected
+    private func chip(_ tab: HubTab) -> some View {
+        let isActive = tab == selected
         Button {
-            selected = category
+            selected = tab
         } label: {
             HStack(spacing: 6) {
-                if let glyph = category.glyph {
+                if let glyph = tab.glyph {
                     Image(systemName: glyph)
                 }
-                Text(category.title)
+                Text(tab.title)
             }
             .font(DSFont.headline)
             .fontWeight(isActive ? .bold : .regular)
-            .foregroundStyle(isActive ? category.activeColor : DSColor.textSecondary)
+            .foregroundStyle(isActive ? tab.activeColor : DSColor.textSecondary)
         }
         .buttonStyle(.plain)
     }

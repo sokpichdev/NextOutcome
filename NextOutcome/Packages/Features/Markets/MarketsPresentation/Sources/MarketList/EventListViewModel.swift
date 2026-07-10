@@ -43,9 +43,9 @@ public final class EventListViewModel {
     /// "All/Trump/Trump Daily/Midterms" row). `selectedTrendingTagID == nil` means "All".
     public private(set) var trendingChips: [Tag] = []
     public private(set) var selectedTrendingTagID: String?
-    private var currentCategory: ShellCategory = .trending
+    private var currentCategory: HubTab = .trending
     /// Categories that show the sub-filter chip row (derived from the loaded events' tags).
-    private static let categoriesWithSubChips: Set<ShellCategory> = [.trending, .politics]
+    private static let categoriesWithSubChips: Set<HubTab> = [.trending, .politics]
 
     /// Whether the sub-filter chip row has anything to show. This row is always visible
     /// (non-collapsible) once populated — the collapsible control is the advanced filter row
@@ -169,49 +169,17 @@ public final class EventListViewModel {
         searchResults = (try? await searchEvents.execute(query: searchQuery)) ?? []
     }
 
-    /// Stable Gamma tag ids for the top-level category rail. `nil` = no filter (Trending).
-    ///
-    /// The app fetches the carousel-tags endpoint (`/tags?is_carousel=true`) for the filter
-    /// row, but that returns almost nothing, so resolving a category against that list left
-    /// every chip mapping to `nil` and silently no-op'ing. These ids are resolved directly and
-    /// were verified against `gamma /tags/slug/<slug>` (world-cup=519, breaking-news=198,
-    /// politics=2, sports=1).
-    public static func tagID(for category: ShellCategory) -> String? {
-        switch category {
-        case .trending: return nil
-        case .worldCup: return "519"
-        case .breaking: return "198"
-        case .politics: return "2"
-        case .sports:   return "1"
-        }
-    }
-
-    /// Map a shell category to a Gamma tag id using a loaded tag list (slug/label match).
-    /// Retained as a fallback for when a live tag list is available; the rail resolves via
-    /// the stable-id overload above.
-    public static func tagID(for category: ShellCategory, in tags: [Tag]) -> String? {
-        let wanted: Set<String>
-        switch category {
-        case .trending: return nil
-        case .worldCup: wanted = ["world cup", "soccer", "football"]
-        case .breaking: wanted = ["breaking", "news"]
-        case .politics: wanted = ["politics"]
-        case .sports:   wanted = ["sports"]
-        }
-        return tags.first { wanted.contains($0.slug.lowercased()) || wanted.contains($0.label.lowercased()) }?.id
-    }
-
     /// Apply a category rail selection. Idempotent: re-applying the current category (e.g.
     /// when the list view remounts after the World Cup hub was shown) does not refetch
     /// unless the VM has never loaded.
-    public func apply(category: ShellCategory) async {
+    public func apply(category: HubTab) async {
         let isInitial: Bool = { if case .idle = state { return true } else { return false } }()
         guard category != currentCategory || isInitial else { return }
         currentCategory = category
 
         let previousEffective = effectiveTagID
         if category != .trending { selectedTrendingTagID = nil }
-        selectedTagID = Self.tagID(for: category)
+        selectedTagID = category.tagID
 
         if isInitial || effectiveTagID != previousEffective {
             nextCursor = nil
