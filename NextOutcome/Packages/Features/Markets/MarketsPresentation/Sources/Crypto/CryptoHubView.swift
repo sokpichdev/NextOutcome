@@ -25,7 +25,11 @@ public struct CryptoHubView: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSLayout.spacing) {
+                timeframeChipRow
                 header
+                if isSearching {
+                    searchField
+                }
                 subTabRow
                 content
             }
@@ -37,23 +41,102 @@ public struct CryptoHubView: View {
         .navigationDestination(for: MarketNavigationTarget.self) {
             MarketDetailView(market: $0.market, eventID: $0.eventID)
         }
+        .sheet(isPresented: $showsMoreSheet) { CryptoMoreSheetPlaceholder() }
         .task {
             if let tagID { await viewModel.loadIfNeeded(tagID: tagID) }
         }
         .refreshable { await viewModel.refresh() }
     }
 
-    // MARK: - Header (title + sort/period menus)
+    /// Whether the row-2 search field is currently revealed.
+    @State private var isSearching = false
+    /// Whether the shared "More filters" placeholder sheet is presented (opened by either
+    /// the timeframe row's "•••More" chip or row 2's filter icon).
+    @State private var showsMoreSheet = false
+
+    // MARK: - Timeframe chip row
+
+    private var timeframeChipRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DSLayout.spacingSmall) {
+                timeframeChip(.all, label: "All", glyph: "square.grid.2x2")
+                timeframeChip(.fiveMin, label: "5 Min", glyph: "line.3.horizontal.decrease")
+                timeframeChip(.fifteenMin, label: "15 Min", glyph: "circle.dashed")
+                timeframeChip(.hourly, label: "1 Hour", glyph: "clock")
+                Button { showsMoreSheet = true } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "ellipsis")
+                        Text("More").font(DSFont.caption.bold())
+                    }
+                    .foregroundStyle(DSColor.textSecondary)
+                    .padding(.horizontal, DSLayout.spacingMedium)
+                    .padding(.vertical, DSLayout.spacingXSmall)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func timeframeChip(_ timeframe: CryptoHubViewModel.Timeframe, label: String, glyph: String) -> some View {
+        let isSelected = viewModel.selectedTimeframe == timeframe
+        return Button {
+            viewModel.selectedTimeframe = timeframe
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: glyph)
+                Text(label)
+                Text("\(viewModel.timeframeCount(for: timeframe))")
+                    .foregroundStyle(DSColor.textSecondary)
+            }
+            .font(DSFont.caption.bold())
+            .foregroundStyle(isSelected ? .white : DSColor.textSecondary)
+            .padding(.horizontal, DSLayout.spacingMedium)
+            .padding(.vertical, DSLayout.spacingXSmall)
+            .background(isSelected ? DSColor.accent : DSColor.surface)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Header (title + search/filter icons + sort/period menus)
 
     private var header: some View {
         VStack(alignment: .leading, spacing: DSLayout.spacing) {
-            Text("Crypto").font(DSFont.title).foregroundStyle(DSColor.textPrimary)
+            HStack {
+                Text("Crypto").font(DSFont.title).foregroundStyle(DSColor.textPrimary)
+                Spacer()
+                Button { isSearching.toggle() } label: {
+                    Image(systemName: "magnifyingglass").foregroundStyle(DSColor.textPrimary)
+                }
+                .buttonStyle(.plain)
+                Button { showsMoreSheet = true } label: {
+                    Image(systemName: "slider.horizontal.3").foregroundStyle(DSColor.textPrimary)
+                }
+                .buttonStyle(.plain)
+            }
             HStack(spacing: DSLayout.spacingSmall) {
                 sortMenu
                 periodMenu
                 Spacer()
             }
         }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundStyle(DSColor.textSecondary)
+            TextField("Search", text: $viewModel.searchQuery)
+                .font(DSFont.subheadline)
+                .foregroundStyle(DSColor.textPrimary)
+            if !viewModel.searchQuery.isEmpty {
+                Button { viewModel.searchQuery = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(DSColor.textSecondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(DSColor.surface).clipShape(RoundedRectangle(cornerRadius: DSLayout.chipRadius))
     }
 
     private var sortMenu: some View {
@@ -171,5 +254,23 @@ public struct CryptoHubView: View {
         } else {
             CryptoStrikeCard(event: event, kind: kind)
         }
+    }
+}
+
+/// Placeholder for the deferred "More filters" sheet (the 10 additional timeframe buckets
+/// and the per-coin list). Opened by both the timeframe row's "•••More" chip and the
+/// header's filter icon. Real content is a separate, later slice.
+private struct CryptoMoreSheetPlaceholder: View {
+    var body: some View {
+        VStack(spacing: DSLayout.spacing) {
+            Image(systemName: "slider.horizontal.3")
+                .font(.largeTitle)
+                .foregroundStyle(DSColor.textSecondary)
+            Text("More filters coming soon")
+                .font(DSFont.headline)
+                .foregroundStyle(DSColor.textPrimary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(DSColor.background)
     }
 }
