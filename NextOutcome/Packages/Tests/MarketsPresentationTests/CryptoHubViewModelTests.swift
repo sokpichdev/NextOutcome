@@ -6,8 +6,15 @@ import SharedDomain
 
 @MainActor
 final class CryptoHubViewModelTests: XCTestCase {
-    private func event(id: String, title: String, volume: Decimal = 0, markets: [Market] = [], recurrence: String? = nil) -> Event {
-        Event(id: id, title: title, slug: id, markets: markets, volume: volume, imageURL: nil, recurrence: recurrence)
+    private func event(
+        id: String, title: String, volume: Decimal = 0, markets: [Market] = [], recurrence: String? = nil,
+        volume24hr: Decimal = 0, liquidity: Decimal = 0, competitive: Double? = nil, creationDate: Date? = nil
+    ) -> Event {
+        Event(
+            id: id, title: title, slug: id, markets: markets, volume: volume, imageURL: nil,
+            recurrence: recurrence, volume24hr: volume24hr, liquidity: liquidity,
+            competitive: competitive, creationDate: creationDate
+        )
     }
 
     private func upDownMarket(id: String, endDate: Date? = nil) -> Market {
@@ -73,14 +80,57 @@ final class CryptoHubViewModelTests: XCTestCase {
         XCTAssertEqual(Set(vm.visibleEvents.map(\.event.id)), Set(["1", "2"]))
     }
 
-    func test_visibleEvents_sortsByVolume_descending() async {
+    func test_visibleEvents_sortsByTotalVolume_descending() async {
         let low = event(id: "low", title: "BTC Up or Down 5m", volume: 10, markets: [upDownMarket(id: "m1")])
         let high = event(id: "high", title: "ETH Up or Down 5m", volume: 100, markets: [upDownMarket(id: "m2")])
         let (vm, _) = makeVM(events: [low, high])
         await vm.loadIfNeeded(tagID: "crypto-tag")
 
-        vm.sortOption = .volume
+        vm.sortOption = .totalVolume
         XCTAssertEqual(vm.visibleEvents.map(\.event.id), ["high", "low"])
+    }
+
+    func test_visibleEvents_sortsByVolume24hr_descending() async {
+        let low = event(id: "low", title: "BTC Up or Down 5m", markets: [upDownMarket(id: "m1")], volume24hr: 10)
+        let high = event(id: "high", title: "ETH Up or Down 5m", markets: [upDownMarket(id: "m2")], volume24hr: 100)
+        let (vm, _) = makeVM(events: [low, high])
+        await vm.loadIfNeeded(tagID: "crypto-tag")
+
+        vm.sortOption = .volume24hr
+        XCTAssertEqual(vm.visibleEvents.map(\.event.id), ["high", "low"])
+    }
+
+    func test_visibleEvents_sortsByLiquidity_descending() async {
+        let low = event(id: "low", title: "BTC Up or Down 5m", markets: [upDownMarket(id: "m1")], liquidity: 10)
+        let high = event(id: "high", title: "ETH Up or Down 5m", markets: [upDownMarket(id: "m2")], liquidity: 100)
+        let (vm, _) = makeVM(events: [low, high])
+        await vm.loadIfNeeded(tagID: "crypto-tag")
+
+        vm.sortOption = .liquidity
+        XCTAssertEqual(vm.visibleEvents.map(\.event.id), ["high", "low"])
+    }
+
+    func test_visibleEvents_sortsByNewest_descending_noCreationDateSortsLast() async {
+        let now = Date(timeIntervalSince1970: 1_782_216_000)
+        let newer = event(id: "newer", title: "BTC Up or Down 5m", markets: [upDownMarket(id: "m1")], creationDate: now)
+        let older = event(id: "older", title: "ETH Up or Down 5m", markets: [upDownMarket(id: "m2")], creationDate: now.addingTimeInterval(-3600))
+        let unknown = event(id: "unknown", title: "XRP Up or Down 5m", markets: [upDownMarket(id: "m3")], creationDate: nil)
+        let (vm, _) = makeVM(events: [unknown, older, newer])
+        await vm.loadIfNeeded(tagID: "crypto-tag")
+
+        vm.sortOption = .newest
+        XCTAssertEqual(vm.visibleEvents.map(\.event.id), ["newer", "older", "unknown"])
+    }
+
+    func test_visibleEvents_sortsByCompetitive_descending_noScoreSortsLast() async {
+        let veryCompetitive = event(id: "very", title: "BTC Up or Down 5m", markets: [upDownMarket(id: "m1")], competitive: 0.99)
+        let lessCompetitive = event(id: "less", title: "ETH Up or Down 5m", markets: [upDownMarket(id: "m2")], competitive: 0.5)
+        let unscored = event(id: "unscored", title: "XRP Up or Down 5m", markets: [upDownMarket(id: "m3")], competitive: nil)
+        let (vm, _) = makeVM(events: [unscored, lessCompetitive, veryCompetitive])
+        await vm.loadIfNeeded(tagID: "crypto-tag")
+
+        vm.sortOption = .competitive
+        XCTAssertEqual(vm.visibleEvents.map(\.event.id), ["very", "less", "unscored"])
     }
 
     func test_visibleEvents_sortsByEndingSoon_noEndDateSortsLast() async {
