@@ -110,10 +110,19 @@ struct EventDTO: Decodable {
     /// The recurring-market series this event belongs to, if any. Real payloads carry at
     /// most one entry; absent for non-recurring events.
     let series: [SeriesDTO]
+    /// Trailing-24-hour trading volume.
+    let volume24hr: Decimal
+    /// Available liquidity in dollars.
+    let liquidity: Decimal
+    /// A 0-1 "competitiveness" score Gamma computes (how close to 50/50 the market is).
+    let competitive: Double?
+    /// When the event was created, ISO8601 with fractional seconds.
+    let creationDate: String?
 
     /// JSON keys for `EventDTO`.
     enum CodingKeys: String, CodingKey {
-        case id, title, slug, markets, volume, image, tags, gameStartTime, description, series
+        case id, title, slug, markets, volume, image, tags, gameStartTime, description, series,
+             volume24hr, liquidity, competitive, creationDate
     }
 
     /// Tolerant decoder falling back to the slug for a missing title and to empty
@@ -131,6 +140,10 @@ struct EventDTO: Decodable {
         gameStartTime = try? c.decode(String.self, forKey: .gameStartTime)
         description = try? c.decode(String.self, forKey: .description)
         series = (try? c.decode([SeriesDTO].self, forKey: .series)) ?? []
+        volume24hr = DTODecoding.decimal(c, .volume24hr)
+        liquidity = DTODecoding.decimal(c, .liquidity)
+        competitive = try? c.decode(Double.self, forKey: .competitive)
+        creationDate = try? c.decode(String.self, forKey: .creationDate)
     }
 }
 

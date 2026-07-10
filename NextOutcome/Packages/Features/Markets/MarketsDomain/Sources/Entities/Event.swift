@@ -34,6 +34,15 @@ public struct Event: Identifiable, Hashable {
     /// `CryptoHubViewModel.Timeframe`), matching the existing `groupItemTitle`/
     /// `sportsMarketType` pattern of Domain carrying the raw signal unchanged.
     public let recurrence: String?
+    /// Trailing-24-hour trading volume, from Gamma's `volume24hr`. `0` when absent.
+    public let volume24hr: Decimal
+    /// Available liquidity in dollars, from Gamma's `liquidity`. `0` when absent.
+    public let liquidity: Decimal
+    /// A 0-1 "competitiveness" score Gamma computes (closer to 1 = closer to 50/50 odds),
+    /// from Gamma's `competitive`. `nil` when absent.
+    public let competitive: Double?
+    /// When the event was created, from Gamma's `creationDate`. `nil` when absent.
+    public let creationDate: Date?
 
     /// Creates an event. Usually built by the mapping layer from a DTO.
     public init(
@@ -46,7 +55,11 @@ public struct Event: Identifiable, Hashable {
         tags: [Tag] = [],
         gameStartTime: Date? = nil,
         description: String? = nil,
-        recurrence: String? = nil
+        recurrence: String? = nil,
+        volume24hr: Decimal = 0,
+        liquidity: Decimal = 0,
+        competitive: Double? = nil,
+        creationDate: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -58,6 +71,10 @@ public struct Event: Identifiable, Hashable {
         self.gameStartTime = gameStartTime
         self.description = description
         self.recurrence = recurrence
+        self.volume24hr = volume24hr
+        self.liquidity = liquidity
+        self.competitive = competitive
+        self.creationDate = creationDate
     }
 
     /// True when at least one market carries a sports section hint (moneyline/spreads/totals/…),
