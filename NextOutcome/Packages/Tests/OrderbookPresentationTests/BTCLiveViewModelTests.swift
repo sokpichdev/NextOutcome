@@ -64,13 +64,18 @@ private final class FakeCryptoSpotPriceRepository: CryptoSpotPriceRepository, @u
     var window: CryptoPriceWindow = CryptoPriceWindow(
         openPrice: 0, closePrice: nil, timestamp: Date(), completed: false
     )
+    /// The `symbol` argument each call was actually invoked with, so tests can assert
+    /// the view model doesn't hardcode "BTC" for a non-Bitcoin market.
+    private(set) var requestedSymbols: [String] = []
 
     func spotPriceHistory(symbol: String, eventStart: Date, eventEnd: Date) async throws -> [CryptoSpotPricePoint] {
-        points
+        requestedSymbols.append(symbol)
+        return points
     }
 
     func priceWindow(symbol: String, eventStart: Date, eventEnd: Date) async throws -> CryptoPriceWindow {
-        window
+        requestedSymbols.append(symbol)
+        return window
     }
 }
 
@@ -79,12 +84,14 @@ final class BTCLiveViewModelTests: XCTestCase {
     private func makeVM(
         repository: FakeOrderbookRepository,
         windowEnd: Date,
+        symbol: String = "BTC",
         spotRepository: FakeCryptoSpotPriceRepository = FakeCryptoSpotPriceRepository()
     ) -> BTCLiveViewModel {
         BTCLiveViewModel(
             assetID: "asset-1",
             eventID: "event-1",
             windowEnd: windowEnd,
+            symbol: symbol,
             fetchHistory: FetchPriceHistoryUseCase(repository: repository),
             fetchServerTime: FetchServerTimeUseCase(repository: repository),
             fetchRecentTrades: FetchRecentTradesUseCase(repository: repository),
@@ -270,5 +277,31 @@ final class BTCLiveViewModelTests: XCTestCase {
         XCTAssertEqual(candles[0].close, 63_950)
         XCTAssertEqual(candles[2].open, 63_890)
         XCTAssertEqual(candles[2].close, 64_010)
+    }
+
+    /// Regression test: this screen opens for any Up/Down crypto market (BTC, ETH, SOL,
+    /// …), not just Bitcoin — `pollSpotPrice` must query the feed with the event's actual
+    /// asset symbol, not a hardcoded "BTC". Without this, an Ethereum round's spot-price
+    /// requests silently ask the server for BTC data, which never matches, so the chart
+    /// (and "Price to beat"/"Current Price") stay empty forever.
+    @MainActor
+    func test_pollSpotPrice_usesTheProvidedSymbol_notHardcodedBTC() async {
+        let windowEnd = Date().addingTimeInterval(300)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: Date(), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        spotRepository.points = [CryptoSpotPricePoint(date: Date(), price: 3_400)]
+
+        let vm = makeVM(repository: repository, windowEnd: windowEnd, symbol: "ETH", spotRepository: spotRepository)
+        vm.start()
+        for _ in 0..<20 { await Task.yield() }
+        vm.stop()
+
+        XCTAssertFalse(spotRepository.requestedSymbols.isEmpty, "expected at least one poll to have fired")
+        XCTAssertTrue(
+            spotRepository.requestedSymbols.allSatisfy { $0 == "ETH" },
+            "expected every spot-price request to use the event's own symbol (ETH), got \(spotRepository.requestedSymbols)"
+        )
     }
 }
