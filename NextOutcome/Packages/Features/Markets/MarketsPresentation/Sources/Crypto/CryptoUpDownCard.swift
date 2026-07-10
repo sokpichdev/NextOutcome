@@ -35,7 +35,8 @@ public struct CryptoUpDownCard: View {
         guard let market, let upOutcome else { return nil }
         return CryptoUpDownNavigationTarget(
             assetID: upOutcome.id, eventID: event.id,
-            windowEnd: market.endDate ?? .distantFuture, market: market
+            windowEnd: market.endDate ?? .distantFuture,
+            symbol: Self.coinSymbol(for: event), market: market
         )
     }
 
@@ -111,5 +112,23 @@ public struct CryptoUpDownCard: View {
             if let label = coinLabels[tag.slug.lowercased()] { return label }
         }
         return "Crypto"
+    }
+
+    /// Ticker symbols for `polymarket.com/api/crypto/*` (the real dollar spot-price
+    /// feed), matched against `event.tags` the same way `coinLabel` is. This screen
+    /// isn't BTC-only, so the symbol sent to that feed must reflect the actual event.
+    private static let coinSymbols: [String: String] = [
+        "bitcoin": "BTC", "ethereum": "ETH", "solana": "SOL",
+        "xrp": "XRP", "dogecoin": "DOGE", "bnb": "BNB",
+    ]
+
+    /// The coin ticker symbol for the spot-price feed, derived from the event's tags.
+    /// Falls back to "BTC" only as a last resort (shouldn't happen for a
+    /// `.upDown`-classified event, which always carries a known coin tag in practice).
+    private static func coinSymbol(for event: Event) -> String {
+        for tag in event.tags {
+            if let symbol = coinSymbols[tag.slug.lowercased()] { return symbol }
+        }
+        return "BTC"
     }
 }

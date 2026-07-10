@@ -51,6 +51,10 @@ public final class BTCLiveViewModel {
     private let eventID: String
     /// When the current 5-minute window closes.
     private let windowEnd: Date
+    /// The underlying crypto asset's ticker symbol (e.g. "BTC", "ETH"), used to query
+    /// the real dollar spot-price feed — this screen opens for any Up/Down coin, not
+    /// just Bitcoin.
+    private let symbol: String
     /// Use case that loads the price series.
     private let fetchHistory: FetchPriceHistoryUseCase
     /// Use case that fetches authoritative server time (fetched once).
@@ -93,6 +97,7 @@ public final class BTCLiveViewModel {
     ///   - assetID: The "Up" outcome token.
     ///   - eventID: The event id for the trades ticker.
     ///   - windowEnd: When the 5-minute window closes.
+    ///   - symbol: The underlying crypto asset's ticker symbol (e.g. "BTC", "ETH").
     ///   - fetchHistory: Loads the price series.
     ///   - fetchServerTime: Fetches authoritative server time (once).
     ///   - fetchRecentTrades: Polls recent trades.
@@ -104,6 +109,7 @@ public final class BTCLiveViewModel {
         assetID: String,
         eventID: String,
         windowEnd: Date,
+        symbol: String,
         fetchHistory: FetchPriceHistoryUseCase,
         fetchServerTime: FetchServerTimeUseCase,
         fetchRecentTrades: FetchRecentTradesUseCase,
@@ -115,6 +121,7 @@ public final class BTCLiveViewModel {
         self.assetID = assetID
         self.eventID = eventID
         self.windowEnd = windowEnd
+        self.symbol = symbol
         self.fetchHistory = fetchHistory
         self.fetchServerTime = fetchServerTime
         self.fetchRecentTrades = fetchRecentTrades
@@ -325,10 +332,10 @@ public final class BTCLiveViewModel {
         while !Task.isCancelled {
             do {
                 async let historyCall = fetchSpotPriceHistory.execute(
-                    symbol: "BTC", eventStart: eventStart, eventEnd: windowEnd
+                    symbol: symbol, eventStart: eventStart, eventEnd: windowEnd
                 )
                 async let windowCall = fetchPriceWindow.execute(
-                    symbol: "BTC", eventStart: eventStart, eventEnd: windowEnd
+                    symbol: symbol, eventStart: eventStart, eventEnd: windowEnd
                 )
                 let (points, window) = try await (historyCall, windowCall)
                 if !Task.isCancelled {

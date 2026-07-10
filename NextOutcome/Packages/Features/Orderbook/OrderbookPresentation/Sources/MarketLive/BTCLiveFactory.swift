@@ -13,12 +13,18 @@ public struct BTCLiveContext: Sendable {
     public let eventID: String     // gamma event id (for the /trades ticker)
     /// When the current 5-minute window closes (drives the countdown).
     public let windowEnd: Date     // when the 5-minute window closes
+    /// The underlying crypto asset's ticker symbol (e.g. "BTC", "ETH"), used to query
+    /// the real dollar spot-price feed. This screen isn't BTC-only — the Crypto hub
+    /// opens it for any Up/Down coin — so this must reflect the actual event's asset,
+    /// not be assumed.
+    public let symbol: String
 
     /// Creates the context needed to open the BTC live screen.
-    public init(assetID: String, eventID: String, windowEnd: Date) {
+    public init(assetID: String, eventID: String, windowEnd: Date, symbol: String) {
         self.assetID = assetID
         self.eventID = eventID
         self.windowEnd = windowEnd
+        self.symbol = symbol
     }
 }
 
