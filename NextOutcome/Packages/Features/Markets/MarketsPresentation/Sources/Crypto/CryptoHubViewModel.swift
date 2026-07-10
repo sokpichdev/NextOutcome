@@ -31,6 +31,10 @@ public final class CryptoHubViewModel {
     /// Period filter, keyword-matched against the event title.
     public enum Period: CaseIterable, Equatable { case all, daily, weekly, monthly }
 
+    /// Recurrence-based timeframe buckets shown as chips above the sub-tab row. Only the 4
+    /// buckets visible without opening the deferred "More" sheet.
+    public enum Timeframe: CaseIterable, Equatable { case all, fiveMin, fifteenMin, hourly }
+
     /// The current load state.
     public private(set) var state: State = .idle
     /// Every fetched event, paired with its classified kind. `.other`-kind events are
@@ -45,6 +49,10 @@ public final class CryptoHubViewModel {
     public var sortOption: SortOption = .volume
     /// The selected period filter.
     public var period: Period = .all
+    /// The selected recurrence timeframe.
+    public var selectedTimeframe: Timeframe = .all
+    /// Case-insensitive substring match against the event title.
+    public var searchQuery: String = ""
 
     private let fetchAllEvents: FetchAllEventsUseCase
 
@@ -81,7 +89,8 @@ public final class CryptoHubViewModel {
         }
     }
 
-    /// `classifiedEvents` filtered by `selectedSubTab`/`period`, sorted by `sortOption`.
+    /// `classifiedEvents` filtered by `selectedSubTab`/`period`/`selectedTimeframe`/
+    /// `searchQuery`, sorted by `sortOption`.
     public var visibleEvents: [(event: Event, kind: CryptoMarketKind)] {
         var events = classifiedEvents
         if let kind = selectedSubTab.kind {
@@ -89,6 +98,13 @@ public final class CryptoHubViewModel {
         }
         if period != .all {
             events = events.filter { matches(period: period, title: $0.event.title) }
+        }
+        if selectedTimeframe != .all {
+            events = events.filter { matches(timeframe: selectedTimeframe, recurrence: $0.event.recurrence) }
+        }
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !query.isEmpty {
+            events = events.filter { $0.event.title.localizedCaseInsensitiveContains(query) }
         }
         switch sortOption {
         case .volume:
@@ -99,6 +115,13 @@ public final class CryptoHubViewModel {
         return events
     }
 
+    /// The count of `classifiedEvents` (the already-`.other`-excluded set) matching a
+    /// timeframe bucket, for the row's "{label} {count}" chips. `.all` counts everything.
+    public func timeframeCount(for timeframe: Timeframe) -> Int {
+        guard timeframe != .all else { return classifiedEvents.count }
+        return classifiedEvents.filter { matches(timeframe: timeframe, recurrence: $0.event.recurrence) }.count
+    }
+
     /// Case-insensitive keyword match of the period against the event title.
     private func matches(period: Period, title: String) -> Bool {
         let lower = title.lowercased()
@@ -107,6 +130,20 @@ public final class CryptoHubViewModel {
         case .daily: return lower.contains("daily")
         case .weekly: return lower.contains("weekly")
         case .monthly: return lower.contains("monthly")
+        }
+    }
+
+    /// Matches a timeframe bucket against an event's `recurrence` slug suffix (e.g.
+    /// `"btc-up-or-down-5m"` → `.fiveMin`). `nil` recurrence or an unrecognized suffix
+    /// (including `"-4h"`/`"-daily"`, which have no bucket in this row) never matches a
+    /// specific bucket.
+    private func matches(timeframe: Timeframe, recurrence: String?) -> Bool {
+        guard let recurrence else { return false }
+        switch timeframe {
+        case .all: return true
+        case .fiveMin: return recurrence.hasSuffix("-5m")
+        case .fifteenMin: return recurrence.hasSuffix("-15m")
+        case .hourly: return recurrence.hasSuffix("-hourly")
         }
     }
 
