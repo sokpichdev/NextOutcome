@@ -30,8 +30,10 @@ public enum HomeCardKind: Equatable {
         Set(event.tags.flatMap { [$0.slug.lowercased(), $0.label.lowercased()] })
     }
 
-    /// Whether a market has "Up"/"Down" outcomes (crypto up/down style).
-    private static func isUpDown(_ market: Market) -> Bool {
+    /// Whether a market has "Up"/"Down" outcomes (crypto up/down style). Package-internal
+    /// (not `private`) so `CryptoMarketKind.classify(_:)` can reuse the same check rather
+    /// than duplicating it.
+    static func isUpDown(_ market: Market) -> Bool {
         let titles = Set(market.outcomes.map { $0.title.lowercased() })
         return titles.contains("up") && titles.contains("down")
     }
