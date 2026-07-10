@@ -9,9 +9,12 @@ import SwiftUI
 /// Screens reached by pushing into a detail (e.g. an individual market's page)
 /// skip this wrapper since they don't need the category rail.
 public struct ShellChrome<Content: View>: View {
-    /// The currently selected top-level category, shown highlighted in the
-    /// category rail and shared with the parent to filter content.
-    @Binding private var selectedCategory: ShellCategory
+    /// The tabs to show in the category rail. Only the Home tab passes anything other
+    /// than the default — see `HubTabsViewModel`.
+    private let tabs: [HubTab]
+    /// The currently selected top-level tab, shown highlighted in the category rail and
+    /// shared with the parent to filter content.
+    @Binding private var selectedCategory: HubTab
     /// Whether the category rail (Trending/World Cup/Breaking/…) is shown below the top bar.
     /// Only the Home tab has content that responds to it — other tabs hide it.
     private let showsCategoryRail: Bool
@@ -26,7 +29,8 @@ public struct ShellChrome<Content: View>: View {
 
     /// Creates the shell chrome wrapper around a tab's content.
     /// - Parameters:
-    ///   - selectedCategory: Binding to the active top-level category.
+    ///   - tabs: The tabs to show in the category rail. Defaults to the 5 pinned tabs.
+    ///   - selectedCategory: Binding to the active top-level tab.
     ///   - showsCategoryRail: Whether to show the category rail below the top bar. Defaults
     ///     to `true`; pass `false` for tabs whose content doesn't filter by category.
     ///   - onGift: Action for the gift icon. Defaults to a no-op.
@@ -34,13 +38,15 @@ public struct ShellChrome<Content: View>: View {
     ///   - onAvatar: Action for the avatar icon (required — typically opens the account menu/drawer).
     ///   - content: A view builder producing the tab's main content.
     public init(
-        selectedCategory: Binding<ShellCategory>,
+        tabs: [HubTab] = HubTab.pinned,
+        selectedCategory: Binding<HubTab>,
         showsCategoryRail: Bool = true,
         onGift: @escaping () -> Void = {},
         onBell: @escaping () -> Void = {},
         onAvatar: @escaping () -> Void,
         @ViewBuilder content: () -> Content
     ) {
+        self.tabs = tabs
         self._selectedCategory = selectedCategory
         self.showsCategoryRail = showsCategoryRail
         self.onGift = onGift
@@ -54,7 +60,7 @@ public struct ShellChrome<Content: View>: View {
             VStack(spacing: 0) {
                 NOTopBar(onGift: onGift, onBell: onBell, onAvatar: onAvatar)
                 if showsCategoryRail {
-                    CategoryRail(selected: $selectedCategory)
+                    CategoryRail(tabs: tabs, selected: $selectedCategory)
                     Divider().overlay(DSColor.separator)
                 }
                 content

@@ -72,7 +72,7 @@ struct RootView: View {
     private let sportsStreamer: any SportsStateStreaming
 
     /// Which feed category the Home tab currently shows (e.g. trending, World Cup).
-    @State private var selectedCategory: ShellCategory = .trending
+    @State private var selectedCategory: HubTab = .trending
     /// Whether the side drawer is currently slid in over the main content.
     @State private var isDrawerOpen = false
 
