@@ -25,8 +25,10 @@ public final class CryptoHubViewModel {
         }
     }
 
-    /// Sort options backed by real `Event`/`Market` fields.
-    public enum SortOption: CaseIterable, Equatable { case volume, endingSoon }
+    /// Sort options backed by real `Event`/`Market` fields. Matches web's sort menu order,
+    /// minus "Earn 3.25%" — a separate USDC-yield feature with no backing data or UI
+    /// anywhere in this app, shown as a disabled row in the view instead of a case here.
+    public enum SortOption: CaseIterable, Equatable { case volume24hr, totalVolume, liquidity, newest, endingSoon, competitive }
 
     /// Period filter, keyword-matched against the event title.
     public enum Period: CaseIterable, Equatable { case all, daily, weekly, monthly }
@@ -45,8 +47,8 @@ public final class CryptoHubViewModel {
 
     /// The selected sub-tab.
     public var selectedSubTab: SubTab = .all
-    /// The selected sort option.
-    public var sortOption: SortOption = .volume
+    /// The selected sort option. Defaults to `.volume24hr`, matching web's default.
+    public var sortOption: SortOption = .volume24hr
     /// The selected period filter.
     public var period: Period = .all
     /// The selected recurrence timeframe.
@@ -107,10 +109,18 @@ public final class CryptoHubViewModel {
             events = events.filter { $0.event.title.localizedCaseInsensitiveContains(query) }
         }
         switch sortOption {
-        case .volume:
+        case .volume24hr:
+            events.sort { $0.event.volume24hr > $1.event.volume24hr }
+        case .totalVolume:
             events.sort { $0.event.volume > $1.event.volume }
+        case .liquidity:
+            events.sort { $0.event.liquidity > $1.event.liquidity }
+        case .newest:
+            events.sort { newestSortKey($0.event) > newestSortKey($1.event) }
         case .endingSoon:
             events.sort { endingSoonSortKey($0.event) < endingSoonSortKey($1.event) }
+        case .competitive:
+            events.sort { competitiveSortKey($0.event) > competitiveSortKey($1.event) }
         }
         return events
     }
@@ -151,5 +161,16 @@ public final class CryptoHubViewModel {
     /// Events with no end date on any market sort last.
     private func endingSoonSortKey(_ event: Event) -> Date {
         event.markets.compactMap(\.endDate).min() ?? .distantFuture
+    }
+
+    /// An event's creation date, for "Newest" sort. Events with no creation date sort last.
+    private func newestSortKey(_ event: Event) -> Date {
+        event.creationDate ?? .distantPast
+    }
+
+    /// An event's competitiveness score, for "Competitive" sort. Events with no score sort
+    /// last (below the valid `0...1` range).
+    private func competitiveSortKey(_ event: Event) -> Double {
+        event.competitive ?? -1
     }
 }
