@@ -61,6 +61,27 @@ enum OrderbookMapper {
         }
     }
 
+    /// Maps a `/api/crypto/price-history` response into domain spot-price points.
+    /// - Parameter dtos: The decoded spot-price samples.
+    /// - Returns: The parsed spot-price points, in the order received.
+    static func spotPriceHistory(from dtos: [CryptoSpotPricePointDTO]) -> [CryptoSpotPricePoint] {
+        dtos.map {
+            CryptoSpotPricePoint(date: Date(timeIntervalSince1970: $0.timestamp / 1000), price: Decimal($0.value))
+        }
+    }
+
+    /// Maps a `/api/crypto/crypto-price` response into a domain price window.
+    /// - Parameter dto: The decoded window snapshot.
+    /// - Returns: The parsed price window.
+    static func priceWindow(from dto: CryptoPriceWindowDTO) -> CryptoPriceWindow {
+        CryptoPriceWindow(
+            openPrice: dto.openPrice.map { Decimal($0) },
+            closePrice: dto.closePrice.map { Decimal($0) },
+            timestamp: Date(timeIntervalSince1970: dto.timestamp / 1000),
+            completed: dto.completed
+        )
+    }
+
     // MARK: WebSocket → normalized events
 
     /// Normalizes one raw market-channel message into zero or more `OrderBookEvent`s,

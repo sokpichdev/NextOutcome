@@ -26,6 +26,11 @@ public enum PolymarketService {
     /// per Polymarket's geographic restrictions.
     case geoblock
 
+    /// The main polymarket.com web app's own Next.js API routes (distinct from the
+    /// dedicated Gamma/Data/CLOB backends) — e.g. `/api/crypto/*`, used for real BTC
+    /// spot-price data that isn't exposed anywhere else.
+    case web
+
     /// The hostname to use when building a request to this service, without a
     /// scheme (`https://` is added separately by `Endpoint.urlRequest`).
     var baseURL: String {
@@ -34,6 +39,7 @@ public enum PolymarketService {
         case .data: return "data-api.polymarket.com"
         case .clob: return "clob.polymarket.com"
         case .geoblock: return "polymarket.com"
+        case .web: return "polymarket.com"
         }
     }
 }

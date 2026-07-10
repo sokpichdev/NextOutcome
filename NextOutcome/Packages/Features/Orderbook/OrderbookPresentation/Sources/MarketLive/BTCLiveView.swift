@@ -38,8 +38,8 @@ public struct BTCLiveView: View {
 
     // MARK: Header (countdown + price to beat)
 
-    /// The header: the countdown on the left (red when urgent) and the price-to-beat on
-    /// the right.
+    /// The header: the countdown on the left (red when urgent), and the dollar
+    /// price-to-beat + current price on the right (with a colored delta, matching web).
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: DSLayout.spacingXSmall) {
@@ -51,14 +51,33 @@ public struct BTCLiveView: View {
                     .foregroundStyle(viewModel.isCountdownUrgent ? DSColor.negative : DSColor.textPrimary)
             }
             Spacer()
-            if let target = viewModel.priceToBeat {
-                VStack(alignment: .trailing, spacing: DSLayout.spacingXSmall) {
-                    Text("Price to beat")
-                        .font(DSFont.caption)
-                        .foregroundStyle(DSColor.textSecondary)
-                    Text(centsLabel(target))
-                        .font(DSFont.priceSmall)
-                        .foregroundStyle(DSColor.textPrimary)
+            HStack(alignment: .firstTextBaseline, spacing: DSLayout.spacing) {
+                if let target = viewModel.priceToBeat {
+                    VStack(alignment: .trailing, spacing: DSLayout.spacingXSmall) {
+                        Text("Price to beat")
+                            .font(DSFont.caption)
+                            .foregroundStyle(DSColor.textSecondary)
+                        Text(usdLabel(target))
+                            .font(DSFont.priceSmall)
+                            .foregroundStyle(DSColor.textPrimary)
+                    }
+                }
+                if let current = viewModel.currentPrice {
+                    VStack(alignment: .trailing, spacing: DSLayout.spacingXSmall) {
+                        HStack(spacing: 4) {
+                            Text("Current Price")
+                                .font(DSFont.caption)
+                                .foregroundStyle(DSColor.textSecondary)
+                            if let delta = viewModel.priceDelta {
+                                Text(deltaLabel(delta))
+                                    .font(DSFont.caption)
+                                    .foregroundStyle(delta >= 0 ? DSColor.positive : DSColor.negative)
+                            }
+                        }
+                        Text(usdLabel(current))
+                            .font(DSFont.priceSmall)
+                            .foregroundStyle(DSColor.textPrimary)
+                    }
                 }
             }
         }
@@ -83,22 +102,37 @@ public struct BTCLiveView: View {
         }
     }
 
-    /// The two chips that switch between candle and line chart modes.
+    /// The three chips that switch between the dollar price line, the probability
+    /// "chance" line, and dollar candlesticks — matching web's three chart styles.
     private var modeToggle: some View {
         HStack(spacing: DSLayout.spacingSmall) {
+            DSChip("Price", isActive: viewModel.chartMode == .price) {
+                viewModel.chartMode = .price
+            }
+            DSChip("Chance", isActive: viewModel.chartMode == .chance) {
+                viewModel.chartMode = .chance
+            }
             DSChip("Candles", isActive: viewModel.chartMode == .candles) {
                 viewModel.chartMode = .candles
-            }
-            DSChip("Line", isActive: viewModel.chartMode == .line) {
-                viewModel.chartMode = .line
             }
         }
     }
 
-    /// The chart contents, switching on load state (spinner / empty / error / the selected
-    /// candle or line chart).
+    /// The chart contents, switching on the selected mode and its backing load state
+    /// (spinner / empty / error / the selected chart).
     @ViewBuilder
     private var chartBody: some View {
+        switch viewModel.chartMode {
+        case .chance:
+            chanceChartBody
+        case .price, .candles:
+            spotChartBody
+        }
+    }
+
+    /// The "Chance" mode body: the probability line, driven by `viewModel.state`.
+    @ViewBuilder
+    private var chanceChartBody: some View {
         switch viewModel.state {
         case .idle, .loading:
             ProgressView().frame(maxWidth: .infinity)
@@ -107,43 +141,104 @@ public struct BTCLiveView: View {
         case let .failed(message):
             emptyOrError(message, showRetry: true)
         case let .loaded(points):
+            PriceChart(data: points.map { PricePoint(date: $0.date, price: fractionValue($0.price)) })
+        }
+    }
+
+    /// The "Price"/"Candles" mode body: the dollar spot-price line or candles, driven by
+    /// `viewModel.spotState`.
+    @ViewBuilder
+    private var spotChartBody: some View {
+        switch viewModel.spotState {
+        case .idle, .loading:
+            ProgressView().frame(maxWidth: .infinity)
+        case .empty:
+            emptyOrError("No price data yet.", showRetry: false)
+        case .failed:
+            emptyOrError("Couldn't load the live BTC price.", showRetry: false)
+        case let .loaded(points):
             if viewModel.chartMode == .candles {
                 candleChart
             } else {
-                // Line mode reuses the C1 price-chart marks.
-                PriceChart(data: points.map { PricePoint(date: $0.date, price: fractionValue($0.price)) })
+                dollarLineChart(points)
             }
         }
     }
 
-    /// The candlestick chart: a wick (high–low) and body (open–close) per candle, plus a
-    /// dashed price-to-beat line. Green when the candle closed up, red when down.
+    /// The dollar price line: a bespoke Swift Charts area+line (rather than the shared
+    /// `PriceChart`, which hardcodes a percent Y-axis used by probability/portfolio
+    /// charts elsewhere), auto-scaled to the spot-price range, plus a dashed
+    /// price-to-beat line.
+    private func dollarLineChart(_ points: [CryptoSpotPricePoint]) -> some View {
+        Chart {
+            ForEach(points, id: \.date) { point in
+                AreaMark(
+                    x: .value("Time", point.date),
+                    y: .value("Price", doubleValue(point.price))
+                )
+                .foregroundStyle(DSGradient.positiveArea)
+                LineMark(
+                    x: .value("Time", point.date),
+                    y: .value("Price", doubleValue(point.price))
+                )
+                .foregroundStyle(DSColor.positive)
+                .lineStyle(StrokeStyle(lineWidth: 2))
+            }
+            if let target = viewModel.priceToBeat {
+                RuleMark(y: .value("Price to beat", doubleValue(target)))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    .foregroundStyle(DSColor.textSecondary)
+            }
+        }
+        .chartYAxis {
+            AxisMarks(values: .automatic(desiredCount: 3)) {
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                    .foregroundStyle(DSColor.separator)
+                AxisValueLabel()
+                    .foregroundStyle(DSColor.textSecondary)
+                    .font(DSFont.caption2)
+            }
+        }
+    }
+
+    /// The candlestick chart: a wick (high–low) and body (open–close) per dollar candle,
+    /// plus a dashed price-to-beat line. Green when the candle closed up, red when down.
+    /// The Y domain is auto-scaled to the price range (unlike the old probability-based
+    /// candles, which were fixed to 0...1).
     private var candleChart: some View {
         Chart {
             ForEach(Array(viewModel.candles.enumerated()), id: \.offset) { _, candle in
                 // High–low wick.
                 RuleMark(
                     x: .value("Time", candle.start),
-                    yStart: .value("Low", fractionValue(candle.low)),
-                    yEnd: .value("High", fractionValue(candle.high))
+                    yStart: .value("Low", doubleValue(candle.low)),
+                    yEnd: .value("High", doubleValue(candle.high))
                 )
                 .foregroundStyle(candleColor(candle))
                 // Open–close body.
                 RectangleMark(
                     x: .value("Time", candle.start),
-                    yStart: .value("Open", fractionValue(candle.open)),
-                    yEnd: .value("Close", fractionValue(candle.close)),
+                    yStart: .value("Open", doubleValue(candle.open)),
+                    yEnd: .value("Close", doubleValue(candle.close)),
                     width: .fixed(6)
                 )
                 .foregroundStyle(candleColor(candle))
             }
             if let target = viewModel.priceToBeat {
-                RuleMark(y: .value("Price to beat", fractionValue(target)))
+                RuleMark(y: .value("Price to beat", doubleValue(target)))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                     .foregroundStyle(DSColor.textSecondary)
             }
         }
-        .chartYScale(domain: 0...1)
+        .chartYAxis {
+            AxisMarks(values: .automatic(desiredCount: 3)) {
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                    .foregroundStyle(DSColor.separator)
+                AxisValueLabel()
+                    .foregroundStyle(DSColor.textSecondary)
+                    .font(DSFont.caption2)
+            }
+        }
     }
 
     /// Green if the candle closed at or above its open, red otherwise.
@@ -233,4 +328,29 @@ public struct BTCLiveView: View {
     private func centsButtonLabel(_ cents: Int?) -> String {
         cents.map { "\($0)¢" } ?? "--"
     }
+
+    /// Converts a dollar `Decimal` to an unclamped `Double` for the spot-price charts
+    /// (unlike `fractionValue`, which clamps into 0…1 for probability charts).
+    private func doubleValue(_ value: Decimal) -> Double {
+        NSDecimalNumber(decimal: value).doubleValue
+    }
+
+    /// Formats a dollar `Decimal` as USD (e.g. "$63,945.94").
+    private func usdLabel(_ value: Decimal) -> String {
+        Self.usdFormatter.string(from: NSDecimalNumber(decimal: value)) ?? "$--"
+    }
+
+    /// Formats a signed dollar delta with an arrow (e.g. "▲$15", "▼$8").
+    private func deltaLabel(_ value: Decimal) -> String {
+        let magnitude = usdLabel(abs(value))
+        return value >= 0 ? "▲\(magnitude)" : "▼\(magnitude)"
+    }
+
+    /// A shared USD currency formatter for `usdLabel`/`deltaLabel`.
+    private static let usdFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        return formatter
+    }()
 }

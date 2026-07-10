@@ -35,6 +35,9 @@ final class AppContainer {
     private let repository: MarketRepository
     /// Fetches order books and price history from the CLOB (central limit order book) layer.
     private let orderbookRepository: OrderbookRepository
+    /// Fetches real dollar spot prices for crypto markets from polymarket.com's own
+    /// `/api/crypto/*` routes (used by the BTC live screen's "Price"/"Candles" modes).
+    private let cryptoSpotPriceRepository: CryptoSpotPriceRepository
     /// Live price/quote stream used by the order book and live market screens.
     private let marketStream: MarketStreaming
     /// Fetches the user's positions, activity, and leaderboard data.
@@ -51,6 +54,7 @@ final class AppContainer {
         let client = APIClient()
         self.repository = GammaMarketRepository(client: client)
         self.orderbookRepository = ClobOrderbookRepository(client: client)
+        self.cryptoSpotPriceRepository = PolymarketCryptoPriceRepository(client: client)
         self.marketStream = MarketSocket()
         self.portfolioRepository = DataPortfolioRepository(client: client)
     }
@@ -221,7 +225,7 @@ final class AppContainer {
     /// Factory injected into the environment so the home feed's BTC card can open the
     /// BTC 5-minute live screen (candles, server-clock countdown, quick-bet).
     func makeBTCLiveFactory() -> BTCLiveViewModelFactory {
-        BTCLiveViewModelFactory { [orderbookRepository, marketStream] context, onQuickBet in
+        BTCLiveViewModelFactory { [orderbookRepository, marketStream, cryptoSpotPriceRepository] context, onQuickBet in
             BTCLiveViewModel(
                 assetID: context.assetID,
                 eventID: context.eventID,
@@ -230,6 +234,8 @@ final class AppContainer {
                 fetchServerTime: FetchServerTimeUseCase(repository: orderbookRepository),
                 fetchRecentTrades: FetchRecentTradesUseCase(repository: orderbookRepository),
                 observeBook: ObserveOrderBookUseCase(repository: orderbookRepository, stream: marketStream),
+                fetchSpotPriceHistory: FetchCryptoSpotPriceHistoryUseCase(repository: cryptoSpotPriceRepository),
+                fetchPriceWindow: FetchCryptoPriceWindowUseCase(repository: cryptoSpotPriceRepository),
                 onQuickBet: onQuickBet
             )
         }
