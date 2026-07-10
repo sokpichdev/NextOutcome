@@ -68,6 +68,13 @@ final class AppContainer {
         )
     }
 
+    /// Builds the view model that resolves the home rail's curated additional
+    /// categories (Crypto, Esports, ...) to their live tag ids.
+    /// - Returns: A view model wired to resolve tags by slug.
+    func makeHubTabsViewModel() -> HubTabsViewModel {
+        HubTabsViewModel(fetchTag: FetchTagUseCase(repository: repository))
+    }
+
     /// Builds the view model for the Breaking movers feed (biggest 24h movers).
     /// - Returns: A view model wired to fetch the ranked movers.
     func makeBreakingViewModel() -> BreakingViewModel {

@@ -14,8 +14,8 @@ import DesignSystem
 public struct EventListView: View {
     /// The view model driving the feed.
     @State private var viewModel: EventListViewModel
-    /// The category selected in the shell rail, applied to the view model.
-    private let selectedCategory: ShellCategory
+    /// The tab selected in the shell rail, applied to the view model.
+    private let selectedCategory: HubTab
     /// The Politics hub view model, non-nil only when `selectedCategory == .politics` — drives
     /// the "2026 Midterms Predictions" promo card prepended to the feed in that category.
     private let politicsHubViewModel: PoliticsHubViewModel?
@@ -23,11 +23,11 @@ public struct EventListView: View {
     /// Creates the view.
     /// - Parameters:
     ///   - viewModel: The event-list view model.
-    ///   - selectedCategory: The initial rail category. Defaults to trending.
+    ///   - selectedCategory: The initial rail tab. Defaults to trending.
     ///   - politicsHubViewModel: The Politics hub view model, when in the Politics category.
     public init(
         viewModel: EventListViewModel,
-        selectedCategory: ShellCategory = .trending,
+        selectedCategory: HubTab = .trending,
         politicsHubViewModel: PoliticsHubViewModel? = nil
     ) {
         self._viewModel = State(initialValue: viewModel)

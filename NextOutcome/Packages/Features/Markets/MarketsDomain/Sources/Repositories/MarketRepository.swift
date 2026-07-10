@@ -39,6 +39,9 @@ public protocol MarketRepository: Sendable {
     func searchEvents(query: String) async throws -> [Event]
     /// Fetches the filter tags (categories) shown in the chip row.
     func fetchTags() async throws -> [Tag]
+    /// Fetches a single tag by its URL slug (e.g. resolving a curated home-rail category
+    /// to its live Gamma tag id at runtime), or `nil` if no tag exists at that slug.
+    func fetchTag(slug: String) async throws -> Tag?
     /// Fetches the top holders of a market's condition.
     func holders(conditionId: String) async throws -> [Holder]
     /// Fetches the comments on an event's discussion thread, sorted and optionally
@@ -59,4 +62,5 @@ public extension MarketRepository {
     func searchEvents(query: String) async throws -> [Event] { [] }
     func commenterPositions(proxyWallet: String, eventID: String) async throws -> [CommentHolding] { [] }
     func movers(tagID: String?) async throws -> [Mover] { [] }
+    func fetchTag(slug: String) async throws -> Tag? { nil }
 }
