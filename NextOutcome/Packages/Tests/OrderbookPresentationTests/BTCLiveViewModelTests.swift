@@ -57,11 +57,29 @@ private struct FakeMarketStreaming: MarketStreaming {
     }
 }
 
+/// Minimal fake `CryptoSpotPriceRepository`. Returns whatever's currently set on
+/// `points`/`window`, so a test can mutate them between polls to simulate a live update.
+private final class FakeCryptoSpotPriceRepository: CryptoSpotPriceRepository, @unchecked Sendable {
+    var points: [CryptoSpotPricePoint] = []
+    var window: CryptoPriceWindow = CryptoPriceWindow(
+        openPrice: 0, closePrice: nil, timestamp: Date(), completed: false
+    )
+
+    func spotPriceHistory(symbol: String, eventStart: Date, eventEnd: Date) async throws -> [CryptoSpotPricePoint] {
+        points
+    }
+
+    func priceWindow(symbol: String, eventStart: Date, eventEnd: Date) async throws -> CryptoPriceWindow {
+        window
+    }
+}
+
 final class BTCLiveViewModelTests: XCTestCase {
     @MainActor
     private func makeVM(
         repository: FakeOrderbookRepository,
-        windowEnd: Date
+        windowEnd: Date,
+        spotRepository: FakeCryptoSpotPriceRepository = FakeCryptoSpotPriceRepository()
     ) -> BTCLiveViewModel {
         BTCLiveViewModel(
             assetID: "asset-1",
@@ -71,6 +89,8 @@ final class BTCLiveViewModelTests: XCTestCase {
             fetchServerTime: FetchServerTimeUseCase(repository: repository),
             fetchRecentTrades: FetchRecentTradesUseCase(repository: repository),
             observeBook: ObserveOrderBookUseCase(repository: repository, stream: FakeMarketStreaming()),
+            fetchSpotPriceHistory: FetchCryptoSpotPriceHistoryUseCase(repository: spotRepository),
+            fetchPriceWindow: FetchCryptoPriceWindowUseCase(repository: spotRepository),
             onQuickBet: { _ in }
         )
     }
@@ -159,5 +179,59 @@ final class BTCLiveViewModelTests: XCTestCase {
         // ticking, so refreshCountdown never re-ran after teardown).
         XCTAssertTrue(vm.isStopped, "stop() state must not be undone by a late-completing load()")
         XCTAssertEqual(vm.countdown, countdownAtStop, "no ticker should have resumed updating the countdown after stop()")
+    }
+
+    /// `start()` must poll the spot-price feed and populate `spotState`/`currentPrice`
+    /// from it — there's no other way this data reaches the VM (no WebSocket source).
+    @MainActor
+    func test_start_pollsSpotPrice_andPopulatesCurrentPrice() async {
+        let windowEnd = Date().addingTimeInterval(300)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: Date(), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        spotRepository.points = [
+            CryptoSpotPricePoint(date: Date().addingTimeInterval(-60), price: 63_945.94),
+            CryptoSpotPricePoint(date: Date(), price: 63_961.25)
+        ]
+        spotRepository.window = CryptoPriceWindow(
+            openPrice: 63_945.94, closePrice: nil, timestamp: Date(), completed: false
+        )
+
+        let vm = makeVM(repository: repository, windowEnd: windowEnd, spotRepository: spotRepository)
+        vm.start()
+        for _ in 0..<20 { await Task.yield() }
+        vm.stop()
+
+        XCTAssertEqual(vm.currentPrice, 63_961.25)
+        XCTAssertEqual(vm.priceToBeat, 63_945.94, "priceToBeat must prefer the polled dollar window over the probability fallback")
+        XCTAssertEqual(vm.priceDelta, 63_961.25 - 63_945.94)
+    }
+
+    /// `.candles` mode buckets the dollar spot series (via `CandleAggregator`), not the
+    /// 0…1 probability series — a regression guard for the "repurposed to dollars" change.
+    @MainActor
+    func test_candles_bucketDollarSpotPrices_notProbability() async {
+        let windowEnd = Date(timeIntervalSince1970: 1_000_000)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: windowEnd.addingTimeInterval(-60), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        let bucketStart = Date(timeIntervalSince1970: 0)
+        spotRepository.points = [
+            CryptoSpotPricePoint(date: bucketStart, price: 63_900),
+            CryptoSpotPricePoint(date: bucketStart.addingTimeInterval(30), price: 64_100)
+        ]
+
+        let vm = makeVM(repository: repository, windowEnd: windowEnd, spotRepository: spotRepository)
+        vm.start()
+        for _ in 0..<20 { await Task.yield() }
+        vm.stop()
+
+        let candles = vm.candles
+        XCTAssertEqual(candles.count, 1)
+        XCTAssertEqual(candles.first?.open, 63_900)
+        XCTAssertEqual(candles.first?.close, 64_100)
+        XCTAssertEqual(candles.first?.high, 64_100)
     }
 }
