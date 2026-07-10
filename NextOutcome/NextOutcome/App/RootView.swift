@@ -46,6 +46,8 @@ struct RootView: View {
     @State private var shellViewModel: ShellViewModel
     /// Resolves the home rail's curated additional categories to live tag ids.
     @State private var hubTabsViewModel: HubTabsViewModel
+    /// Owns the app's persisted Light/Dark theme preference.
+    @State private var themeManager = ThemeManager()
 
     // Factories and services below are handed to child views through the SwiftUI
     // environment. They aren't `@State` because they're immutable and don't drive UI.
@@ -129,6 +131,7 @@ struct RootView: View {
             if isDrawerOpen { drawerOverlay.transition(.move(edge: .leading)) }
         }
         .tint(DSColor.accent)
+        .preferredColorScheme(themeManager.isDarkMode ? .dark : .light)
         .animation(.easeInOut(duration: 0.3), value: isDrawerOpen)
         // Provide shared factories and services to child views through environment keys.
         .environment(\.marketLiveFactory, marketLiveFactory)
@@ -223,8 +226,10 @@ struct RootView: View {
                 .onTapGesture { isDrawerOpen = false }
             SideMenuDrawer(
                 addressShort: shellViewModel.addressShort,
+                isDarkMode: themeManager.isDarkMode,
                 onSelect: { _ in isDrawerOpen = false },
-                onLogout: { isDrawerOpen = false }
+                onLogout: { isDrawerOpen = false },
+                onToggleTheme: { themeManager.toggle() }
             )
             .frame(width: 320)
         }
