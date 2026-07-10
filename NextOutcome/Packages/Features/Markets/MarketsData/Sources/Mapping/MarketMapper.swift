@@ -186,7 +186,8 @@ enum MarketMapper {
             imageURL: dto.image.flatMap(URL.init(string:)),
             tags: dto.tags.map(tag(from:)),
             gameStartTime: eventKickoff ?? earliestMarketKickoff,
-            description: dto.description
+            description: dto.description,
+            recurrence: dto.series.first?.slug
         )
     }
 }
