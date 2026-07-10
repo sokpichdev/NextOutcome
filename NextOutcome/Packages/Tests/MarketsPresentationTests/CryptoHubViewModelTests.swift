@@ -6,8 +6,8 @@ import SharedDomain
 
 @MainActor
 final class CryptoHubViewModelTests: XCTestCase {
-    private func event(id: String, title: String, volume: Decimal = 0, markets: [Market] = []) -> Event {
-        Event(id: id, title: title, slug: id, markets: markets, volume: volume, imageURL: nil)
+    private func event(id: String, title: String, volume: Decimal = 0, markets: [Market] = [], recurrence: String? = nil) -> Event {
+        Event(id: id, title: title, slug: id, markets: markets, volume: volume, imageURL: nil, recurrence: recurrence)
     }
 
     private func upDownMarket(id: String, endDate: Date? = nil) -> Market {
@@ -112,6 +112,47 @@ final class CryptoHubViewModelTests: XCTestCase {
         let (vm, _) = makeVM(events: [])
         await vm.refresh()
         XCTAssertEqual(vm.state, .idle)
+    }
+
+    func test_timeframeCount_countsClassifiedEventsPerBucket() async {
+        let fiveMin = event(id: "5m", title: "BTC Up or Down 5m", markets: [upDownMarket(id: "m1")], recurrence: "btc-up-or-down-5m")
+        let fifteenMin = event(id: "15m", title: "ETH Up or Down 15m", markets: [upDownMarket(id: "m2")], recurrence: "eth-up-or-down-15m")
+        let hourly = event(id: "hourly", title: "SOL Up or Down Hourly", markets: [upDownMarket(id: "m3")], recurrence: "sol-up-or-down-hourly")
+        let fourHour = event(id: "4h", title: "BTC Up or Down 4h", markets: [upDownMarket(id: "m4")], recurrence: "btc-up-or-down-4h")
+        let (vm, _) = makeVM(events: [fiveMin, fifteenMin, hourly, fourHour])
+        await vm.loadIfNeeded(tagID: "crypto-tag")
+
+        XCTAssertEqual(vm.timeframeCount(for: .all), 4)
+        XCTAssertEqual(vm.timeframeCount(for: .fiveMin), 1)
+        XCTAssertEqual(vm.timeframeCount(for: .fifteenMin), 1)
+        XCTAssertEqual(vm.timeframeCount(for: .hourly), 1)
+        // "4h" doesn't match any of the 3 specific buckets, only counts under .all.
+    }
+
+    func test_visibleEvents_filtersBySelectedTimeframe() async {
+        let fiveMin = event(id: "5m", title: "BTC Up or Down 5m", markets: [upDownMarket(id: "m1")], recurrence: "btc-up-or-down-5m")
+        let hourly = event(id: "hourly", title: "SOL Up or Down Hourly", markets: [upDownMarket(id: "m2")], recurrence: "sol-up-or-down-hourly")
+        let (vm, _) = makeVM(events: [fiveMin, hourly])
+        await vm.loadIfNeeded(tagID: "crypto-tag")
+
+        vm.selectedTimeframe = .fiveMin
+        XCTAssertEqual(vm.visibleEvents.map(\.event.id), ["5m"])
+
+        vm.selectedTimeframe = .all
+        XCTAssertEqual(Set(vm.visibleEvents.map(\.event.id)), Set(["5m", "hourly"]))
+    }
+
+    func test_visibleEvents_filtersBySearchQuery_caseInsensitive() async {
+        let bitcoin = event(id: "btc", title: "BTC Up or Down 5m", markets: [upDownMarket(id: "m1")])
+        let ethereum = event(id: "eth", title: "ETH Up or Down 5m", markets: [upDownMarket(id: "m2")])
+        let (vm, _) = makeVM(events: [bitcoin, ethereum])
+        await vm.loadIfNeeded(tagID: "crypto-tag")
+
+        vm.searchQuery = "btc"
+        XCTAssertEqual(vm.visibleEvents.map(\.event.id), ["btc"])
+
+        vm.searchQuery = ""
+        XCTAssertEqual(Set(vm.visibleEvents.map(\.event.id)), Set(["btc", "eth"]))
     }
 }
 
