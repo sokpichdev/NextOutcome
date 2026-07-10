@@ -20,17 +20,24 @@ public struct CryptoStrikeCard: View {
         self.kind = kind
     }
 
+    /// The top 2 markets shown as a preview. The full, untruncated list lives one level
+    /// deeper — tapping the card pushes `EventDetailView`, which lists every strike via
+    /// `MarketGroupSection` (already built, no changes needed). Matches
+    /// `MultiOutcomeCard`'s existing `prefix(3)` precedent for the same "preview, not the
+    /// full list" idea.
+    private var previewMarkets: [Market] { Array(event.markets.prefix(2)) }
+
     public var body: some View {
-        DSCard {
-            VStack(alignment: .leading, spacing: DSLayout.spacing) {
-                HStack(spacing: DSLayout.spacing) {
-                    CardIcon(url: event.imageURL)
-                    Text(event.title).font(DSFont.headline)
-                        .foregroundStyle(DSColor.textPrimary).lineLimit(1)
-                    Spacer()
-                }
-                ForEach(event.markets) { market in
-                    NavigationLink(value: MarketNavigationTarget(market: market, eventID: event.id)) {
+        NavigationLink(value: event) {
+            DSCard {
+                VStack(alignment: .leading, spacing: DSLayout.spacing) {
+                    HStack(spacing: DSLayout.spacing) {
+                        CardIcon(url: event.imageURL)
+                        Text(event.title).font(DSFont.headline)
+                            .foregroundStyle(DSColor.textPrimary).lineLimit(1)
+                        Spacer()
+                    }
+                    ForEach(previewMarkets) { market in
                         HStack {
                             Text(Self.rowLabel(for: market, kind: kind, eventTitle: event.title))
                                 .font(DSFont.subheadline)
@@ -44,12 +51,12 @@ public struct CryptoStrikeCard: View {
                             }
                         }
                     }
-                    .buttonStyle(.plain)
+                    Label("LIVE · \(Self.coinLabel(for: event))", systemImage: "circle.fill")
+                        .font(DSFont.caption).foregroundStyle(DSColor.negative)
                 }
-                Label("LIVE · \(Self.coinLabel(for: event))", systemImage: "circle.fill")
-                    .font(DSFont.caption).foregroundStyle(DSColor.negative)
             }
         }
+        .buttonStyle(.plain)
     }
 
     /// Formats a market's row label. Every `CryptoMarketKind` shows the market's
