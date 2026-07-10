@@ -96,6 +96,15 @@ final class AppContainer {
         )
     }
 
+    /// Builds the view model for the Crypto hub. Unlike other hub view models, this doesn't
+    /// take a tag id at construction — the Crypto tag's id is resolved dynamically by
+    /// `HubTabsViewModel` after `RootView.init()` runs, so it's supplied later via
+    /// `CryptoHubViewModel.loadIfNeeded(tagID:)` instead.
+    /// - Returns: A view model wired to fetch the Crypto tag's events once its id is known.
+    func makeCryptoHubViewModel() -> CryptoHubViewModel {
+        CryptoHubViewModel(fetchAllEvents: FetchAllEventsUseCase(repository: repository))
+    }
+
     /// The use case shared by Sports league detail screens (built lazily per league, since
     /// each screen owns its own view model).
     func makeFetchAllEventsUseCase() -> FetchAllEventsUseCase {
