@@ -1,7 +1,6 @@
-<!-- App Logo -->
+<!-- App Icon -->
 <p align="center">
-  <!-- TODO: add app logo — replace the placeholder below with docs/assets/logo.png -->
-  <img src="docs/assets/logo.png" alt="NextOutcome logo" width="120" onerror="this.style.display='none'"/>
+  <img src="screenshots/app_icon.png" alt="NextOutcome app icon" width="120"/>
 </p>
 
 <h1 align="center">NextOutcome</h1>
@@ -82,15 +81,16 @@ watch-only today, with on-chain trading actively on the roadmap.
 
 ## Features
 
-- **Markets feed** — trending, category rail (Politics, Sports, Breaking, World Cup), sort/status filters, and hide-sports toggle, with infinite scroll.
+- **Markets feed** — trending, a dynamic category rail (pinned tabs plus curated categories like Crypto/Esports resolved live from Gamma tags), sort/status filters, and hide-sports toggle, with infinite scroll.
 - **Search** — debounced full-text market search.
 - **Event & market detail** — multi-series price chart with selectable timeframes, a "% chance" header, grouped market sections (moneyline / spreads / totals), rules expander, and a sticky header on scroll.
 - **Live order book** — expandable depth ladder streamed over WebSocket with transparent reconnect/back-off, plus spread and cumulative-size depth bars.
-- **BTC 5-minute live** — candle/line chart, a server-clock–anchored countdown, live Up/Down quick-bet prices, and a recent-trades ticker.
+- **Crypto hub** — classifies markets into Up/Down, Above/Below, Price Range, and Hit Price, with sort/period/timeframe filters and search. Up/Down cards open a **live BTC detail screen**: server-clock countdown, price-to-beat delta, a Price/Chance/Candles chart, live quick-bet buttons, and a recent-trades ticker.
 - **Live sports stats** — score hero, minute timeline, stats, pitch, lineups, and commentary, streamed from the public sports feed.
 - **World Cup hub** — Games schedule, Props (awards / player H2H / group futures), a Bracket carousel (Groups → knockout rounds), and a Map tab with a rotating, draggable **SceneKit globe** of nation odds.
 - **Portfolio (watch-only)** — track any wallet's open/closed positions, activity feed, and the trader leaderboard. No keys, no custody.
 - **Social strip** — comments, top holders, and recent activity per event.
+- **Light/Dark theme** — app-wide toggle from the drawer, persisted locally, independent of system appearance.
 - **Mock trade sheet** — keypad amount entry with a live "to win" payout. **Simulated only** — sends nothing, stores nothing — until real trading lands.
 
 ---
@@ -223,7 +223,7 @@ Each feature slice (Markets, Orderbook, Portfolio, LiveStats, Trading) has its o
 
 ## Project Status
 
-🚧 **In active development.** Browsing, live order books, live sports/World Cup, and the watch-only portfolio are implemented. Trading is **mock/simulated** pending wallet + proxy integration and funding.
+🚧 **In active development.** Browsing (with a dynamic, tag-resolved category rail), live order books, the Crypto hub with a live BTC detail screen, live sports/World Cup, the watch-only portfolio, and app-wide light/dark theming are implemented. Trading is **mock/simulated** pending wallet + proxy integration and funding.
 
 ---
 
@@ -233,11 +233,15 @@ Each feature slice (Markets, Orderbook, Portfolio, LiveStats, Trading) has its o
 - [x] Live order book over WebSocket with reconnect/back-off
 - [x] Live sports stats and the World Cup hub (schedule, props, bracket, 3D globe map)
 - [x] Watch-only portfolio (positions, activity, leaderboard) by wallet address
+- [x] Dynamic category rail — curated categories (e.g. Crypto, Esports) resolved live from Gamma tags
+- [x] Crypto hub — Up/Down, Above/Below, Price Range, Hit Price markets, plus a live BTC detail screen
+- [x] App-wide light/dark theme toggle, persisted locally
+- [x] 1024pt app icon (light/dark/tinted variants)
 - [ ] Real on-chain trading — vetted EIP-712 signer + backend proxy (currently simulated)
 - [ ] Wallet connect & session auth
 - [ ] Portfolio funding and real positions on market detail
 - [ ] Push notifications for price moves and market resolutions
-- [ ] Polished screenshots, demo video, and App Store assets
+- [ ] Polished screenshots, demo video, and App Store assets covering the Crypto hub and theming
 - [ ] Expanded test coverage across feature slices, and CI wiring
 
 ---
