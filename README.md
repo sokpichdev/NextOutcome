@@ -17,6 +17,7 @@
   <img alt="Swift" src="https://img.shields.io/badge/Swift-5.9-orange"/>
   <img alt="UI" src="https://img.shields.io/badge/UI-SwiftUI-green"/>
   <img alt="Status" src="https://img.shields.io/badge/status-in%20development-yellow"/>
+  <img alt="" src="https://komarev.com/ghpvc/?username=sokpichdev&color=blueviolet"/>
 </p>
 
 <p align="center">
