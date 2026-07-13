@@ -138,28 +138,32 @@ public final class BTCLiveViewModel {
 
     // MARK: Derived
 
-    /// Dollar OHLC candles built from the loaded spot-price series (the "Candles" chart
-    /// mode — matches web, which has no probability-candle view).
-    ///
-    /// Unlike the probability series, `spotPriceHistory` only ever returns ~1 sample per
-    /// minute for this round (it's a checkpointed oracle price, not tick data), so
-    /// bucketing by a fixed time interval (`CandleAggregator`'s usual approach) puts at
-    /// most one sample per bucket — every candle degenerates to a flat dot with no
-    /// visible body or wick. Instead, each *consecutive pair* of real samples becomes its
-    /// own candle (open = the earlier sample, close = the later one, high/low = their
-    /// span), so every candle reflects an actual price move.
+    /// The bucket width for `candles`. The live RTDS feed streams many ticks per second, so
+    /// 15-second OHLC buckets yield ~20 real candlesticks across the 5-minute window instead
+    /// of hundreds of one-tick dots.
+    private let candleInterval: TimeInterval = 15
+
+    /// Dollar OHLC candles for the "Candles" chart mode (matches web, which has no
+    /// probability-candle view). Built by bucketing the live spot-price series into
+    /// `candleInterval` windows via `CandleAggregator`. Now that the price streams from RTDS
+    /// (many ticks/second), each bucket holds real movement, so candles show visible bodies
+    /// and wicks rather than degenerating to flat dots.
     public var candles: [Candle] {
         guard case let .loaded(points) = spotState, points.count >= 2 else { return [] }
-        let sorted = points.sorted { $0.date < $1.date }
-        return zip(sorted, sorted.dropFirst()).map { previous, current in
-            Candle(
-                open: previous.price,
-                high: max(previous.price, current.price),
-                low: min(previous.price, current.price),
-                close: current.price,
-                start: previous.date
-            )
-        }
+        let pricePoints = points.map { PriceHistoryPoint(date: $0.date, price: $0.price) }
+        return CandleAggregator.candles(from: pricePoints, interval: candleInterval)
+    }
+
+    /// The min/max dollar price across the loaded spot series, widened to include the
+    /// price-to-beat, for the dollar charts' y-axis domain. Without this the charts auto-scale
+    /// from 0, so BTC's ~$63k candles collapse to a flat line on a 0…100k axis. `nil` until a
+    /// series is loaded.
+    public var spotPriceBounds: (min: Decimal, max: Decimal)? {
+        guard case let .loaded(points) = spotState, !points.isEmpty else { return nil }
+        var low = points.map(\.price).min()!
+        var high = points.map(\.price).max()!
+        if let beat = priceToBeat { low = min(low, beat); high = max(high, beat) }
+        return (low, high)
     }
 
     /// The dollar "price to beat" — the window's open price. Before the first

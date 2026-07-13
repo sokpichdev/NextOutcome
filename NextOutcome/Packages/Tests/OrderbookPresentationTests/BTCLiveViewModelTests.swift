@@ -258,19 +258,24 @@ final class BTCLiveViewModelTests: XCTestCase {
         )
     }
 
-    /// `.candles` mode builds from the dollar spot series, not the 0…1 probability
-    /// series — a regression guard for the "repurposed to dollars" change.
+    /// `.candles` builds dollar OHLC candles by aggregating the (now high-frequency) RTDS
+    /// spot ticks into fixed time buckets — not the 0…1 probability series, and not one
+    /// candle per raw tick. Dense ticks within a bucket collapse to one open/high/low/close.
     @MainActor
-    func test_candles_bucketDollarSpotPrices_notProbability() async {
+    func test_candles_aggregateDenseSpotTicksIntoOHLCBuckets() async {
         let windowEnd = Date(timeIntervalSince1970: 1_000_000)
         let repository = FakeOrderbookRepository()
         repository.points = [PriceHistoryPoint(date: windowEnd.addingTimeInterval(-60), price: 0.5)]
 
         let spotRepository = FakeCryptoSpotPriceRepository()
-        let bucketStart = Date(timeIntervalSince1970: 0)
+        let b0 = Date(timeIntervalSince1970: 0) // aligns to a 15s bucket boundary
         spotRepository.points = [
-            CryptoSpotPricePoint(date: bucketStart, price: 63_900),
-            CryptoSpotPricePoint(date: bucketStart.addingTimeInterval(30), price: 64_100)
+            CryptoSpotPricePoint(date: b0.addingTimeInterval(1), price: 63_900),  // open, bucket 0
+            CryptoSpotPricePoint(date: b0.addingTimeInterval(5), price: 63_960),  // high, bucket 0
+            CryptoSpotPricePoint(date: b0.addingTimeInterval(9), price: 63_880),  // low, bucket 0
+            CryptoSpotPricePoint(date: b0.addingTimeInterval(14), price: 63_920), // close, bucket 0
+            CryptoSpotPricePoint(date: b0.addingTimeInterval(16), price: 63_930), // open, bucket 1
+            CryptoSpotPricePoint(date: b0.addingTimeInterval(29), price: 64_010), // close/high, bucket 1
         ]
 
         let vm = makeVM(repository: repository, windowEnd: windowEnd, spotRepository: spotRepository)
@@ -279,47 +284,40 @@ final class BTCLiveViewModelTests: XCTestCase {
         vm.stop()
 
         let candles = vm.candles
-        XCTAssertEqual(candles.count, 1)
-        XCTAssertEqual(candles.first?.open, 63_900)
-        XCTAssertEqual(candles.first?.close, 64_100)
-        XCTAssertEqual(candles.first?.high, 64_100)
+        XCTAssertEqual(candles.count, 2, "6 ticks across two 15s buckets → 2 candles, not 5 pair-candles")
+        XCTAssertEqual(candles[0].open, 63_900)
+        XCTAssertEqual(candles[0].high, 63_960)
+        XCTAssertEqual(candles[0].low, 63_880)
+        XCTAssertEqual(candles[0].close, 63_920)
+        XCTAssertNotEqual(candles[0].high, candles[0].low, "a bucket with real movement must not be a flat dot")
+        XCTAssertEqual(candles[1].open, 63_930)
+        XCTAssertEqual(candles[1].close, 64_010)
     }
 
-    /// Regression test: `spotPriceHistory` only ever returns ~1 sample per minute for
-    /// this round (a checkpointed oracle price, not tick data). Bucketing those by a
-    /// fixed time interval put at most one sample per bucket, so every candle degenerated
-    /// to a flat dot with no visible body/wick ("candles not doing anything"). Each
-    /// consecutive pair of real samples must become its own candle instead, so N samples
-    /// produce N-1 candles, each reflecting an actual price move.
+    /// The dollar charts must scale their y-axis to the data (min…max across the spot series,
+    /// plus the price-to-beat), not from 0 — otherwise BTC's ~$63k candles collapse to a flat
+    /// line on a 0…100k axis.
     @MainActor
-    func test_candles_oneMinuteSpacedSamples_produceNonDegenerateCandles() async {
-        let windowEnd = Date(timeIntervalSince1970: 1_000_000)
+    func test_spotPriceBounds_spanSeriesAndPriceToBeat() async {
+        let windowEnd = Date().addingTimeInterval(300)
         let repository = FakeOrderbookRepository()
-        repository.points = [PriceHistoryPoint(date: windowEnd.addingTimeInterval(-60), price: 0.5)]
+        repository.points = [PriceHistoryPoint(date: Date(), price: 0.5)]
 
         let spotRepository = FakeCryptoSpotPriceRepository()
-        let start = Date(timeIntervalSince1970: 0)
         spotRepository.points = [
-            CryptoSpotPricePoint(date: start, price: 63_900),
-            CryptoSpotPricePoint(date: start.addingTimeInterval(60), price: 63_950),
-            CryptoSpotPricePoint(date: start.addingTimeInterval(120), price: 63_890),
-            CryptoSpotPricePoint(date: start.addingTimeInterval(180), price: 64_010)
+            CryptoSpotPricePoint(date: Date().addingTimeInterval(-30), price: 62_800),
+            CryptoSpotPricePoint(date: Date(), price: 62_950),
         ]
+        spotRepository.window = CryptoPriceWindow(openPrice: 63_100, closePrice: nil, timestamp: Date(), completed: false)
 
         let vm = makeVM(repository: repository, windowEnd: windowEnd, spotRepository: spotRepository)
         vm.start()
         for _ in 0..<20 { await Task.yield() }
         vm.stop()
 
-        let candles = vm.candles
-        XCTAssertEqual(candles.count, 3, "4 one-minute-spaced samples must produce 3 candles, not 4 flat ones bucketed by a 60s window")
-        for candle in candles {
-            XCTAssertNotEqual(candle.high, candle.low, "each candle must span an actual price move, not degenerate to a flat dot")
-        }
-        XCTAssertEqual(candles[0].open, 63_900)
-        XCTAssertEqual(candles[0].close, 63_950)
-        XCTAssertEqual(candles[2].open, 63_890)
-        XCTAssertEqual(candles[2].close, 64_010)
+        let bounds = vm.spotPriceBounds
+        XCTAssertEqual(bounds?.min, 62_800)
+        XCTAssertEqual(bounds?.max, 63_100, "max must include the price-to-beat (63,100), above the series max")
     }
 
     /// Regression test: this screen opens for any Up/Down crypto market (BTC, ETH, SOL,

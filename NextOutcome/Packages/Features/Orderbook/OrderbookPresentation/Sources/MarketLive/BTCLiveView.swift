@@ -199,6 +199,7 @@ public struct BTCLiveView: View {
                     .font(DSFont.caption2)
             }
         }
+        .chartYScale(domain: spotYDomain)
     }
 
     /// The candlestick chart: a wick (high–low) and body (open–close) per dollar candle,
@@ -239,6 +240,19 @@ public struct BTCLiveView: View {
                     .font(DSFont.caption2)
             }
         }
+        .chartYScale(domain: spotYDomain)
+    }
+
+    /// The dollar charts' y-axis domain: the spot-price bounds padded by ~15% of the range
+    /// (with small floors) so candle bodies and the price-to-beat line are clearly visible,
+    /// instead of collapsing onto a 0-based auto-scaled axis. Falls back to `0…1` when there's
+    /// no data (the chart isn't rendered in that state).
+    private var spotYDomain: ClosedRange<Double> {
+        guard let bounds = viewModel.spotPriceBounds else { return 0...1 }
+        let low = doubleValue(bounds.min)
+        let high = doubleValue(bounds.max)
+        let pad = max((high - low) * 0.15, high * 0.0005, 1)
+        return (low - pad)...(high + pad)
     }
 
     /// Green if the candle closed at or above its open, red otherwise.
