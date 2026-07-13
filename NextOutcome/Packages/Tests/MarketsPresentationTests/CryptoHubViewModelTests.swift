@@ -36,10 +36,12 @@ final class CryptoHubViewModelTests: XCTestCase {
         )
     }
 
-    private func makeVM(events: [Event]) -> (CryptoHubViewModel, CryptoFakeRepository) {
+    private func makeVM(
+        events: [Event], now: @escaping () -> Date = { Date() }
+    ) -> (CryptoHubViewModel, CryptoFakeRepository) {
         let repo = CryptoFakeRepository()
         repo.events = events
-        let vm = CryptoHubViewModel(fetchAllEvents: FetchAllEventsUseCase(repository: repo))
+        let vm = CryptoHubViewModel(fetchAllEvents: FetchAllEventsUseCase(repository: repo), now: now)
         return (vm, repo)
     }
 
@@ -52,6 +54,27 @@ final class CryptoHubViewModelTests: XCTestCase {
 
         XCTAssertEqual(vm.state, .loaded)
         XCTAssertEqual(vm.classifiedEvents.map(\.event.id), ["1"])
+    }
+
+    /// Regression: Polymarket sometimes returns dead ephemeral crypto windows as
+    /// `closed:false, active:true` (e.g. an "Ethereum Up or Down — Dec 19" 5-min event whose
+    /// window ended months ago). Opening one fires `/api/crypto/*` with a stale timestamp and
+    /// 400s ("Timestamp too old for Chainlink API"). The hub must drop any crypto window whose
+    /// latest market end is already in the past, regardless of the API's `closed` flag. Events
+    /// with no end date are kept (can't tell they're expired).
+    func test_loadIfNeeded_excludesExpiredCryptoWindows() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let live = event(id: "live", title: "BTC Up or Down 5m", markets: [upDownMarket(id: "m1", endDate: now.addingTimeInterval(120))])
+        let expired = event(id: "expired", title: "ETH Up or Down 5m", markets: [upDownMarket(id: "m2", endDate: now.addingTimeInterval(-3600))])
+        let noEnd = event(id: "noEnd", title: "SOL Up or Down 5m", markets: [upDownMarket(id: "m3", endDate: nil)])
+        let (vm, _) = makeVM(events: [live, expired, noEnd], now: { now })
+
+        await vm.loadIfNeeded(tagID: "crypto-tag")
+
+        XCTAssertEqual(
+            Set(vm.classifiedEvents.map(\.event.id)), Set(["live", "noEnd"]),
+            "an expired crypto window must be excluded even when the API reports it as active/open"
+        )
     }
 
     func test_loadIfNeeded_isIdempotent_forSameTagID() async {
@@ -138,7 +161,9 @@ final class CryptoHubViewModelTests: XCTestCase {
         let soon = event(id: "soon", title: "BTC Up or Down 5m", markets: [upDownMarket(id: "m1", endDate: now.addingTimeInterval(60))])
         let later = event(id: "later", title: "ETH Up or Down 5m", markets: [upDownMarket(id: "m2", endDate: now.addingTimeInterval(3600))])
         let never = event(id: "never", title: "XRP Up or Down 5m", markets: [upDownMarket(id: "m3", endDate: nil)])
-        let (vm, _) = makeVM(events: [never, later, soon])
+        // Anchor the clock before these end dates so the expiry filter keeps them all — this
+        // test is about sort order, not expiry.
+        let (vm, _) = makeVM(events: [never, later, soon], now: { now })
         await vm.loadIfNeeded(tagID: "crypto-tag")
 
         vm.sortOption = .endingSoon

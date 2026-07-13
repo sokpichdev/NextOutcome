@@ -57,11 +57,16 @@ public final class CryptoHubViewModel {
     public var searchQuery: String = ""
 
     private let fetchAllEvents: FetchAllEventsUseCase
+    /// The current time, injected so the expired-window filter is deterministic in tests.
+    private let now: () -> Date
 
     /// Creates the view model.
-    /// - Parameter fetchAllEvents: Loads a tag's events, unpaginated.
-    public init(fetchAllEvents: FetchAllEventsUseCase) {
+    /// - Parameters:
+    ///   - fetchAllEvents: Loads a tag's events, unpaginated.
+    ///   - now: Supplies the current time for the expired-window filter. Defaults to `Date()`.
+    public init(fetchAllEvents: FetchAllEventsUseCase, now: @escaping () -> Date = { Date() }) {
         self.fetchAllEvents = fetchAllEvents
+        self.now = now
     }
 
     /// Fetches `tagID`'s events and classifies them, unless already loaded for this tag id.
@@ -84,11 +89,24 @@ public final class CryptoHubViewModel {
             classifiedEvents = events
                 .map { (event: $0, kind: CryptoMarketKind.classify($0)) }
                 .filter { $0.kind != .other }
+                .filter { isWindowLive($0.event) }
             loadedTagID = tagID
             state = .loaded
         } catch {
             state = .failed("Couldn't load Crypto. Pull to refresh.")
         }
+    }
+
+    /// Whether an event's crypto window is still live — i.e. its latest market end is in the
+    /// future. Polymarket occasionally leaves dead ephemeral windows flagged `closed:false,
+    /// active:true` (e.g. a 5-minute "Up or Down" event whose window ended months ago); opening
+    /// one 400s the `/api/crypto/*` calls ("Timestamp too old for Chainlink API"). Events with
+    /// no end date are kept — there's nothing to say they've expired.
+    /// - Parameter event: The event to check.
+    /// - Returns: `true` if the window hasn't ended yet (or has no end date).
+    private func isWindowLive(_ event: Event) -> Bool {
+        guard let latestEnd = event.markets.compactMap(\.endDate).max() else { return true }
+        return latestEnd > now()
     }
 
     /// `classifiedEvents` filtered by `selectedSubTab`/`period`/`selectedTimeframe`/
