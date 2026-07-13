@@ -73,17 +73,24 @@ public final class CryptoHubViewModel {
     /// - Parameter tagID: The Crypto tag's live Gamma id.
     public func loadIfNeeded(tagID: String) async {
         guard loadedTagID != tagID else { return }
-        await load(tagID: tagID)
+        await load(tagID: tagID, showLoading: true)
     }
 
     /// Re-fetches using the last-loaded tag id (pull-to-refresh). No-op before the first load.
     public func refresh() async {
         guard let tagID = loadedTagID else { return }
-        await load(tagID: tagID)
+        await load(tagID: tagID, showLoading: false)
     }
 
-    private func load(tagID: String) async {
-        state = .loading
+    /// Fetches and classifies the tag's events.
+    /// - Parameters:
+    ///   - tagID: The Crypto tag's live Gamma id.
+    ///   - showLoading: Whether to flash the `.loading` state first. `true` for the initial
+    ///     load; `false` for pull-to-refresh, so existing content stays on screen while
+    ///     refreshing — flipping to `.loading` mid-refresh tears the event list down and can
+    ///     cancel the in-flight request (surfacing a spurious `NSURLErrorCancelled`).
+    private func load(tagID: String, showLoading: Bool) async {
+        if showLoading { state = .loading }
         do {
             let events = try await fetchAllEvents.execute(tagID: tagID)
             classifiedEvents = events
@@ -93,8 +100,23 @@ public final class CryptoHubViewModel {
             loadedTagID = tagID
             state = .loaded
         } catch {
-            state = .failed("Couldn't load Crypto. Pull to refresh.")
+            // A cancelled request (superseded refresh, view churn) is benign, and even a real
+            // failure shouldn't blank away content we already have — only surface the error
+            // screen when there's nothing to show.
+            if isCancellation(error) {
+                state = classifiedEvents.isEmpty ? .idle : .loaded
+            } else {
+                state = classifiedEvents.isEmpty ? .failed("Couldn't load Crypto. Pull to refresh.") : .loaded
+            }
         }
+    }
+
+    /// Whether `error` is a task/URL cancellation (e.g. a superseded pull-to-refresh), which is
+    /// benign rather than a load failure.
+    private func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if (error as? URLError)?.code == .cancelled { return true }
+        return false
     }
 
     /// Whether an event's crypto window is still live — i.e. its latest market end is in the

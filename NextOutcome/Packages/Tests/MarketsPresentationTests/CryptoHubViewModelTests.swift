@@ -189,6 +189,44 @@ final class CryptoHubViewModelTests: XCTestCase {
         XCTAssertEqual(vm.state, .idle)
     }
 
+    /// Pull-to-refresh cancels its own in-flight request under view churn (`NSURLErrorCancelled`,
+    /// −999). That's benign — a cancelled refresh must keep the already-loaded content, not flash
+    /// the "Couldn't load Crypto" error over 200+ good events.
+    func test_refresh_whenRequestCancelled_keepsLoadedContent() async {
+        let live = event(id: "1", title: "BTC Up or Down 5m", markets: [upDownMarket(id: "m1")])
+        let (vm, repo) = makeVM(events: [live])
+        await vm.loadIfNeeded(tagID: "crypto-tag")
+        XCTAssertEqual(vm.state, .loaded)
+
+        repo.errorToThrow = URLError(.cancelled)
+        await vm.refresh()
+
+        XCTAssertEqual(vm.state, .loaded, "a cancelled refresh must not surface an error")
+        XCTAssertEqual(vm.classifiedEvents.map(\.event.id), ["1"], "existing content must be kept")
+    }
+
+    /// A genuinely failed refresh (not just cancelled) must also keep the existing content
+    /// rather than blanking to an error screen when we already have data to show.
+    func test_refresh_whenRequestFails_withExistingData_keepsContent() async {
+        let live = event(id: "1", title: "BTC Up or Down 5m", markets: [upDownMarket(id: "m1")])
+        let (vm, repo) = makeVM(events: [live])
+        await vm.loadIfNeeded(tagID: "crypto-tag")
+
+        repo.errorToThrow = URLError(.timedOut)
+        await vm.refresh()
+
+        XCTAssertEqual(vm.state, .loaded)
+        XCTAssertEqual(vm.classifiedEvents.map(\.event.id), ["1"])
+    }
+
+    /// A failed *initial* load (no data yet) must still surface the error screen.
+    func test_initialLoad_failure_showsError() async {
+        let (vm, repo) = makeVM(events: [])
+        repo.errorToThrow = URLError(.notConnectedToInternet)
+        await vm.loadIfNeeded(tagID: "crypto-tag")
+        XCTAssertEqual(vm.state, .failed("Couldn't load Crypto. Pull to refresh."))
+    }
+
     func test_timeframeCount_countsClassifiedEventsPerBucket() async {
         let fiveMin = event(id: "5m", title: "BTC Up or Down 5m", markets: [upDownMarket(id: "m1")], recurrence: "btc-up-or-down-5m")
         let fifteenMin = event(id: "15m", title: "ETH Up or Down 15m", markets: [upDownMarket(id: "m2")], recurrence: "eth-up-or-down-15m")
@@ -233,12 +271,17 @@ final class CryptoHubViewModelTests: XCTestCase {
 
 private final class CryptoFakeRepository: MarketRepository, @unchecked Sendable {
     var events: [Event] = []
+    /// When set, `fetchAllEvents` throws it — lets tests simulate a cancelled/failed refresh.
+    var errorToThrow: Error?
 
     func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod) async throws -> Page<Event> {
         Page(items: [], nextCursor: nil)
     }
     func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] { [] }
-    func fetchAllEvents(tagID: String, status: EventStatus) async throws -> [Event] { events }
+    func fetchAllEvents(tagID: String, status: EventStatus) async throws -> [Event] {
+        if let errorToThrow { throw errorToThrow }
+        return events
+    }
     func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] { [:] }
     func fetchMarkets(cursor: String?) async throws -> Page<Market> { Page(items: [], nextCursor: nil) }
     func fetchEvent(slug: String) async throws -> Event { throw URLError(.resourceUnavailable) }
