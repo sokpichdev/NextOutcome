@@ -166,6 +166,19 @@ public final class BTCLiveViewModel {
         return (low, high)
     }
 
+    /// The padded y-axis domain (as `Double`) for the dollar charts. Pads `spotPriceBounds` by
+    /// 15% of the visible range, floored *relative to the price* (0.1%) rather than by a fixed
+    /// dollar amount — a fixed pad that's negligible for BTC (~$62k) would swamp a low-priced
+    /// coin like SOL (~$76) and squash its candles into a flat line. `nil` until a series
+    /// loads.
+    public var spotChartDomain: ClosedRange<Double>? {
+        guard let bounds = spotPriceBounds else { return nil }
+        let low = NSDecimalNumber(decimal: bounds.min).doubleValue
+        let high = NSDecimalNumber(decimal: bounds.max).doubleValue
+        let pad = max((high - low) * 0.15, high * 0.001)
+        return (low - pad)...(high + pad)
+    }
+
     /// The dollar "price to beat" — the window's open price. Before the first
     /// spot-price poll completes (`priceWindow == nil`), falls back to the probability
     /// series' window-open sample so the header isn't blank on entry. Once polled, this

@@ -320,6 +320,38 @@ final class BTCLiveViewModelTests: XCTestCase {
         XCTAssertEqual(bounds?.max, 63_100, "max must include the price-to-beat (63,100), above the series max")
     }
 
+    /// The chart y-domain must pad *relative* to the price, not by a fixed dollar amount. A
+    /// ~$76 coin (e.g. SOL) moving in a ~$0.3 band must keep a tight domain — a fixed ~$1 pad
+    /// would swamp the range and squash the candles into a flat line (the "not candling" bug
+    /// on low-priced coins).
+    @MainActor
+    func test_spotChartDomain_padsRelatively_keepsLowPricedCoinTight() async {
+        let windowEnd = Date().addingTimeInterval(300)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: Date(), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        spotRepository.points = [
+            CryptoSpotPricePoint(date: Date().addingTimeInterval(-30), price: Decimal(string: "75.60")!),
+            CryptoSpotPricePoint(date: Date(), price: Decimal(string: "75.90")!),
+        ]
+        // openPrice nil → no price-to-beat, so the domain reflects only the series.
+        spotRepository.window = CryptoPriceWindow(openPrice: nil, closePrice: nil, timestamp: Date(), completed: false)
+
+        let vm = makeVM(repository: repository, windowEnd: windowEnd, spotRepository: spotRepository)
+        vm.start()
+        for _ in 0..<20 { await Task.yield() }
+        vm.stop()
+
+        guard let domain = vm.spotChartDomain else { return XCTFail("expected a chart domain") }
+        XCTAssertLessThan(
+            domain.upperBound - domain.lowerBound, 1.0,
+            "a ~$76 coin in a $0.3 band must keep a tight domain, not a fixed ~$1 pad"
+        )
+        XCTAssertGreaterThan(domain.lowerBound, 75.0)
+        XCTAssertLessThan(domain.upperBound, 76.5)
+    }
+
     /// Regression test: this screen opens for any Up/Down crypto market (BTC, ETH, SOL,
     /// …), not just Bitcoin — `pollSpotPrice` must query the feed with the event's actual
     /// asset symbol, not a hardcoded "BTC". Without this, an Ethereum round's spot-price
