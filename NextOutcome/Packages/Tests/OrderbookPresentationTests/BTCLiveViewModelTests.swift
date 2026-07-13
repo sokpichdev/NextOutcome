@@ -97,6 +97,7 @@ final class BTCLiveViewModelTests: XCTestCase {
         repository: FakeOrderbookRepository,
         windowEnd: Date,
         symbol: String = "BTC",
+        windowInterval: TimeInterval = 300,
         spotRepository: FakeCryptoSpotPriceRepository = FakeCryptoSpotPriceRepository(),
         spotStreamer: FakeCryptoSpotPriceStreaming = FakeCryptoSpotPriceStreaming()
     ) -> BTCLiveViewModel {
@@ -104,6 +105,7 @@ final class BTCLiveViewModelTests: XCTestCase {
             assetID: "asset-1",
             eventID: "event-1",
             windowEnd: windowEnd,
+            windowInterval: windowInterval,
             symbol: symbol,
             fetchHistory: FetchPriceHistoryUseCase(repository: repository),
             fetchServerTime: FetchServerTimeUseCase(repository: repository),
@@ -350,6 +352,25 @@ final class BTCLiveViewModelTests: XCTestCase {
         )
         XCTAssertGreaterThan(domain.lowerBound, 75.0)
         XCTAssertLessThan(domain.upperBound, 76.5)
+    }
+
+    /// The chart title must reflect the actual coin and its window length, not a hardcoded
+    /// "BTC 5m" — the screen opens for any coin and any timeframe.
+    @MainActor
+    func test_title_reflectsSymbolAndDerivedTimeframe() {
+        XCTAssertEqual(makeVM(repository: FakeOrderbookRepository(), windowEnd: Date(), symbol: "BTC", windowInterval: 300).title, "BTC 5m")
+        XCTAssertEqual(makeVM(repository: FakeOrderbookRepository(), windowEnd: Date(), symbol: "SOL", windowInterval: 3600).title, "SOL 1h")
+        XCTAssertEqual(makeVM(repository: FakeOrderbookRepository(), windowEnd: Date(), symbol: "ETH", windowInterval: 900).title, "ETH 15m")
+    }
+
+    /// The window length is derived from the event's recurrence slug (a 5-minute vs hourly
+    /// vs 4-hour Up/Down round), not assumed to be 5 minutes.
+    func test_windowInterval_forRecurrence_mapsSuffixes() {
+        XCTAssertEqual(BTCLiveContext.windowInterval(forRecurrence: "btc-up-or-down-5m"), 300)
+        XCTAssertEqual(BTCLiveContext.windowInterval(forRecurrence: "eth-up-or-down-15m"), 900)
+        XCTAssertEqual(BTCLiveContext.windowInterval(forRecurrence: "sol-up-or-down-hourly"), 3600)
+        XCTAssertEqual(BTCLiveContext.windowInterval(forRecurrence: "btc-up-or-down-4h"), 14400)
+        XCTAssertEqual(BTCLiveContext.windowInterval(forRecurrence: nil), 300)
     }
 
     /// Regression test: this screen opens for any Up/Down crypto market (BTC, ETH, SOL,

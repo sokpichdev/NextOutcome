@@ -90,7 +90,7 @@ public struct BTCLiveView: View {
         DSCard {
             VStack(alignment: .leading, spacing: DSLayout.spacing) {
                 HStack {
-                    Text("BTC 5m")
+                    Text(viewModel.title)
                         .font(DSFont.headline)
                         .foregroundStyle(DSColor.textPrimary)
                     Spacer()
@@ -155,7 +155,7 @@ public struct BTCLiveView: View {
         case .empty:
             emptyOrError("No price data yet.", showRetry: false)
         case .failed:
-            emptyOrError("Couldn't load the live BTC price.", showRetry: false)
+            emptyOrError("Couldn't load the live price.", showRetry: false)
         case let .loaded(points):
             if viewModel.chartMode == .candles {
                 candleChart

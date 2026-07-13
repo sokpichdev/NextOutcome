@@ -42,8 +42,21 @@ public final class BTCLiveViewModel {
     /// The latest order book, used for the live Up/Down cents.
     public private(set) var book: OrderBook?
 
-    /// The rolling window used to pick the price-to-beat (5 minutes).
-    public let windowInterval: TimeInterval = 300
+    /// The rolling window length (e.g. 300s for a 5-minute round), used to pick the
+    /// price-to-beat and to bound the REST seed. Injected from the market's recurrence so the
+    /// screen works for 5m/15m/1h/… rounds, not just 5-minute ones.
+    public let windowInterval: TimeInterval
+
+    /// The chart card title, e.g. "BTC 5m" or "SOL 1h" — the coin plus its window length,
+    /// derived rather than hardcoded (the screen opens for any coin and timeframe).
+    public var title: String { "\(symbol) \(timeframeLabel)" }
+
+    /// A short label for `windowInterval`: "5m", "15m", "1h", "4h", "1d", …
+    private var timeframeLabel: String {
+        if windowInterval < 3600 { return "\(Int((windowInterval / 60).rounded()))m" }
+        if windowInterval < 86_400 { return "\(Int((windowInterval / 3600).rounded()))h" }
+        return "\(Int((windowInterval / 86_400).rounded()))d"
+    }
 
     /// The "Up" outcome token being charted/traded.
     private let assetID: String
@@ -101,7 +114,8 @@ public final class BTCLiveViewModel {
     /// - Parameters:
     ///   - assetID: The "Up" outcome token.
     ///   - eventID: The event id for the trades ticker.
-    ///   - windowEnd: When the 5-minute window closes.
+    ///   - windowEnd: When the current window closes.
+    ///   - windowInterval: The window length in seconds (e.g. 300 for a 5-minute round).
     ///   - symbol: The underlying crypto asset's ticker symbol (e.g. "BTC", "ETH").
     ///   - fetchHistory: Loads the price series.
     ///   - fetchServerTime: Fetches authoritative server time (once).
@@ -114,6 +128,7 @@ public final class BTCLiveViewModel {
         assetID: String,
         eventID: String,
         windowEnd: Date,
+        windowInterval: TimeInterval = 300,
         symbol: String,
         fetchHistory: FetchPriceHistoryUseCase,
         fetchServerTime: FetchServerTimeUseCase,
@@ -126,6 +141,7 @@ public final class BTCLiveViewModel {
         self.assetID = assetID
         self.eventID = eventID
         self.windowEnd = windowEnd
+        self.windowInterval = windowInterval
         self.symbol = symbol
         self.fetchHistory = fetchHistory
         self.fetchServerTime = fetchServerTime

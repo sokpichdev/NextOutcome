@@ -5,26 +5,46 @@
 
 import SwiftUI
 
-/// Parameters needed to open the BTC 5-minute live screen for a resolved event.
+/// Parameters needed to open the crypto live screen for an Up/Down event.
 public struct BTCLiveContext: Sendable {
     /// The CLOB token id for the "Up" outcome.
     public let assetID: String     // CLOB token id for the "Up" outcome
     /// The Gamma event id, used by the recent-trades ticker.
     public let eventID: String     // gamma event id (for the /trades ticker)
-    /// When the current 5-minute window closes (drives the countdown).
-    public let windowEnd: Date     // when the 5-minute window closes
+    /// When the current window closes (drives the countdown).
+    public let windowEnd: Date
+    /// The window length in seconds (e.g. 300 for a 5-minute round), derived from the
+    /// event's recurrence — the screen opens for 5m/15m/1h/… rounds, not just 5-minute ones.
+    public let windowInterval: TimeInterval
     /// The underlying crypto asset's ticker symbol (e.g. "BTC", "ETH"), used to query
     /// the real dollar spot-price feed. This screen isn't BTC-only — the Crypto hub
     /// opens it for any Up/Down coin — so this must reflect the actual event's asset,
     /// not be assumed.
     public let symbol: String
 
-    /// Creates the context needed to open the BTC live screen.
-    public init(assetID: String, eventID: String, windowEnd: Date, symbol: String) {
+    /// Creates the context needed to open the crypto live screen.
+    public init(assetID: String, eventID: String, windowEnd: Date, windowInterval: TimeInterval = 300, symbol: String) {
         self.assetID = assetID
         self.eventID = eventID
         self.windowEnd = windowEnd
+        self.windowInterval = windowInterval
         self.symbol = symbol
+    }
+
+    /// Derives the window length from an event's Gamma recurrence slug (e.g.
+    /// `"btc-up-or-down-5m"` → 300, `"…-hourly"` → 3600). Falls back to 5 minutes for an
+    /// unknown or missing recurrence.
+    /// - Parameter recurrence: The event's recurrence slug.
+    /// - Returns: The window length in seconds.
+    public static func windowInterval(forRecurrence recurrence: String?) -> TimeInterval {
+        guard let recurrence = recurrence?.lowercased() else { return 300 }
+        if recurrence.hasSuffix("-5m") { return 300 }
+        if recurrence.hasSuffix("-15m") { return 900 }
+        if recurrence.hasSuffix("-30m") { return 1_800 }
+        if recurrence.hasSuffix("-1h") || recurrence.hasSuffix("hourly") { return 3_600 }
+        if recurrence.hasSuffix("-4h") { return 14_400 }
+        if recurrence.hasSuffix("daily") || recurrence.hasSuffix("-1d") { return 86_400 }
+        return 300
     }
 }
 
