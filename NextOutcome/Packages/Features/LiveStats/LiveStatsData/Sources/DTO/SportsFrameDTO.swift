@@ -43,6 +43,7 @@ extension SportsFrameDTO {
         let parsed = MatchState.parseScore(score)
         return MatchState(
             gameID: gameID,
+            rawScore: score ?? previous?.rawScore,
             league: leagueAbbreviation ?? previous?.league,
             period: period ?? previous?.period,
             clockMinute: previous?.clockMinute,

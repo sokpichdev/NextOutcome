@@ -124,6 +124,10 @@ public struct MatchState: Sendable, Equatable {
 
     /// The feed's unique identifier for this game.
     public var gameID: String
+    /// The feed's raw score string, unparsed. Soccer/basketball send `"1-0"` (also parsed
+    /// into `home.goals`/`away.goals`); esports send a composite `"000-000|1-0|Bo3"` that
+    /// `parseScore` rejects, so consumers needing the map/series breakdown read this.
+    public var rawScore: String?
     /// The competition/league name, if provided.
     public var league: String?
     /// The current period label (e.g. "1H", "HT", "2H"), if provided.
@@ -151,6 +155,7 @@ public struct MatchState: Sendable, Equatable {
     /// "not available" value so callers can build partial snapshots as the feed fills in.
     public init(
         gameID: String,
+        rawScore: String? = nil,
         league: String? = nil,
         period: String? = nil,
         clockMinute: Int? = nil,
@@ -164,6 +169,7 @@ public struct MatchState: Sendable, Equatable {
         ballPositionPct: Double? = nil
     ) {
         self.gameID = gameID
+        self.rawScore = rawScore
         self.league = league
         self.period = period
         self.clockMinute = clockMinute

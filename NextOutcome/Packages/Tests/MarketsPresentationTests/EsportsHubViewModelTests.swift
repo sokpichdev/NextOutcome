@@ -7,6 +7,7 @@ import XCTest
 import SharedDomain
 @testable import MarketsPresentation
 import MarketsDomain
+import LiveStatsDomain
 
 @MainActor
 final class EsportsHubViewModelTests: XCTestCase {
@@ -145,6 +146,50 @@ final class EsportsHubViewModelTests: XCTestCase {
         XCTAssertNil(vm.liveStream(for: m))
     }
 
+    func test_socketSnapshot_updatesResultInstantly_keepingPolledTeams() async {
+        let now = Date()
+        let live = match("live", game: "counter-strike-2", start: now)
+        let polled = GameResult(
+            eventID: "live", score: "000-000|0-0|Bo3", elapsed: nil, period: "1/3",
+            live: true, ended: false,
+            teams: [GameTeam(name: "QUAZAR", abbreviation: "qua", logoURL: nil, colorHex: "#df013c", ordering: "home")]
+        )
+        let repo = EsportsFakeRepository(allEvents: [live], gameResults: ["live": polled])
+        let streamer = FakeStreamer()
+        let vm = EsportsHubViewModel(
+            fetchAllEvents: FetchAllEventsUseCase(repository: repo),
+            fetchGameResults: FetchGameResultsUseCase(repository: repo),
+            fetchTrades: FetchActivityTradesUseCase(repository: repo),
+            streamer: streamer,
+            now: { now }
+        )
+        await vm.loadIfNeeded(tagID: "64")
+
+        // Wait for the subscription task to register with the fake socket.
+        for _ in 0..<200 where !streamer.hasSubscriber(gameID: "live") {
+            await Task.yield()
+        }
+        XCTAssertTrue(streamer.hasSubscriber(gameID: "live"))
+
+        // Push a socket snapshot with a new series score and period.
+        streamer.push(
+            gameID: "live",
+            state: MatchState(gameID: "live", rawScore: "000-000|1-0|Bo3", period: "2/3", isLive: true, ended: false)
+        )
+        // Give the subscription task a beat to deliver on the main actor.
+        for _ in 0..<200 where vm.result(for: live)?.score != "000-000|1-0|Bo3" {
+            await Task.yield()
+        }
+
+        let updated = vm.result(for: live)
+        XCTAssertEqual(updated?.score, "000-000|1-0|Bo3")
+        XCTAssertEqual(updated?.period, "2/3")
+        XCTAssertEqual(updated?.teams.first?.name, "QUAZAR") // poll metadata preserved
+
+        vm.stopLivePolling()
+        XCTAssertTrue(streamer.cancelledGameIDs.contains("live"))
+    }
+
     func test_pollingLifecycle() async {
         let (vm, _) = makeVM(events: [match("m1", game: "dota-2", start: .init())])
         await vm.loadIfNeeded(tagID: "64")
@@ -175,6 +220,29 @@ final class EsportsHubViewModelTests: XCTestCase {
         XCTAssertEqual(EsportsHubViewModel.seriesScore(from: "2-1")?.home, 2)
         XCTAssertNil(EsportsHubViewModel.seriesScore(from: nil))
         XCTAssertNil(EsportsHubViewModel.seriesScore(from: "Bo3"))
+    }
+}
+
+/// Hand-driven sports socket: tests push `MatchState` snapshots into per-game streams.
+private final class FakeStreamer: SportsStateStreaming, @unchecked Sendable {
+    private var continuations: [String: AsyncThrowingStream<MatchState, Error>.Continuation] = [:]
+    private(set) var cancelledGameIDs: Set<String> = []
+
+    func states(gameID: String) -> AsyncThrowingStream<MatchState, Error> {
+        AsyncThrowingStream { continuation in
+            continuations[gameID] = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.cancelledGameIDs.insert(gameID)
+            }
+        }
+    }
+
+    func push(gameID: String, state: MatchState) {
+        continuations[gameID]?.yield(state)
+    }
+
+    func hasSubscriber(gameID: String) -> Bool {
+        continuations[gameID] != nil
     }
 }
 
