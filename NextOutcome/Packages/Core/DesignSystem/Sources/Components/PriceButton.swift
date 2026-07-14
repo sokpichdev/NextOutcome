@@ -1,6 +1,8 @@
 import SwiftUI
 
-/// Tinted price button for trading rows: outcome name leading, cent price trailing.
+/// Tinted, raised price button for trading rows: outcome name leading, cent price
+/// trailing. Every style renders as a 3D key that presses down onto its lip when
+/// tapped — the same depth language as the trade sheet's keypad.
 /// `.yes`/`.no` tint green/red for binary markets; `.team` tints blue for sports rows.
 /// `.solid` fills with a team's brand colour (white text); `.neutral` is the draw slot.
 public struct PriceButton: View {
@@ -26,6 +28,8 @@ public struct PriceButton: View {
     private let style: Style
     /// Called when the button is tapped.
     private let action: () -> Void
+    /// Bumped on each tap to drive `.sensoryFeedback`, which fires on change.
+    @State private var pressTick = 0
 
     /// Creates a price button.
     /// - Parameters:
@@ -41,15 +45,23 @@ public struct PriceButton: View {
     }
 
     public var body: some View {
-        Button(action: action) {
+        Button {
+            pressTick &+= 1
+            action()
+        } label: {
             content
                 .foregroundStyle(foregroundColor)
                 .padding(.horizontal, DSLayout.spacingMedium)
                 .padding(.vertical, DSLayout.spacingSmall)
-                .background(backgroundColor)
-                .clipShape(RoundedRectangle(cornerRadius: DSLayout.chipRadius))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(
+            DSRaisedButtonStyle(
+                face: backgroundColor,
+                lip: lipColor,
+                depth: DSDepth.medium
+            )
+        )
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: pressTick)
     }
 
     /// The button's inner layout. `.solid`/`.neutral` styles (used for sports
@@ -95,6 +107,18 @@ public struct PriceButton: View {
         case .team: DSColor.accentTint
         case .solid(let color): color
         case .neutral: DSColor.surfaceElevated
+        }
+    }
+
+    /// The lip (side-wall) color beneath the face for the current `style` — the face
+    /// colour with the light taken out of it.
+    private var lipColor: Color {
+        switch style {
+        case .yes: DSLip.tint(DSColor.positiveTint)
+        case .no: DSLip.tint(DSColor.negativeTint)
+        case .team: DSLip.tint(DSColor.accentTint)
+        case .solid(let color): color.dsDarkened(0.35)
+        case .neutral: DSLip.surface
         }
     }
 }
