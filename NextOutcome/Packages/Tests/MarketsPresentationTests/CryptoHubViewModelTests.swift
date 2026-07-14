@@ -36,10 +36,12 @@ final class CryptoHubViewModelTests: XCTestCase {
         )
     }
 
-    private func makeVM(events: [Event]) -> (CryptoHubViewModel, CryptoFakeRepository) {
+    private func makeVM(
+        events: [Event], now: @escaping () -> Date = { Date() }
+    ) -> (CryptoHubViewModel, CryptoFakeRepository) {
         let repo = CryptoFakeRepository()
         repo.events = events
-        let vm = CryptoHubViewModel(fetchAllEvents: FetchAllEventsUseCase(repository: repo))
+        let vm = CryptoHubViewModel(fetchAllEvents: FetchAllEventsUseCase(repository: repo), now: now)
         return (vm, repo)
     }
 
@@ -52,6 +54,27 @@ final class CryptoHubViewModelTests: XCTestCase {
 
         XCTAssertEqual(vm.state, .loaded)
         XCTAssertEqual(vm.classifiedEvents.map(\.event.id), ["1"])
+    }
+
+    /// Regression: Polymarket sometimes returns dead ephemeral crypto windows as
+    /// `closed:false, active:true` (e.g. an "Ethereum Up or Down — Dec 19" 5-min event whose
+    /// window ended months ago). Opening one fires `/api/crypto/*` with a stale timestamp and
+    /// 400s ("Timestamp too old for Chainlink API"). The hub must drop any crypto window whose
+    /// latest market end is already in the past, regardless of the API's `closed` flag. Events
+    /// with no end date are kept (can't tell they're expired).
+    func test_loadIfNeeded_excludesExpiredCryptoWindows() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let live = event(id: "live", title: "BTC Up or Down 5m", markets: [upDownMarket(id: "m1", endDate: now.addingTimeInterval(120))])
+        let expired = event(id: "expired", title: "ETH Up or Down 5m", markets: [upDownMarket(id: "m2", endDate: now.addingTimeInterval(-3600))])
+        let noEnd = event(id: "noEnd", title: "SOL Up or Down 5m", markets: [upDownMarket(id: "m3", endDate: nil)])
+        let (vm, _) = makeVM(events: [live, expired, noEnd], now: { now })
+
+        await vm.loadIfNeeded(tagID: "crypto-tag")
+
+        XCTAssertEqual(
+            Set(vm.classifiedEvents.map(\.event.id)), Set(["live", "noEnd"]),
+            "an expired crypto window must be excluded even when the API reports it as active/open"
+        )
     }
 
     func test_loadIfNeeded_isIdempotent_forSameTagID() async {
@@ -138,7 +161,9 @@ final class CryptoHubViewModelTests: XCTestCase {
         let soon = event(id: "soon", title: "BTC Up or Down 5m", markets: [upDownMarket(id: "m1", endDate: now.addingTimeInterval(60))])
         let later = event(id: "later", title: "ETH Up or Down 5m", markets: [upDownMarket(id: "m2", endDate: now.addingTimeInterval(3600))])
         let never = event(id: "never", title: "XRP Up or Down 5m", markets: [upDownMarket(id: "m3", endDate: nil)])
-        let (vm, _) = makeVM(events: [never, later, soon])
+        // Anchor the clock before these end dates so the expiry filter keeps them all — this
+        // test is about sort order, not expiry.
+        let (vm, _) = makeVM(events: [never, later, soon], now: { now })
         await vm.loadIfNeeded(tagID: "crypto-tag")
 
         vm.sortOption = .endingSoon
@@ -162,6 +187,44 @@ final class CryptoHubViewModelTests: XCTestCase {
         let (vm, _) = makeVM(events: [])
         await vm.refresh()
         XCTAssertEqual(vm.state, .idle)
+    }
+
+    /// Pull-to-refresh cancels its own in-flight request under view churn (`NSURLErrorCancelled`,
+    /// −999). That's benign — a cancelled refresh must keep the already-loaded content, not flash
+    /// the "Couldn't load Crypto" error over 200+ good events.
+    func test_refresh_whenRequestCancelled_keepsLoadedContent() async {
+        let live = event(id: "1", title: "BTC Up or Down 5m", markets: [upDownMarket(id: "m1")])
+        let (vm, repo) = makeVM(events: [live])
+        await vm.loadIfNeeded(tagID: "crypto-tag")
+        XCTAssertEqual(vm.state, .loaded)
+
+        repo.errorToThrow = URLError(.cancelled)
+        await vm.refresh()
+
+        XCTAssertEqual(vm.state, .loaded, "a cancelled refresh must not surface an error")
+        XCTAssertEqual(vm.classifiedEvents.map(\.event.id), ["1"], "existing content must be kept")
+    }
+
+    /// A genuinely failed refresh (not just cancelled) must also keep the existing content
+    /// rather than blanking to an error screen when we already have data to show.
+    func test_refresh_whenRequestFails_withExistingData_keepsContent() async {
+        let live = event(id: "1", title: "BTC Up or Down 5m", markets: [upDownMarket(id: "m1")])
+        let (vm, repo) = makeVM(events: [live])
+        await vm.loadIfNeeded(tagID: "crypto-tag")
+
+        repo.errorToThrow = URLError(.timedOut)
+        await vm.refresh()
+
+        XCTAssertEqual(vm.state, .loaded)
+        XCTAssertEqual(vm.classifiedEvents.map(\.event.id), ["1"])
+    }
+
+    /// A failed *initial* load (no data yet) must still surface the error screen.
+    func test_initialLoad_failure_showsError() async {
+        let (vm, repo) = makeVM(events: [])
+        repo.errorToThrow = URLError(.notConnectedToInternet)
+        await vm.loadIfNeeded(tagID: "crypto-tag")
+        XCTAssertEqual(vm.state, .failed("Couldn't load Crypto. Pull to refresh."))
     }
 
     func test_timeframeCount_countsClassifiedEventsPerBucket() async {
@@ -208,12 +271,17 @@ final class CryptoHubViewModelTests: XCTestCase {
 
 private final class CryptoFakeRepository: MarketRepository, @unchecked Sendable {
     var events: [Event] = []
+    /// When set, `fetchAllEvents` throws it — lets tests simulate a cancelled/failed refresh.
+    var errorToThrow: Error?
 
     func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod) async throws -> Page<Event> {
         Page(items: [], nextCursor: nil)
     }
     func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] { [] }
-    func fetchAllEvents(tagID: String, status: EventStatus) async throws -> [Event] { events }
+    func fetchAllEvents(tagID: String, status: EventStatus) async throws -> [Event] {
+        if let errorToThrow { throw errorToThrow }
+        return events
+    }
     func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] { [:] }
     func fetchMarkets(cursor: String?) async throws -> Page<Market> { Page(items: [], nextCursor: nil) }
     func fetchEvent(slug: String) async throws -> Event { throw URLError(.resourceUnavailable) }

@@ -36,6 +36,7 @@ public struct CryptoUpDownCard: View {
         return CryptoUpDownNavigationTarget(
             assetID: upOutcome.id, eventID: event.id,
             windowEnd: market.endDate ?? .distantFuture,
+            windowInterval: BTCLiveContext.windowInterval(forRecurrence: event.recurrence),
             symbol: Self.coinSymbol(for: event), market: market
         )
     }

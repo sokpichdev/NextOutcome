@@ -90,7 +90,7 @@ public struct BTCLiveView: View {
         DSCard {
             VStack(alignment: .leading, spacing: DSLayout.spacing) {
                 HStack {
-                    Text("BTC 5m")
+                    Text(viewModel.title)
                         .font(DSFont.headline)
                         .foregroundStyle(DSColor.textPrimary)
                     Spacer()
@@ -155,7 +155,7 @@ public struct BTCLiveView: View {
         case .empty:
             emptyOrError("No price data yet.", showRetry: false)
         case .failed:
-            emptyOrError("Couldn't load the live BTC price.", showRetry: false)
+            emptyOrError("Couldn't load the live price.", showRetry: false)
         case let .loaded(points):
             if viewModel.chartMode == .candles {
                 candleChart
@@ -199,6 +199,7 @@ public struct BTCLiveView: View {
                     .font(DSFont.caption2)
             }
         }
+        .chartYScale(domain: spotYDomain)
     }
 
     /// The candlestick chart: a wick (high–low) and body (open–close) per dollar candle,
@@ -239,6 +240,15 @@ public struct BTCLiveView: View {
                     .font(DSFont.caption2)
             }
         }
+        .chartYScale(domain: spotYDomain)
+    }
+
+    /// The dollar charts' y-axis domain — the view model's data-scaled, relatively-padded
+    /// domain so candle bodies and the price-to-beat line are clearly visible instead of
+    /// collapsing onto a 0-based auto-scaled axis. Falls back to `0…1` when there's no data
+    /// (the chart isn't rendered in that state).
+    private var spotYDomain: ClosedRange<Double> {
+        viewModel.spotChartDomain ?? 0...1
     }
 
     /// Green if the candle closed at or above its open, red otherwise.

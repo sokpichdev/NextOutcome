@@ -40,6 +40,9 @@ final class AppContainer {
     private let cryptoSpotPriceRepository: CryptoSpotPriceRepository
     /// Live price/quote stream used by the order book and live market screens.
     private let marketStream: MarketStreaming
+    /// Live dollar crypto-price stream (Polymarket RTDS) used by the BTC live screen's
+    /// "Current Price"/"Price" chart — replaces the former 5-second spot-price poll.
+    private let cryptoPriceStream: CryptoSpotPriceStreaming
     /// Fetches the user's positions, activity, and leaderboard data.
     private let portfolioRepository: PortfolioRepository
 
@@ -56,6 +59,7 @@ final class AppContainer {
         self.orderbookRepository = ClobOrderbookRepository(client: client)
         self.cryptoSpotPriceRepository = PolymarketCryptoPriceRepository(client: client)
         self.marketStream = MarketSocket()
+        self.cryptoPriceStream = RTDSSocket()
         self.portfolioRepository = DataPortfolioRepository(client: client)
     }
 
@@ -225,17 +229,20 @@ final class AppContainer {
     /// Factory injected into the environment so the home feed's BTC card can open the
     /// BTC 5-minute live screen (candles, server-clock countdown, quick-bet).
     func makeBTCLiveFactory() -> BTCLiveViewModelFactory {
-        BTCLiveViewModelFactory { [orderbookRepository, marketStream, cryptoSpotPriceRepository] context, onQuickBet in
+        BTCLiveViewModelFactory { [orderbookRepository, marketStream, cryptoSpotPriceRepository, cryptoPriceStream] context, onQuickBet in
             BTCLiveViewModel(
                 assetID: context.assetID,
                 eventID: context.eventID,
                 windowEnd: context.windowEnd,
+                windowInterval: context.windowInterval,
                 symbol: context.symbol,
                 fetchHistory: FetchPriceHistoryUseCase(repository: orderbookRepository),
                 fetchServerTime: FetchServerTimeUseCase(repository: orderbookRepository),
                 fetchRecentTrades: FetchRecentTradesUseCase(repository: orderbookRepository),
                 observeBook: ObserveOrderBookUseCase(repository: orderbookRepository, stream: marketStream),
-                fetchSpotPriceHistory: FetchCryptoSpotPriceHistoryUseCase(repository: cryptoSpotPriceRepository),
+                observeSpotPrice: ObserveCryptoSpotPriceUseCase(
+                    repository: cryptoSpotPriceRepository, stream: cryptoPriceStream
+                ),
                 fetchPriceWindow: FetchCryptoPriceWindowUseCase(repository: cryptoSpotPriceRepository),
                 onQuickBet: onQuickBet
             )

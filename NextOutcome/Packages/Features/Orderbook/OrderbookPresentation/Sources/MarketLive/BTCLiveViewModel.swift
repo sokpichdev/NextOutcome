@@ -42,8 +42,21 @@ public final class BTCLiveViewModel {
     /// The latest order book, used for the live Up/Down cents.
     public private(set) var book: OrderBook?
 
-    /// The rolling window used to pick the price-to-beat (5 minutes).
-    public let windowInterval: TimeInterval = 300
+    /// The rolling window length (e.g. 300s for a 5-minute round), used to pick the
+    /// price-to-beat and to bound the REST seed. Injected from the market's recurrence so the
+    /// screen works for 5m/15m/1h/… rounds, not just 5-minute ones.
+    public let windowInterval: TimeInterval
+
+    /// The chart card title, e.g. "BTC 5m" or "SOL 1h" — the coin plus its window length,
+    /// derived rather than hardcoded (the screen opens for any coin and timeframe).
+    public var title: String { "\(symbol) \(timeframeLabel)" }
+
+    /// A short label for `windowInterval`: "5m", "15m", "1h", "4h", "1d", …
+    private var timeframeLabel: String {
+        if windowInterval < 3600 { return "\(Int((windowInterval / 60).rounded()))m" }
+        if windowInterval < 86_400 { return "\(Int((windowInterval / 3600).rounded()))h" }
+        return "\(Int((windowInterval / 86_400).rounded()))d"
+    }
 
     /// The "Up" outcome token being charted/traded.
     private let assetID: String
@@ -63,8 +76,10 @@ public final class BTCLiveViewModel {
     private let fetchRecentTrades: FetchRecentTradesUseCase
     /// Use case that streams the live book.
     private let observeBook: ObserveOrderBookUseCase
-    /// Use case that polls the real dollar spot-price series.
-    private let fetchSpotPriceHistory: FetchCryptoSpotPriceHistoryUseCase
+    /// Use case that streams the live dollar spot-price series: seeds via REST, then folds
+    /// live RTDS socket ticks. Replaces the former 5-second spot-price poll so "Current
+    /// Price" ticks in real time, matching web.
+    private let observeSpotPrice: ObserveCryptoSpotPriceUseCase
     /// Use case that polls the window's dollar open/close snapshot.
     private let fetchPriceWindow: FetchCryptoPriceWindowUseCase
     /// Callback invoked when the user taps Up/Down (host opens the trade flow).
@@ -78,8 +93,11 @@ public final class BTCLiveViewModel {
     private var tradesTask: Task<Void, Never>?
     /// Runs the initial history + server-time load.
     private var loadTask: Task<Void, Never>?
-    /// Polls the real dollar spot-price series on a timer.
+    /// Consumes the live dollar spot-price stream.
     private var spotTask: Task<Void, Never>?
+    /// Polls the window's dollar open/close snapshot on a timer (it isn't on the live tick
+    /// feed, so it stays a low-frequency poll).
+    private var windowTask: Task<Void, Never>?
     /// Set once `stop()` runs; guards against a late-completing `load()` resurrecting
     /// the countdown ticker (or spawning other work) after teardown.
     private(set) var isStopped = false
@@ -96,65 +114,85 @@ public final class BTCLiveViewModel {
     /// - Parameters:
     ///   - assetID: The "Up" outcome token.
     ///   - eventID: The event id for the trades ticker.
-    ///   - windowEnd: When the 5-minute window closes.
+    ///   - windowEnd: When the current window closes.
+    ///   - windowInterval: The window length in seconds (e.g. 300 for a 5-minute round).
     ///   - symbol: The underlying crypto asset's ticker symbol (e.g. "BTC", "ETH").
     ///   - fetchHistory: Loads the price series.
     ///   - fetchServerTime: Fetches authoritative server time (once).
     ///   - fetchRecentTrades: Polls recent trades.
     ///   - observeBook: Streams the live book.
-    ///   - fetchSpotPriceHistory: Polls the real dollar spot-price series.
+    ///   - observeSpotPrice: Streams the live dollar spot-price series (seed + socket).
     ///   - fetchPriceWindow: Polls the window's dollar open/close snapshot.
     ///   - onQuickBet: Called when the user taps Up/Down.
     public init(
         assetID: String,
         eventID: String,
         windowEnd: Date,
+        windowInterval: TimeInterval = 300,
         symbol: String,
         fetchHistory: FetchPriceHistoryUseCase,
         fetchServerTime: FetchServerTimeUseCase,
         fetchRecentTrades: FetchRecentTradesUseCase,
         observeBook: ObserveOrderBookUseCase,
-        fetchSpotPriceHistory: FetchCryptoSpotPriceHistoryUseCase,
+        observeSpotPrice: ObserveCryptoSpotPriceUseCase,
         fetchPriceWindow: FetchCryptoPriceWindowUseCase,
         onQuickBet: @escaping @MainActor (BetSide) -> Void
     ) {
         self.assetID = assetID
         self.eventID = eventID
         self.windowEnd = windowEnd
+        self.windowInterval = windowInterval
         self.symbol = symbol
         self.fetchHistory = fetchHistory
         self.fetchServerTime = fetchServerTime
         self.fetchRecentTrades = fetchRecentTrades
         self.observeBook = observeBook
-        self.fetchSpotPriceHistory = fetchSpotPriceHistory
+        self.observeSpotPrice = observeSpotPrice
         self.fetchPriceWindow = fetchPriceWindow
         self.onQuickBet = onQuickBet
     }
 
     // MARK: Derived
 
-    /// Dollar OHLC candles built from the loaded spot-price series (the "Candles" chart
-    /// mode — matches web, which has no probability-candle view).
-    ///
-    /// Unlike the probability series, `spotPriceHistory` only ever returns ~1 sample per
-    /// minute for this round (it's a checkpointed oracle price, not tick data), so
-    /// bucketing by a fixed time interval (`CandleAggregator`'s usual approach) puts at
-    /// most one sample per bucket — every candle degenerates to a flat dot with no
-    /// visible body or wick. Instead, each *consecutive pair* of real samples becomes its
-    /// own candle (open = the earlier sample, close = the later one, high/low = their
-    /// span), so every candle reflects an actual price move.
+    /// The bucket width for `candles`. The live RTDS feed streams many ticks per second, so
+    /// 15-second OHLC buckets yield ~20 real candlesticks across the 5-minute window instead
+    /// of hundreds of one-tick dots.
+    private let candleInterval: TimeInterval = 15
+
+    /// Dollar OHLC candles for the "Candles" chart mode (matches web, which has no
+    /// probability-candle view). Built by bucketing the live spot-price series into
+    /// `candleInterval` windows via `CandleAggregator`. Now that the price streams from RTDS
+    /// (many ticks/second), each bucket holds real movement, so candles show visible bodies
+    /// and wicks rather than degenerating to flat dots.
     public var candles: [Candle] {
         guard case let .loaded(points) = spotState, points.count >= 2 else { return [] }
-        let sorted = points.sorted { $0.date < $1.date }
-        return zip(sorted, sorted.dropFirst()).map { previous, current in
-            Candle(
-                open: previous.price,
-                high: max(previous.price, current.price),
-                low: min(previous.price, current.price),
-                close: current.price,
-                start: previous.date
-            )
-        }
+        let pricePoints = points.map { PriceHistoryPoint(date: $0.date, price: $0.price) }
+        return CandleAggregator.candles(from: pricePoints, interval: candleInterval)
+    }
+
+    /// The min/max dollar price across the loaded spot series, widened to include the
+    /// price-to-beat, for the dollar charts' y-axis domain. Without this the charts auto-scale
+    /// from 0, so BTC's ~$63k candles collapse to a flat line on a 0…100k axis. `nil` until a
+    /// series is loaded.
+    public var spotPriceBounds: (min: Decimal, max: Decimal)? {
+        guard case let .loaded(points) = spotState, !points.isEmpty else { return nil }
+        var low = points.map(\.price).min()!
+        var high = points.map(\.price).max()!
+        if let beat = priceToBeat { low = min(low, beat); high = max(high, beat) }
+        return (low, high)
+    }
+
+    /// The padded y-axis domain (as `Double`) for the dollar charts. Pads `spotPriceBounds` by
+    /// 15% of the visible range, floored *relative to the price* (0.1%) rather than by a fixed
+    /// dollar amount — a fixed pad that's negligible for BTC (~$62k) would swamp a low-priced
+    /// coin like SOL (~$76) and squash its candles into a flat line. `nil` until a series
+    /// loads.
+    public var spotChartDomain: ClosedRange<Double>? {
+        guard let bounds = spotPriceBounds else { return nil }
+        let low = NSDecimalNumber(decimal: bounds.min).doubleValue
+        let high = NSDecimalNumber(decimal: bounds.max).doubleValue
+        let pad = max((high - low) * 0.15, high * 0.001)
+        return (low - pad)...(high + pad)
     }
 
     /// The dollar "price to beat" — the window's open price. Before the first
@@ -218,7 +256,8 @@ public final class BTCLiveViewModel {
         loadTask = Task { await load() }
         bookTask = Task { [weak self] in await self?.streamBook() }
         tradesTask = Task { [weak self] in await self?.pollTrades() }
-        spotTask = Task { [weak self] in await self?.pollSpotPrice() }
+        spotTask = Task { [weak self] in await self?.streamSpotPrice() }
+        windowTask = Task { [weak self] in await self?.pollPriceWindow() }
     }
 
     /// Cancels every running task and marks the model stopped. Call from the view's teardown.
@@ -229,6 +268,7 @@ public final class BTCLiveViewModel {
         bookTask?.cancel(); bookTask = nil
         tradesTask?.cancel(); tradesTask = nil
         spotTask?.cancel(); spotTask = nil
+        windowTask?.cancel(); windowTask = nil
     }
 
     /// Inline retry for the price-series/server-time load.
@@ -323,28 +363,35 @@ public final class BTCLiveViewModel {
         }
     }
 
-    /// Polls the real dollar spot-price series (and the window's open/close snapshot)
-    /// every ~5 seconds. There's no WebSocket source for this data, so — like
-    /// `pollTrades` — it's refetched on a timer, keeping the last good state on
-    /// transient errors.
-    private func pollSpotPrice() async {
+    /// Consumes the live dollar spot-price stream, updating `spotState` as the series grows.
+    /// The use case seeds with the REST history (so the chart isn't blank on entry) and then
+    /// folds live RTDS ticks in, so `currentPrice` follows the market in real time instead of
+    /// lagging up to 5s behind a poll.
+    private func streamSpotPrice() async {
+        let eventStart = windowEnd.addingTimeInterval(-windowInterval)
+        for await points in observeSpotPrice.execute(
+            symbol: symbol, eventStart: eventStart, eventEnd: windowEnd
+        ) {
+            if Task.isCancelled { return }
+            spotState = points.isEmpty ? .empty : .loaded(points)
+        }
+    }
+
+    /// Polls the window's dollar open/close snapshot (the "price to beat") every ~5 seconds.
+    /// Unlike the spot price, this isn't carried on the live tick feed — it's a checkpointed
+    /// open/close derived server-side — so, like `pollTrades`, it stays a timer poll that
+    /// keeps the last good value on transient errors.
+    private func pollPriceWindow() async {
         let eventStart = windowEnd.addingTimeInterval(-windowInterval)
         while !Task.isCancelled {
             do {
-                async let historyCall = fetchSpotPriceHistory.execute(
+                let window = try await fetchPriceWindow.execute(
                     symbol: symbol, eventStart: eventStart, eventEnd: windowEnd
                 )
-                async let windowCall = fetchPriceWindow.execute(
-                    symbol: symbol, eventStart: eventStart, eventEnd: windowEnd
-                )
-                let (points, window) = try await (historyCall, windowCall)
-                if !Task.isCancelled {
-                    spotState = points.isEmpty ? .empty : .loaded(points)
-                    priceWindow = window
-                }
+                if !Task.isCancelled { priceWindow = window }
             } catch {
                 if isCancellation(error) { return }
-                // Non-fatal: keep the last good series/window and retry next tick.
+                // Non-fatal: keep the last good window and retry next tick.
             }
             try? await Task.sleep(nanoseconds: 5_000_000_000)
         }

@@ -57,38 +57,78 @@ public final class CryptoHubViewModel {
     public var searchQuery: String = ""
 
     private let fetchAllEvents: FetchAllEventsUseCase
+    /// The current time, injected so the expired-window filter is deterministic in tests.
+    private let now: () -> Date
 
     /// Creates the view model.
-    /// - Parameter fetchAllEvents: Loads a tag's events, unpaginated.
-    public init(fetchAllEvents: FetchAllEventsUseCase) {
+    /// - Parameters:
+    ///   - fetchAllEvents: Loads a tag's events, unpaginated.
+    ///   - now: Supplies the current time for the expired-window filter. Defaults to `Date()`.
+    public init(fetchAllEvents: FetchAllEventsUseCase, now: @escaping () -> Date = { Date() }) {
         self.fetchAllEvents = fetchAllEvents
+        self.now = now
     }
 
     /// Fetches `tagID`'s events and classifies them, unless already loaded for this tag id.
     /// - Parameter tagID: The Crypto tag's live Gamma id.
     public func loadIfNeeded(tagID: String) async {
         guard loadedTagID != tagID else { return }
-        await load(tagID: tagID)
+        await load(tagID: tagID, showLoading: true)
     }
 
     /// Re-fetches using the last-loaded tag id (pull-to-refresh). No-op before the first load.
     public func refresh() async {
         guard let tagID = loadedTagID else { return }
-        await load(tagID: tagID)
+        await load(tagID: tagID, showLoading: false)
     }
 
-    private func load(tagID: String) async {
-        state = .loading
+    /// Fetches and classifies the tag's events.
+    /// - Parameters:
+    ///   - tagID: The Crypto tag's live Gamma id.
+    ///   - showLoading: Whether to flash the `.loading` state first. `true` for the initial
+    ///     load; `false` for pull-to-refresh, so existing content stays on screen while
+    ///     refreshing — flipping to `.loading` mid-refresh tears the event list down and can
+    ///     cancel the in-flight request (surfacing a spurious `NSURLErrorCancelled`).
+    private func load(tagID: String, showLoading: Bool) async {
+        if showLoading { state = .loading }
         do {
             let events = try await fetchAllEvents.execute(tagID: tagID)
             classifiedEvents = events
                 .map { (event: $0, kind: CryptoMarketKind.classify($0)) }
                 .filter { $0.kind != .other }
+                .filter { isWindowLive($0.event) }
             loadedTagID = tagID
             state = .loaded
         } catch {
-            state = .failed("Couldn't load Crypto. Pull to refresh.")
+            // A cancelled request (superseded refresh, view churn) is benign, and even a real
+            // failure shouldn't blank away content we already have — only surface the error
+            // screen when there's nothing to show.
+            if isCancellation(error) {
+                state = classifiedEvents.isEmpty ? .idle : .loaded
+            } else {
+                state = classifiedEvents.isEmpty ? .failed("Couldn't load Crypto. Pull to refresh.") : .loaded
+            }
         }
+    }
+
+    /// Whether `error` is a task/URL cancellation (e.g. a superseded pull-to-refresh), which is
+    /// benign rather than a load failure.
+    private func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if (error as? URLError)?.code == .cancelled { return true }
+        return false
+    }
+
+    /// Whether an event's crypto window is still live — i.e. its latest market end is in the
+    /// future. Polymarket occasionally leaves dead ephemeral windows flagged `closed:false,
+    /// active:true` (e.g. a 5-minute "Up or Down" event whose window ended months ago); opening
+    /// one 400s the `/api/crypto/*` calls ("Timestamp too old for Chainlink API"). Events with
+    /// no end date are kept — there's nothing to say they've expired.
+    /// - Parameter event: The event to check.
+    /// - Returns: `true` if the window hasn't ended yet (or has no end date).
+    private func isWindowLive(_ event: Event) -> Bool {
+        guard let latestEnd = event.markets.compactMap(\.endDate).max() else { return true }
+        return latestEnd > now()
     }
 
     /// `classifiedEvents` filtered by `selectedSubTab`/`period`/`selectedTimeframe`/

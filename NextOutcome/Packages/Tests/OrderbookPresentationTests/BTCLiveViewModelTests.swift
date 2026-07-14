@@ -57,6 +57,18 @@ private struct FakeMarketStreaming: MarketStreaming {
     }
 }
 
+/// Preset crypto-price streamer: emits the given live points (in order) then finishes, so
+/// tests can assert the view model folds live socket ticks into `spotState`/`currentPrice`.
+private struct FakeCryptoSpotPriceStreaming: CryptoSpotPriceStreaming {
+    var points: [CryptoSpotPricePoint] = []
+    func prices(symbol: String) -> AsyncStream<CryptoSpotPricePoint> {
+        AsyncStream { continuation in
+            points.forEach { continuation.yield($0) }
+            continuation.finish()
+        }
+    }
+}
+
 /// Minimal fake `CryptoSpotPriceRepository`. Returns whatever's currently set on
 /// `points`/`window`, so a test can mutate them between polls to simulate a live update.
 private final class FakeCryptoSpotPriceRepository: CryptoSpotPriceRepository, @unchecked Sendable {
@@ -85,18 +97,21 @@ final class BTCLiveViewModelTests: XCTestCase {
         repository: FakeOrderbookRepository,
         windowEnd: Date,
         symbol: String = "BTC",
-        spotRepository: FakeCryptoSpotPriceRepository = FakeCryptoSpotPriceRepository()
+        windowInterval: TimeInterval = 300,
+        spotRepository: FakeCryptoSpotPriceRepository = FakeCryptoSpotPriceRepository(),
+        spotStreamer: FakeCryptoSpotPriceStreaming = FakeCryptoSpotPriceStreaming()
     ) -> BTCLiveViewModel {
         BTCLiveViewModel(
             assetID: "asset-1",
             eventID: "event-1",
             windowEnd: windowEnd,
+            windowInterval: windowInterval,
             symbol: symbol,
             fetchHistory: FetchPriceHistoryUseCase(repository: repository),
             fetchServerTime: FetchServerTimeUseCase(repository: repository),
             fetchRecentTrades: FetchRecentTradesUseCase(repository: repository),
             observeBook: ObserveOrderBookUseCase(repository: repository, stream: FakeMarketStreaming()),
-            fetchSpotPriceHistory: FetchCryptoSpotPriceHistoryUseCase(repository: spotRepository),
+            observeSpotPrice: ObserveCryptoSpotPriceUseCase(repository: spotRepository, stream: spotStreamer),
             fetchPriceWindow: FetchCryptoPriceWindowUseCase(repository: spotRepository),
             onQuickBet: { _ in }
         )
@@ -215,52 +230,54 @@ final class BTCLiveViewModelTests: XCTestCase {
         XCTAssertEqual(vm.priceDelta, 63_961.25 - 63_945.94)
     }
 
-    /// `.candles` mode builds from the dollar spot series, not the 0…1 probability
-    /// series — a regression guard for the "repurposed to dollars" change.
+    /// `currentPrice` must follow the live RTDS socket tick, not just the REST seed — this is
+    /// the whole point of moving off the 5-second poll. We seed the REST history with one
+    /// stale sample, then have the fake streamer emit a newer tick; `currentPrice` must be the
+    /// streamed value.
     @MainActor
-    func test_candles_bucketDollarSpotPrices_notProbability() async {
-        let windowEnd = Date(timeIntervalSince1970: 1_000_000)
+    func test_start_streamsLiveSpotPrice_updatesCurrentPriceBeyondTheSeed() async {
+        let windowEnd = Date().addingTimeInterval(300)
         let repository = FakeOrderbookRepository()
-        repository.points = [PriceHistoryPoint(date: windowEnd.addingTimeInterval(-60), price: 0.5)]
+        repository.points = [PriceHistoryPoint(date: Date(), price: 0.5)]
 
         let spotRepository = FakeCryptoSpotPriceRepository()
-        let bucketStart = Date(timeIntervalSince1970: 0)
-        spotRepository.points = [
-            CryptoSpotPricePoint(date: bucketStart, price: 63_900),
-            CryptoSpotPricePoint(date: bucketStart.addingTimeInterval(30), price: 64_100)
-        ]
+        spotRepository.points = [CryptoSpotPricePoint(date: Date().addingTimeInterval(-60), price: 63_000)]
+        let streamer = FakeCryptoSpotPriceStreaming(points: [
+            CryptoSpotPricePoint(date: Date(), price: 63_412.75)
+        ])
 
-        let vm = makeVM(repository: repository, windowEnd: windowEnd, spotRepository: spotRepository)
+        let vm = makeVM(
+            repository: repository, windowEnd: windowEnd,
+            spotRepository: spotRepository, spotStreamer: streamer
+        )
         vm.start()
-        for _ in 0..<20 { await Task.yield() }
+        for _ in 0..<50 { await Task.yield() }
         vm.stop()
 
-        let candles = vm.candles
-        XCTAssertEqual(candles.count, 1)
-        XCTAssertEqual(candles.first?.open, 63_900)
-        XCTAssertEqual(candles.first?.close, 64_100)
-        XCTAssertEqual(candles.first?.high, 64_100)
+        XCTAssertEqual(
+            vm.currentPrice, 63_412.75,
+            "currentPrice must reflect the live streamed tick, not just the REST seed"
+        )
     }
 
-    /// Regression test: `spotPriceHistory` only ever returns ~1 sample per minute for
-    /// this round (a checkpointed oracle price, not tick data). Bucketing those by a
-    /// fixed time interval put at most one sample per bucket, so every candle degenerated
-    /// to a flat dot with no visible body/wick ("candles not doing anything"). Each
-    /// consecutive pair of real samples must become its own candle instead, so N samples
-    /// produce N-1 candles, each reflecting an actual price move.
+    /// `.candles` builds dollar OHLC candles by aggregating the (now high-frequency) RTDS
+    /// spot ticks into fixed time buckets — not the 0…1 probability series, and not one
+    /// candle per raw tick. Dense ticks within a bucket collapse to one open/high/low/close.
     @MainActor
-    func test_candles_oneMinuteSpacedSamples_produceNonDegenerateCandles() async {
+    func test_candles_aggregateDenseSpotTicksIntoOHLCBuckets() async {
         let windowEnd = Date(timeIntervalSince1970: 1_000_000)
         let repository = FakeOrderbookRepository()
         repository.points = [PriceHistoryPoint(date: windowEnd.addingTimeInterval(-60), price: 0.5)]
 
         let spotRepository = FakeCryptoSpotPriceRepository()
-        let start = Date(timeIntervalSince1970: 0)
+        let b0 = Date(timeIntervalSince1970: 0) // aligns to a 15s bucket boundary
         spotRepository.points = [
-            CryptoSpotPricePoint(date: start, price: 63_900),
-            CryptoSpotPricePoint(date: start.addingTimeInterval(60), price: 63_950),
-            CryptoSpotPricePoint(date: start.addingTimeInterval(120), price: 63_890),
-            CryptoSpotPricePoint(date: start.addingTimeInterval(180), price: 64_010)
+            CryptoSpotPricePoint(date: b0.addingTimeInterval(1), price: 63_900),  // open, bucket 0
+            CryptoSpotPricePoint(date: b0.addingTimeInterval(5), price: 63_960),  // high, bucket 0
+            CryptoSpotPricePoint(date: b0.addingTimeInterval(9), price: 63_880),  // low, bucket 0
+            CryptoSpotPricePoint(date: b0.addingTimeInterval(14), price: 63_920), // close, bucket 0
+            CryptoSpotPricePoint(date: b0.addingTimeInterval(16), price: 63_930), // open, bucket 1
+            CryptoSpotPricePoint(date: b0.addingTimeInterval(29), price: 64_010), // close/high, bucket 1
         ]
 
         let vm = makeVM(repository: repository, windowEnd: windowEnd, spotRepository: spotRepository)
@@ -269,14 +286,91 @@ final class BTCLiveViewModelTests: XCTestCase {
         vm.stop()
 
         let candles = vm.candles
-        XCTAssertEqual(candles.count, 3, "4 one-minute-spaced samples must produce 3 candles, not 4 flat ones bucketed by a 60s window")
-        for candle in candles {
-            XCTAssertNotEqual(candle.high, candle.low, "each candle must span an actual price move, not degenerate to a flat dot")
-        }
+        XCTAssertEqual(candles.count, 2, "6 ticks across two 15s buckets → 2 candles, not 5 pair-candles")
         XCTAssertEqual(candles[0].open, 63_900)
-        XCTAssertEqual(candles[0].close, 63_950)
-        XCTAssertEqual(candles[2].open, 63_890)
-        XCTAssertEqual(candles[2].close, 64_010)
+        XCTAssertEqual(candles[0].high, 63_960)
+        XCTAssertEqual(candles[0].low, 63_880)
+        XCTAssertEqual(candles[0].close, 63_920)
+        XCTAssertNotEqual(candles[0].high, candles[0].low, "a bucket with real movement must not be a flat dot")
+        XCTAssertEqual(candles[1].open, 63_930)
+        XCTAssertEqual(candles[1].close, 64_010)
+    }
+
+    /// The dollar charts must scale their y-axis to the data (min…max across the spot series,
+    /// plus the price-to-beat), not from 0 — otherwise BTC's ~$63k candles collapse to a flat
+    /// line on a 0…100k axis.
+    @MainActor
+    func test_spotPriceBounds_spanSeriesAndPriceToBeat() async {
+        let windowEnd = Date().addingTimeInterval(300)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: Date(), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        spotRepository.points = [
+            CryptoSpotPricePoint(date: Date().addingTimeInterval(-30), price: 62_800),
+            CryptoSpotPricePoint(date: Date(), price: 62_950),
+        ]
+        spotRepository.window = CryptoPriceWindow(openPrice: 63_100, closePrice: nil, timestamp: Date(), completed: false)
+
+        let vm = makeVM(repository: repository, windowEnd: windowEnd, spotRepository: spotRepository)
+        vm.start()
+        for _ in 0..<20 { await Task.yield() }
+        vm.stop()
+
+        let bounds = vm.spotPriceBounds
+        XCTAssertEqual(bounds?.min, 62_800)
+        XCTAssertEqual(bounds?.max, 63_100, "max must include the price-to-beat (63,100), above the series max")
+    }
+
+    /// The chart y-domain must pad *relative* to the price, not by a fixed dollar amount. A
+    /// ~$76 coin (e.g. SOL) moving in a ~$0.3 band must keep a tight domain — a fixed ~$1 pad
+    /// would swamp the range and squash the candles into a flat line (the "not candling" bug
+    /// on low-priced coins).
+    @MainActor
+    func test_spotChartDomain_padsRelatively_keepsLowPricedCoinTight() async {
+        let windowEnd = Date().addingTimeInterval(300)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: Date(), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        spotRepository.points = [
+            CryptoSpotPricePoint(date: Date().addingTimeInterval(-30), price: Decimal(string: "75.60")!),
+            CryptoSpotPricePoint(date: Date(), price: Decimal(string: "75.90")!),
+        ]
+        // openPrice nil → no price-to-beat, so the domain reflects only the series.
+        spotRepository.window = CryptoPriceWindow(openPrice: nil, closePrice: nil, timestamp: Date(), completed: false)
+
+        let vm = makeVM(repository: repository, windowEnd: windowEnd, spotRepository: spotRepository)
+        vm.start()
+        for _ in 0..<20 { await Task.yield() }
+        vm.stop()
+
+        guard let domain = vm.spotChartDomain else { return XCTFail("expected a chart domain") }
+        XCTAssertLessThan(
+            domain.upperBound - domain.lowerBound, 1.0,
+            "a ~$76 coin in a $0.3 band must keep a tight domain, not a fixed ~$1 pad"
+        )
+        XCTAssertGreaterThan(domain.lowerBound, 75.0)
+        XCTAssertLessThan(domain.upperBound, 76.5)
+    }
+
+    /// The chart title must reflect the actual coin and its window length, not a hardcoded
+    /// "BTC 5m" — the screen opens for any coin and any timeframe.
+    @MainActor
+    func test_title_reflectsSymbolAndDerivedTimeframe() {
+        XCTAssertEqual(makeVM(repository: FakeOrderbookRepository(), windowEnd: Date(), symbol: "BTC", windowInterval: 300).title, "BTC 5m")
+        XCTAssertEqual(makeVM(repository: FakeOrderbookRepository(), windowEnd: Date(), symbol: "SOL", windowInterval: 3600).title, "SOL 1h")
+        XCTAssertEqual(makeVM(repository: FakeOrderbookRepository(), windowEnd: Date(), symbol: "ETH", windowInterval: 900).title, "ETH 15m")
+    }
+
+    /// The window length is derived from the event's recurrence slug (a 5-minute vs hourly
+    /// vs 4-hour Up/Down round), not assumed to be 5 minutes.
+    func test_windowInterval_forRecurrence_mapsSuffixes() {
+        XCTAssertEqual(BTCLiveContext.windowInterval(forRecurrence: "btc-up-or-down-5m"), 300)
+        XCTAssertEqual(BTCLiveContext.windowInterval(forRecurrence: "eth-up-or-down-15m"), 900)
+        XCTAssertEqual(BTCLiveContext.windowInterval(forRecurrence: "sol-up-or-down-hourly"), 3600)
+        XCTAssertEqual(BTCLiveContext.windowInterval(forRecurrence: "btc-up-or-down-4h"), 14400)
+        XCTAssertEqual(BTCLiveContext.windowInterval(forRecurrence: nil), 300)
     }
 
     /// Regression test: this screen opens for any Up/Down crypto market (BTC, ETH, SOL,
