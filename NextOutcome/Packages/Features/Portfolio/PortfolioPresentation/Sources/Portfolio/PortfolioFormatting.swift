@@ -29,6 +29,16 @@ enum PortfolioFormatting {
         return sign + String(format: "%.1f%%", value)
     }
 
+    /// Formats a whole dollar amount with thousands grouping, `$981,077` — the esports
+    /// leaderboard's amount style (web shows no cents there).
+    static func wholeUSD(_ amount: Decimal) -> String {
+        let value = NSDecimalNumber(decimal: amount).doubleValue
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return "$" + (formatter.string(from: NSNumber(value: value)) ?? String(format: "%.0f", value))
+    }
+
     /// Formats a share count to one decimal place.
     static func shares(_ size: Decimal) -> String {
         let value = NSDecimalNumber(decimal: size).doubleValue

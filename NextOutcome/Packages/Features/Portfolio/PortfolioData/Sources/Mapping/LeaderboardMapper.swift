@@ -33,14 +33,22 @@ enum LeaderboardMapper {
     /// - Parameters:
     ///   - dto: The decoded leaderboard row.
     ///   - rank: The 1-based rank to assign.
+    ///   - metric: The requested ranking metric — picks `pnl` vs `vol` when the response
+    ///     carries both (the `/v1/leaderboard` category-scoped shape), falling back to the
+    ///     generic resolved `amount`.
     /// - Returns: The domain leaderboard entry.
-    static func entry(from dto: LeaderboardEntryDTO, rank: Int) -> LeaderboardEntry {
-        LeaderboardEntry(
+    static func entry(
+        from dto: LeaderboardEntryDTO, rank: Int, metric: LeaderboardMetric = .volume
+    ) -> LeaderboardEntry {
+        let metricAmount = metric == .profit ? dto.pnl : dto.vol
+        return LeaderboardEntry(
             id: dto.proxyWallet ?? "rank-\(rank)",
             rank: rank,
             name: displayName(dto),
-            profileImageURL: dto.profileImage.flatMap(URL.init(string:)),
-            amount: dto.amount
+            profileImageURL: dto.profileImage.flatMap { $0.isEmpty ? nil : URL(string: $0) },
+            amount: metricAmount ?? dto.amount,
+            xUsername: dto.xUsername,
+            verifiedBadge: dto.verifiedBadge
         )
     }
 

@@ -20,12 +20,17 @@ public struct FetchLeaderboardUseCase: Sendable {
     /// - Parameters:
     ///   - metric: Rank by volume or profit. Defaults to volume.
     ///   - window: The time window. Defaults to the last week.
+    ///   - category: A category slug (e.g. "esports") to scope rankings to. Defaults to
+    ///     `nil` (the global leaderboard).
+    ///   - limit: The maximum number of rows. Defaults to the original 10-row page.
     /// - Returns: The ranked leaderboard entries.
     /// - Throws: A networking error if the fetch fails.
     public func execute(
         metric: LeaderboardMetric = .volume,
-        window: LeaderboardWindow = .week
+        window: LeaderboardWindow = .week,
+        category: String? = nil,
+        limit: Int = 10
     ) async throws -> [LeaderboardEntry] {
-        try await repository.leaderboard(metric: metric, window: window)
+        try await repository.leaderboard(metric: metric, window: window, category: category, limit: limit)
     }
 }

@@ -43,6 +43,10 @@ public struct Event: Identifiable, Hashable {
     public let competitive: Double?
     /// When the event was created, from Gamma's `creationDate`. `nil` when absent.
     public let creationDate: Date?
+    /// The event's resolution source URL string, from Gamma's `resolutionSource`. For
+    /// esports matches this is the official stream (e.g. `https://www.twitch.tv/<channel>`),
+    /// which the Esports hub embeds. `nil`/empty for most events.
+    public let resolutionSource: String?
 
     /// Creates an event. Usually built by the mapping layer from a DTO.
     public init(
@@ -59,7 +63,8 @@ public struct Event: Identifiable, Hashable {
         volume24hr: Decimal = 0,
         liquidity: Decimal = 0,
         competitive: Double? = nil,
-        creationDate: Date? = nil
+        creationDate: Date? = nil,
+        resolutionSource: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -75,6 +80,7 @@ public struct Event: Identifiable, Hashable {
         self.liquidity = liquidity
         self.competitive = competitive
         self.creationDate = creationDate
+        self.resolutionSource = resolutionSource
     }
 
     /// True when at least one market carries a sports section hint (moneyline/spreads/totals/…),

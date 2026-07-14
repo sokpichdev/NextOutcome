@@ -109,6 +109,24 @@ final class AppContainer {
         CryptoHubViewModel(fetchAllEvents: FetchAllEventsUseCase(repository: repository))
     }
 
+    /// Builds the view model for the Esports hub. Like the Crypto hub, the Esports tag's
+    /// id is resolved dynamically by `HubTabsViewModel`, so it's supplied later via
+    /// `EsportsHubViewModel.loadIfNeeded(tagID:)`.
+    /// - Returns: A view model wired to fetch the tag's events, live scores, and trades.
+    func makeEsportsHubViewModel() -> EsportsHubViewModel {
+        EsportsHubViewModel(
+            fetchAllEvents: FetchAllEventsUseCase(repository: repository),
+            fetchGameResults: FetchGameResultsUseCase(repository: repository),
+            fetchTrades: FetchActivityTradesUseCase(repository: repository)
+        )
+    }
+
+    /// Builds the view model for the Esports hub's Leaderboard tab (esports-scoped
+    /// `/v1/leaderboard` rankings).
+    func makeEsportsLeaderboardViewModel() -> EsportsLeaderboardViewModel {
+        EsportsLeaderboardViewModel(fetchLeaderboard: FetchLeaderboardUseCase(repository: portfolioRepository))
+    }
+
     /// The use case shared by Sports league detail screens (built lazily per league, since
     /// each screen owns its own view model).
     func makeFetchAllEventsUseCase() -> FetchAllEventsUseCase {

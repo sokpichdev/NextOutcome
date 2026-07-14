@@ -118,11 +118,13 @@ struct EventDTO: Decodable {
     let competitive: Double?
     /// When the event was created, ISO8601 with fractional seconds.
     let creationDate: String?
+    /// The event's resolution source URL — for esports matches, the official stream.
+    let resolutionSource: String?
 
     /// JSON keys for `EventDTO`.
     enum CodingKeys: String, CodingKey {
         case id, title, slug, markets, volume, image, tags, gameStartTime, description, series,
-             volume24hr, liquidity, competitive, creationDate
+             volume24hr, liquidity, competitive, creationDate, resolutionSource
     }
 
     /// Tolerant decoder falling back to the slug for a missing title and to empty
@@ -144,6 +146,7 @@ struct EventDTO: Decodable {
         liquidity = DTODecoding.decimal(c, .liquidity)
         competitive = try? c.decode(Double.self, forKey: .competitive)
         creationDate = try? c.decode(String.self, forKey: .creationDate)
+        resolutionSource = try? c.decode(String.self, forKey: .resolutionSource)
     }
 }
 

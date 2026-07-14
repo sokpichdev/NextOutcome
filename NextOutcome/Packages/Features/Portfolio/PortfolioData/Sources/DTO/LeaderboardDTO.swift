@@ -53,29 +53,46 @@ struct ClosedPositionDTO: Decodable {
 struct LeaderboardEntryDTO: Decodable {
     /// The trader's proxy wallet address.
     let proxyWallet: String?
-    /// The trader's display name, if any.
+    /// The trader's display name, if any. Category-scoped responses use `userName`;
+    /// the decoder folds both spellings into this field.
     let name: String?
     /// A generated pseudonym, used when `name` is absent.
     let pseudonym: String?
     /// The trader's avatar URL string.
     let profileImage: String?
+    /// The trader's linked X (Twitter) username, if any.
+    let xUsername: String?
+    /// Whether the trader carries Polymarket's verified badge.
+    let verifiedBadge: Bool
+    /// The row's dollar profit, when the response carries a `pnl` field.
+    let pnl: Decimal?
+    /// The row's dollar volume, when the response carries a `vol` field.
+    let vol: Decimal?
     /// The ranking amount (see the custom decoder for how it's resolved).
     let amount: Decimal
 
-    /// JSON keys, including the alternate `volume`/`profit` amount keys.
+    /// JSON keys, including the alternate `volume`/`profit`/`vol`/`pnl` amount keys and
+    /// the `userName` display-name spelling.
     enum CodingKeys: String, CodingKey {
-        case proxyWallet, name, pseudonym, profileImage
-        case amount, volume, profit
+        case proxyWallet, name, userName, pseudonym, profileImage, xUsername, verifiedBadge
+        case amount, volume, profit, vol, pnl
     }
 
     /// Custom decoder that resolves the ranked value from whichever of `amount`, `volume`,
-    /// or `profit` the API populated.
+    /// `profit`, `vol`, or `pnl` the API populated.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         proxyWallet = try? c.decode(String.self, forKey: .proxyWallet)
-        name = try? c.decode(String.self, forKey: .name)
+        name = (try? c.decode(String.self, forKey: .name)) ?? (try? c.decode(String.self, forKey: .userName))
         pseudonym = try? c.decode(String.self, forKey: .pseudonym)
         profileImage = try? c.decode(String.self, forKey: .profileImage)
+        let x = try? c.decode(String.self, forKey: .xUsername)
+        xUsername = (x?.isEmpty == false) ? x : nil
+        verifiedBadge = (try? c.decode(Bool.self, forKey: .verifiedBadge)) ?? false
+        let pnlValue = PortfolioDecoding.decimal(c, .pnl)
+        let volValue = PortfolioDecoding.decimal(c, .vol)
+        pnl = pnlValue == 0 ? nil : pnlValue
+        vol = volValue == 0 ? nil : volValue
         // The ranked value may arrive under `amount`, `volume`, or `profit`.
         amount = PortfolioDecoding.decimal(c, .amount)
             .nonZeroOr(PortfolioDecoding.decimal(c, .volume))

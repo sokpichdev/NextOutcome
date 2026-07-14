@@ -191,7 +191,8 @@ enum MarketMapper {
             volume24hr: dto.volume24hr,
             liquidity: dto.liquidity,
             competitive: dto.competitive,
-            creationDate: DateParsing.parse(dto.creationDate)
+            creationDate: DateParsing.parse(dto.creationDate),
+            resolutionSource: dto.resolutionSource
         )
     }
 }

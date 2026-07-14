@@ -21,6 +21,21 @@ public protocol PortfolioRepository: Sendable {
     func activity(address: String, cursor: String?) async throws -> Page<Activity>
     /// Fetches the wallet's settled/closed positions.
     func closedPositions(address: String) async throws -> [ClosedPosition]
-    /// Fetches the leaderboard for a metric and time window.
-    func leaderboard(metric: LeaderboardMetric, window: LeaderboardWindow) async throws -> [LeaderboardEntry]
+    /// Fetches the leaderboard for a metric and time window, optionally scoped to a
+    /// category (e.g. "esports").
+    /// - Parameters:
+    ///   - metric: Rank by volume or profit.
+    ///   - window: The time window.
+    ///   - category: The Polymarket category slug to scope rankings to, or `nil` for global.
+    ///   - limit: The maximum number of entries to return.
+    func leaderboard(
+        metric: LeaderboardMetric, window: LeaderboardWindow, category: String?, limit: Int
+    ) async throws -> [LeaderboardEntry]
+}
+
+public extension PortfolioRepository {
+    /// Fetches the global leaderboard (no category scope) with the original 10-row page.
+    func leaderboard(metric: LeaderboardMetric, window: LeaderboardWindow) async throws -> [LeaderboardEntry] {
+        try await leaderboard(metric: metric, window: window, category: nil, limit: 10)
+    }
 }

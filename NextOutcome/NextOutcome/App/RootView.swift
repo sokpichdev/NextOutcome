@@ -38,6 +38,10 @@ struct RootView: View {
     @State private var sportsHubViewModel: SportsHubViewModel
     /// Drives the Crypto hub shown in the Home tab when that category is selected.
     @State private var cryptoHubViewModel: CryptoHubViewModel
+    /// Drives the Esports hub shown in the Home tab when that category is selected.
+    @State private var esportsHubViewModel: EsportsHubViewModel
+    /// Drives the Esports hub's Leaderboard tab.
+    @State private var esportsLeaderboardViewModel: EsportsLeaderboardViewModel
     /// Shared use case for building Sports league detail screens on demand.
     private let fetchAllEventsUseCase: FetchAllEventsUseCase
     /// Drives the Search tab.
@@ -78,7 +82,18 @@ struct RootView: View {
     private let sportsStreamer: any SportsStateStreaming
 
     /// Which feed category the Home tab currently shows (e.g. trending, World Cup).
-    @State private var selectedCategory: HubTab = .trending
+    /// DEBUG builds honour a `-preselectCategory <slug> <tagID>` launch argument so
+    /// simulator-driven verification can land directly on a rail category.
+    @State private var selectedCategory: HubTab = {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if let index = args.firstIndex(of: "-preselectCategory"), args.count > index + 2 {
+            return HubTab(id: args[index + 1], title: args[index + 1], glyph: nil,
+                          activeColor: DSColor.accent, tagID: args[index + 2])
+        }
+        #endif
+        return .trending
+    }()
     /// Whether the side drawer is currently slid in over the main content.
     @State private var isDrawerOpen = false
 
@@ -104,6 +119,8 @@ struct RootView: View {
         Task { await politics.loadIfNeeded() }
         _sportsHubViewModel = State(initialValue: container.makeSportsHubViewModel())
         _cryptoHubViewModel = State(initialValue: container.makeCryptoHubViewModel())
+        _esportsHubViewModel = State(initialValue: container.makeEsportsHubViewModel())
+        _esportsLeaderboardViewModel = State(initialValue: container.makeEsportsLeaderboardViewModel())
         fetchAllEventsUseCase = container.makeFetchAllEventsUseCase()
         _searchViewModel = State(initialValue: container.makeSearchViewModel())
         _portfolioViewModel = State(initialValue: portfolio)
@@ -171,6 +188,12 @@ struct RootView: View {
                         )
                     } else if selectedCategory.id == "crypto" {
                         CryptoHubView(viewModel: cryptoHubViewModel, tagID: selectedCategory.tagID)
+                    } else if selectedCategory.id == "esports" {
+                        EsportsHubView(
+                            viewModel: esportsHubViewModel,
+                            tagID: selectedCategory.tagID,
+                            leaderboard: AnyView(EsportsLeaderboardView(viewModel: esportsLeaderboardViewModel))
+                        )
                     } else {
                         EventListView(
                             viewModel: eventListViewModel,

@@ -83,17 +83,38 @@ public struct DataPortfolioRepository: PortfolioRepository {
     /// - Parameters:
     ///   - metric: Rank by volume or profit.
     ///   - window: The time window.
+    ///   - category: A category slug (e.g. "esports") to scope rankings to, or `nil` for global.
+    ///   - limit: The maximum number of rows.
     /// - Returns: The ranked entries.
     public func leaderboard(
         metric: LeaderboardMetric,
-        window: LeaderboardWindow
+        window: LeaderboardWindow,
+        category: String?,
+        limit: Int
     ) async throws -> [LeaderboardEntry] {
         let endpoint = Endpoint(
             host: .data,
             path: "/v1/leaderboard",
-            query: ["rankBy": metric.rawValue, "window": window.rawValue, "limit": "10"]
+            query: Self.leaderboardQuery(metric: metric, window: window, category: category, limit: limit)
         )
         let dtos: [LeaderboardEntryDTO] = try await client.fetch(endpoint)
-        return dtos.enumerated().map { LeaderboardMapper.entry(from: $1, rank: $0 + 1) }
+        return dtos.enumerated().map { LeaderboardMapper.entry(from: $1, rank: $0 + 1, metric: metric) }
+    }
+
+    /// Builds the `/v1/leaderboard` query. The category-scoped shape uses the newer
+    /// `timePeriod`/`orderBy` parameter names (verified live); the global feed keeps the
+    /// original `rankBy`/`window` names the leaderboard screen has always used.
+    static func leaderboardQuery(
+        metric: LeaderboardMetric, window: LeaderboardWindow, category: String?, limit: Int
+    ) -> [String: String] {
+        guard let category else {
+            return ["rankBy": metric.rawValue, "window": window.rawValue, "limit": "\(limit)"]
+        }
+        return [
+            "timePeriod": window.timePeriodParam,
+            "orderBy": metric == .profit ? "PNL" : "VOL",
+            "category": category,
+            "limit": "\(limit)",
+        ]
     }
 }
