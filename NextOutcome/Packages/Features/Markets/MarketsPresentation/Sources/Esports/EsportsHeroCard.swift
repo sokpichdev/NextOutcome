@@ -22,11 +22,23 @@ struct EsportsHeroCard: View {
 
     private var info: EsportsMatchInfo { EsportsMatchInfo(event: event, result: result) }
 
+    /// DEBUG-only `-forceTwitchChannel <name>` launch argument, for verifying the embed
+    /// plays against a channel that's currently broadcasting.
+    static var channelOverride: String? {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if let index = args.firstIndex(of: "-forceTwitchChannel"), args.count > index + 1 {
+            return args[index + 1]
+        }
+        #endif
+        return nil
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .topLeading) {
                 EsportsStreamView(
-                    twitchChannel: EsportsCatalog.twitchChannel(from: event.resolutionSource),
+                    twitchChannel: Self.channelOverride ?? EsportsCatalog.twitchChannel(from: event.resolutionSource),
                     imageURL: event.imageURL
                 )
                 if result?.live == true {
