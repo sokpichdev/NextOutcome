@@ -119,7 +119,7 @@ public final class TradeSheetViewModel {
     public func addAmount(_ dollars: Int) {
         guard phase == .entering else { return }
         let next = amountCents + dollars * 100
-        guard next <= 100_000_00 else { return }
+        guard next <= Self.maxAmountCents else { return }
         amountCents = next
     }
 
@@ -127,10 +127,19 @@ public final class TradeSheetViewModel {
     /// - Parameter digit: The digit (0–9) that was tapped.
     public func appendDigit(_ digit: Int) {
         guard phase == .entering else { return }
-        // Cap at a reasonable mock ceiling so the keypad can't scroll amounts off-screen.
         let next = amountCents * 10 + digit
-        guard next <= 100_000_00 else { return }
-        amountCents = amountCents * 10 + digit
+        guard next <= Self.maxAmountCents else { return }
+        amountCents = next
+    }
+
+    /// Appends two zeroes from the keypad's "00" key, capped at the mock ceiling.
+    /// Rejected as a unit rather than digit-by-digit, so a near-ceiling amount doesn't
+    /// silently take only one of the two zeroes.
+    public func appendDoubleZero() {
+        guard phase == .entering else { return }
+        let next = amountCents * 100
+        guard next <= Self.maxAmountCents else { return }
+        amountCents = next
     }
 
     /// Removes the last entered digit.
@@ -138,6 +147,16 @@ public final class TradeSheetViewModel {
         guard phase == .entering else { return }
         amountCents /= 10
     }
+
+    /// Resets the entered amount to zero — the keypad's long-press-on-backspace action.
+    public func clear() {
+        guard phase == .entering else { return }
+        amountCents = 0
+    }
+
+    /// A reasonable mock ceiling ($100,000) so keypad entry can't scroll the amount
+    /// off-screen.
+    private static let maxAmountCents = 100_000_00
 
     /// Runs the simulated submit: flips to `.submitting`, calls the submitter (ignoring
     /// errors since nothing is real), then flips to `.success`.

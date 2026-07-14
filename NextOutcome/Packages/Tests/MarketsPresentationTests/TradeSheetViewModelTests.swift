@@ -83,6 +83,40 @@ final class TradeSheetViewModelTests: XCTestCase {
         XCTAssertEqual(vm.priceCents, 50) // No price 0.5 * 100
     }
 
+    func test_appendDoubleZero_appendsBothZeroes() {
+        let vm = makeVM()
+
+        vm.appendDigit(5)
+        vm.appendDoubleZero()
+
+        XCTAssertEqual(vm.amountCents, 500)
+        XCTAssertEqual(vm.amountDisplay, "$5.00")
+    }
+
+    func test_appendDoubleZero_respectsCeiling_asAUnit() {
+        let vm = makeVM()
+
+        // 500_000 * 100 overflows the 100_000_00 ceiling. The "00" key must be rejected
+        // whole — taking only the first zero would leave an amount the user never typed.
+        for digit in [5, 0, 0, 0, 0, 0] {
+            vm.appendDigit(digit)
+        }
+        XCTAssertEqual(vm.amountCents, 500_000)
+
+        vm.appendDoubleZero()
+        XCTAssertEqual(vm.amountCents, 500_000, "\"00\" that overflows the ceiling must be rejected whole")
+    }
+
+    func test_clear_resetsAmount() {
+        let vm = makeVM()
+
+        vm.addAmount(100)
+        vm.clear()
+
+        XCTAssertEqual(vm.amountCents, 0)
+        XCTAssertEqual(vm.amountDisplay, "$0.00")
+    }
+
     func test_appendDigit_overflowGuard_usesRealFormula() {
         let vm = makeVM()
 

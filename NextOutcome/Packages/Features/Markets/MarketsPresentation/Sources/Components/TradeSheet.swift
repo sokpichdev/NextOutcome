@@ -8,10 +8,14 @@ import DesignSystem
 import MarketsDomain
 import TradingDomain
 
-/// Mock trade entry sheet: outcome + side pill, a big dollar amount driven by a digit
-/// keypad, a "To win $X" row from `PayoutCalculator`, and a Confirm button that always
-/// succeeds — this is a **simulated** trade. No order is sent and nothing persists;
-/// Confirm plays a short success animation with `successCaption`, then auto-dismisses.
+/// Mock trade entry sheet: a raised Yes/No side picker, a big dollar amount driven by
+/// the custom `DSNumberPad`, a "To win $X" row from `PayoutCalculator`, and a Trade
+/// button that always succeeds — this is a **simulated** trade. No order is sent and
+/// nothing persists; Trade plays a short success animation with `successCaption`, then
+/// auto-dismisses.
+///
+/// The sheet never uses the system keyboard: `DSNumberPad` owns all amount entry, so the
+/// layout below it is fixed and the amount stays on screen while typing.
 public struct TradeSheet: View {
     /// Dismisses the sheet (used after the success animation).
     @Environment(\.dismiss) private var dismiss
@@ -30,15 +34,23 @@ public struct TradeSheet: View {
             if viewModel.phase == .success {
                 successView
             } else {
-                amountBlock
                 sideToggle
-                quickAmountRow
+                Spacer(minLength: 0)
+                amountBlock
                 toWinRow
+                Spacer(minLength: 0)
+                quickAmountRow
+                DSNumberPad(
+                    onDigit: viewModel.appendDigit,
+                    onSecondary: viewModel.appendDoubleZero,
+                    onBackspace: viewModel.backspace,
+                    onClear: viewModel.clear
+                )
                 confirmButton
-                keypad
             }
         }
         .padding(DSLayout.margin)
+        .frame(maxHeight: .infinity)
         .background(DSColor.background)
         .onChange(of: viewModel.phase) { _, new in
             guard new == .success else { return }
@@ -67,24 +79,25 @@ public struct TradeSheet: View {
         }
     }
 
-    /// Segmented Yes/No control — switches the traded side in place, updating the
-    /// payout and subtitle. Selected side takes its green/red tint.
+    /// Yes/No side picker — switches the traded side in place, updating the payout and
+    /// subtitle. Both sides are raised 3D keys; the selected one sinks onto its lip and
+    /// takes its green/red tint, so "which side am I on" reads as physical state rather
+    /// than just colour.
     private var sideToggle: some View {
-        HStack(spacing: 0) {
-            sideSegment(.yes, title: "Yes", tint: DSColor.positive, fill: DSColor.positiveTint)
-            sideSegment(.no, title: "No", tint: DSColor.negative, fill: DSColor.negativeTint)
+        HStack(spacing: DSLayout.spacingMedium) {
+            sideKey(.yes, title: "Yes", tint: DSColor.positive, fill: DSColor.positiveTint)
+            sideKey(.no, title: "No", tint: DSColor.negative, fill: DSColor.negativeTint)
         }
-        .background(DSColor.surfaceElevated)
-        .clipShape(RoundedRectangle(cornerRadius: DSLayout.chipRadius))
+        .sensoryFeedback(.selection, trigger: viewModel.side)
     }
 
-    /// Builds one Yes/No segment button, tinted when it's the selected side.
+    /// Builds one Yes/No key, tinted and held down when it's the selected side.
     /// - Parameters:
-    ///   - side: The side this segment selects.
-    ///   - title: The button label.
+    ///   - side: The side this key selects.
+    ///   - title: The key label.
     ///   - tint: The text/foreground colour when selected.
-    ///   - fill: The background fill when selected.
-    private func sideSegment(_ side: Side, title: String, tint: Color, fill: Color) -> some View {
+    ///   - fill: The face fill when selected.
+    private func sideKey(_ side: Side, title: String, tint: Color, fill: Color) -> some View {
         let selected = viewModel.side == side
         return Button {
             viewModel.setSide(side)
@@ -93,16 +106,19 @@ public struct TradeSheet: View {
                 .font(DSFont.subheadline.bold())
                 .foregroundStyle(selected ? tint : DSColor.textSecondary)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, DSLayout.spacingSmall)
-                .background(selected ? fill : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: DSLayout.chipRadius))
+                .padding(.vertical, DSLayout.spacingMedium)
         }
         .buttonStyle(.plain)
+        .dsRaised(
+            face: selected ? fill : DSColor.surfaceElevated,
+            lip: selected ? DSLip.tint(fill) : DSLip.surface,
+            isPressed: selected
+        )
     }
 
-    /// The +$1/+$5/+$10/+$100 quick-add chips.
+    /// The +$1/+$5/+$10/+$100 quick-add keys, raised to match the pad below them.
     private var quickAmountRow: some View {
-        HStack(spacing: DSLayout.spacingSmall) {
+        HStack(spacing: DSLayout.spacingMedium) {
             ForEach([1, 5, 10, 100], id: \.self) { amount in
                 Button {
                     viewModel.addAmount(amount)
@@ -111,11 +127,15 @@ public struct TradeSheet: View {
                         .font(DSFont.subheadline.bold())
                         .foregroundStyle(DSColor.textPrimary)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, DSLayout.spacingSmall)
-                        .background(DSColor.surfaceElevated)
-                        .clipShape(RoundedRectangle(cornerRadius: DSLayout.chipRadius))
+                        .padding(.vertical, DSLayout.spacingMedium)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(
+                    DSRaisedButtonStyle(
+                        face: DSColor.surfaceElevated,
+                        lip: DSLip.surface,
+                        depth: DSDepth.small
+                    )
+                )
             }
         }
     }
@@ -143,7 +163,8 @@ public struct TradeSheet: View {
         .padding(.horizontal, DSLayout.spacingSmall)
     }
 
-    /// The Trade/Confirm button, showing a spinner while submitting.
+    /// The Trade/Confirm button, showing a spinner while submitting. Takes the side's
+    /// own colour so the primary action matches the side being traded.
     private var confirmButton: some View {
         Button {
             Task { await viewModel.confirm() }
@@ -152,61 +173,12 @@ public struct TradeSheet: View {
                 if viewModel.phase == .submitting {
                     ProgressView().tint(.white)
                 } else {
-                    Text("Trade")
-                        .font(DSFont.subheadline.bold())
+                    Text("Trade \(viewModel.outcomeTitle)")
                 }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, DSLayout.spacing)
-            .foregroundStyle(.white)
-            .background(DSGradient.accent)
-            .clipShape(RoundedRectangle(cornerRadius: DSLayout.chipRadius))
         }
-        .buttonStyle(.plain)
+        .modifier(SideActionStyle(side: viewModel.side))
         .disabled(!viewModel.isConfirmEnabled)
-    }
-
-    /// The custom digit keypad (1–9, 0, and backspace) driving amount entry.
-    private var keypad: some View {
-        let rows: [[String]] = [
-            ["1", "2", "3"],
-            ["4", "5", "6"],
-            ["7", "8", "9"],
-            ["", "0", "⌫"]
-        ]
-        return VStack(spacing: DSLayout.spacingSmall) {
-            ForEach(rows, id: \.self) { row in
-                HStack(spacing: DSLayout.spacingSmall) {
-                    ForEach(row, id: \.self) { key in
-                        keypadButton(key)
-                    }
-                }
-            }
-        }
-    }
-
-    /// Builds one keypad key. An empty string renders a blank spacer; "⌫" deletes; a digit
-    /// appends.
-    /// - Parameter key: The key label.
-    @ViewBuilder
-    private func keypadButton(_ key: String) -> some View {
-        if key.isEmpty {
-            Color.clear.frame(maxWidth: .infinity, minHeight: 44)
-        } else {
-            Button {
-                if key == "⌫" {
-                    viewModel.backspace()
-                } else if let digit = Int(key) {
-                    viewModel.appendDigit(digit)
-                }
-            } label: {
-                Text(key)
-                    .font(DSFont.title3.bold())
-                    .foregroundStyle(DSColor.textPrimary)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-            }
-            .buttonStyle(.plain)
-        }
     }
 
     /// The success state: an animated checkmark and the "simulated" caption.
@@ -224,6 +196,23 @@ public struct TradeSheet: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, DSLayout.spacingXLarge)
         .animation(.easeOut(duration: 0.25), value: viewModel.phase)
+    }
+}
+
+/// Applies the raised buy-Yes (green) or buy-No (red) button style for `side`. A
+/// `ViewModifier` rather than an inline `if`, because the two styles are different
+/// types and swapping them inside the view builder would rebuild the button's identity
+/// — losing the press animation mid-tap.
+private struct SideActionStyle: ViewModifier {
+    /// The side currently being traded.
+    let side: Side
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        switch side {
+        case .yes: content.buttonStyle(DSBuyYesButtonStyle())
+        case .no: content.buttonStyle(DSBuyNoButtonStyle())
+        }
     }
 }
 
