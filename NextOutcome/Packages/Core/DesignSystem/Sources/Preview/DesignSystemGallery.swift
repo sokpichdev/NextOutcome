@@ -15,6 +15,7 @@ import SwiftUI
 /// group of components: core building blocks (pills, bars, chips, buttons,
 /// badges, the value/PnL header), the persistent shell chrome (top bar,
 /// category rail, side drawer), and a detail-page header + multi-series chart.
+/// `DSNumberPad` carries its own preview alongside the component.
 
 #Preview("DesignSystem Gallery") {
     ScrollView {
@@ -46,6 +47,13 @@ import SwiftUI
             Button("Review Order") {}
                 .buttonStyle(DSPrimaryButtonStyle())
                 .padding(.horizontal)
+
+            // Raised price buttons
+            HStack {
+                PriceButton(title: "Yes", price: "62¢", style: .yes) {}
+                PriceButton(title: "No", price: "38¢", style: .no) {}
+            }
+            .padding(.horizontal)
 
             // Badges
             HStack {
