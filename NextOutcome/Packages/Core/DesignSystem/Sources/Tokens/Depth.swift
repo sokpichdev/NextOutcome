@@ -56,23 +56,30 @@ private struct DSRaisedSurface: ViewModifier {
     /// The shape used for both the face and the lip.
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: cornerRadius, style: .continuous) }
 
+    /// The lip, as only the crescent left uncovered by the face — the full shape dropped
+    /// by `depth` with the face's current footprint subtracted out.
+    ///
+    /// Subtracting matters because faces are often *translucent* (a `DSColor` tint pill).
+    /// Drawing a full lip behind one would show the darker lip straight through the face
+    /// and muddy its colour; this way a translucent face still reveals the card behind it.
+    private var lipShape: some Shape {
+        shape.offset(y: depth).subtracting(shape.offset(y: travel))
+    }
+
     func body(content: Content) -> some View {
         content
+            // The label rides the face down when pressed.
+            .offset(y: travel)
             // The face — flat, exactly the fill the element had before it was raised.
             .background {
                 shape
                     .fill(face)
                     .offset(y: travel)
             }
-            // The lip. Added after the offset above so it stays put while the face
-            // travels onto it; only its bottom `depth` points are ever visible.
+            // The lip, which stays put while the face travels onto it.
             .background {
-                shape
-                    .fill(lip)
-                    .offset(y: depth)
-                    .shadow(color: .black.opacity(0.22), radius: depth, y: depth * 0.6)
+                lipShape.fill(lip)
             }
-            .offset(y: travel)
             // Reserve the lip's height in layout so raised elements don't overlap.
             .padding(.bottom, depth)
             .contentShape(shape)
