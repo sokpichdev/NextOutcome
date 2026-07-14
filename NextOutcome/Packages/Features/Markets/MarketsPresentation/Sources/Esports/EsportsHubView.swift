@@ -116,6 +116,7 @@ public struct EsportsHubView: View {
                         EsportsHeroCard(
                             event: event,
                             result: viewModel.result(for: event),
+                            stream: viewModel.liveStream(for: event),
                             trades: viewModel.trades(for: event)
                         )
                     }

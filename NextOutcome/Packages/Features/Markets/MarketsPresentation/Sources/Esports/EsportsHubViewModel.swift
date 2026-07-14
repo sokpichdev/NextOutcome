@@ -37,6 +37,9 @@ public final class EsportsHubViewModel {
     /// Recent trades keyed by event id, for the hero cards' live-trades ticker. Only hero
     /// matches are fetched, newest first.
     public private(set) var heroTrades: [String: [ActivityTrade]] = [:]
+    /// Confirmed-live broadcasts keyed by event id, probed from each hero match's
+    /// `resolutionSource`. Absent = offline/unknown, so the hero shows artwork.
+    public private(set) var liveStreams: [String: EsportsStream] = [:]
     /// When the hub's data was last refreshed.
     public private(set) var lastUpdated: Date?
 
@@ -51,6 +54,8 @@ public final class EsportsHubViewModel {
     private let fetchGameResults: FetchGameResultsUseCase
     /// Loads recent trades for a market condition, for the hero ticker.
     private let fetchTrades: FetchActivityTradesUseCase
+    /// Probes whether hero matches' broadcasts are live. `nil` disables stream embeds.
+    private let liveStreamProber: (any LiveStreamProbing)?
     /// Injectable clock for deterministic tests.
     private let now: () -> Date
     /// Seconds between result polls while visible.
@@ -61,18 +66,22 @@ public final class EsportsHubViewModel {
     ///   - fetchAllEvents: Loads the esports tag's events, unpaginated.
     ///   - fetchGameResults: Loads live scores for match events.
     ///   - fetchTrades: Loads recent trades for the hero cards' ticker.
+    ///   - liveStreamProber: Confirms hero broadcasts are on air before embedding them.
+    ///     Defaults to `nil` (no embeds), keeping tests and previews network-free.
     ///   - now: Supplies the current time. Defaults to `Date()`.
     ///   - pollInterval: Seconds between live-result refreshes. Defaults to 20.
     public init(
         fetchAllEvents: FetchAllEventsUseCase,
         fetchGameResults: FetchGameResultsUseCase,
         fetchTrades: FetchActivityTradesUseCase,
+        liveStreamProber: (any LiveStreamProbing)? = nil,
         now: @escaping () -> Date = { Date() },
         pollInterval: TimeInterval = 20
     ) {
         self.fetchAllEvents = fetchAllEvents
         self.fetchGameResults = fetchGameResults
         self.fetchTrades = fetchTrades
+        self.liveStreamProber = liveStreamProber
         self.now = now
         self.pollInterval = pollInterval
     }
@@ -150,7 +159,25 @@ public final class EsportsHubViewModel {
         results.merge(fetched) { _, new in new }
         matches = Self.sortedMatches(matches, results: results, now: reference)
         await refreshHeroTrades()
+        await refreshLiveStreams()
     }
+
+    /// Probes each hero match's broadcast and records the ones that are actually on air.
+    /// Re-runs every poll so a stream that starts (or ends) mid-session appears/disappears.
+    private func refreshLiveStreams() async {
+        guard let liveStreamProber else { return }
+        for match in heroMatches.prefix(5) {
+            guard let source = match.resolutionSource, !source.isEmpty else { continue }
+            if let stream = await liveStreamProber.liveStream(for: source) {
+                liveStreams[match.id] = stream
+            } else {
+                liveStreams[match.id] = nil
+            }
+        }
+    }
+
+    /// The confirmed-live broadcast for an event, if any.
+    public func liveStream(for event: Event) -> EsportsStream? { liveStreams[event.id] }
 
     /// Fetches recent trades for each hero match's moneyline market, feeding the ticker.
     private func refreshHeroTrades() async {

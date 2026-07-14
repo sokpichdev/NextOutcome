@@ -121,7 +121,8 @@ final class AppContainer {
         EsportsHubViewModel(
             fetchAllEvents: FetchAllEventsUseCase(repository: repository),
             fetchGameResults: FetchGameResultsUseCase(repository: repository),
-            fetchTrades: FetchActivityTradesUseCase(repository: repository)
+            fetchTrades: FetchActivityTradesUseCase(repository: repository),
+            liveStreamProber: WebLiveStreamProber()
         )
     }
 
