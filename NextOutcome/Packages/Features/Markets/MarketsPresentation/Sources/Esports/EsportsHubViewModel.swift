@@ -7,13 +7,15 @@
 
 import Foundation
 import MarketsDomain
+import LiveStatsDomain
 
 /// Drives the Esports hub: the hero carousel of live matches, the per-game tiles with
 /// live counts, the Games list, and the results/price polling that keeps them current.
 ///
-/// Live scores come from polling `/events/results` (like the World Cup hub); the
-/// `LiveStatsData` Sports websocket produces the same `GameResult` shape and can replace
-/// the poll later without touching this type's public surface.
+/// Live scores arrive two ways: the sports websocket (`SportsStateStreaming`) pushes
+/// instant score/period updates for the hero matches, while the `/events/results` poll
+/// (every `pollInterval`) covers the full list, supplies team metadata (logos/colours),
+/// and backstops the socket across drops.
 @MainActor
 @Observable
 public final class EsportsHubViewModel {
@@ -56,6 +58,11 @@ public final class EsportsHubViewModel {
     private let fetchTrades: FetchActivityTradesUseCase
     /// Probes whether hero matches' broadcasts are live. `nil` disables stream embeds.
     private let liveStreamProber: (any LiveStreamProbing)?
+    /// Streams instant score updates for hero matches. `nil` leaves the poll as the only
+    /// score source (tests, previews).
+    private let streamer: (any SportsStateStreaming)?
+    /// Open per-match socket subscriptions, keyed by event id.
+    private var socketTasks: [String: Task<Void, Never>] = [:]
     /// Injectable clock for deterministic tests.
     private let now: () -> Date
     /// Seconds between result polls while visible.
@@ -68,6 +75,8 @@ public final class EsportsHubViewModel {
     ///   - fetchTrades: Loads recent trades for the hero cards' ticker.
     ///   - liveStreamProber: Confirms hero broadcasts are on air before embedding them.
     ///     Defaults to `nil` (no embeds), keeping tests and previews network-free.
+    ///   - streamer: The sports websocket, for instant hero score updates. Defaults to
+    ///     `nil` (poll-only).
     ///   - now: Supplies the current time. Defaults to `Date()`.
     ///   - pollInterval: Seconds between live-result refreshes. Defaults to 20.
     public init(
@@ -75,6 +84,7 @@ public final class EsportsHubViewModel {
         fetchGameResults: FetchGameResultsUseCase,
         fetchTrades: FetchActivityTradesUseCase,
         liveStreamProber: (any LiveStreamProbing)? = nil,
+        streamer: (any SportsStateStreaming)? = nil,
         now: @escaping () -> Date = { Date() },
         pollInterval: TimeInterval = 20
     ) {
@@ -82,6 +92,7 @@ public final class EsportsHubViewModel {
         self.fetchGameResults = fetchGameResults
         self.fetchTrades = fetchTrades
         self.liveStreamProber = liveStreamProber
+        self.streamer = streamer
         self.now = now
         self.pollInterval = pollInterval
     }
@@ -158,8 +169,61 @@ public final class EsportsHubViewModel {
         guard let fetched = try? await fetchGameResults.execute(eventIDs: nearTerm.map(\.id)) else { return }
         results.merge(fetched) { _, new in new }
         matches = Self.sortedMatches(matches, results: results, now: reference)
+        syncSocketSubscriptions()
         await refreshHeroTrades()
         await refreshLiveStreams()
+    }
+
+    // MARK: - Websocket score updates
+
+    /// Keeps one socket subscription open per hero match (instant score/period pushes),
+    /// closing subscriptions for matches that leave the hero set. Each `states(gameID:)`
+    /// call owns a connection, so the set is capped to the heroes the user actually sees.
+    private func syncSocketSubscriptions() {
+        guard let streamer else { return }
+        let wanted = Set(heroMatches.prefix(5).map(\.id))
+        for (id, task) in socketTasks where !wanted.contains(id) {
+            task.cancel()
+            socketTasks[id] = nil
+        }
+        for id in wanted where socketTasks[id] == nil {
+            socketTasks[id] = Task { [weak self] in
+                // The socket reconnects internally; the stream only finishes on
+                // cancellation or an unrecoverable error (then the poll still covers us).
+                guard let stream = self?.nonisolatedStates(streamer: streamer, gameID: id) else { return }
+                do {
+                    for try await snapshot in stream {
+                        guard !Task.isCancelled, let self else { return }
+                        self.apply(snapshot: snapshot, eventID: id)
+                    }
+                } catch {}
+            }
+        }
+    }
+
+    /// Opens the stream outside the actor hop, keeping `syncSocketSubscriptions` synchronous.
+    nonisolated private func nonisolatedStates(
+        streamer: any SportsStateStreaming, gameID: String
+    ) -> AsyncThrowingStream<MatchState, Error> {
+        streamer.states(gameID: gameID)
+    }
+
+    /// Merges a socket snapshot into `results`, preserving the poll-supplied team
+    /// metadata (logos, colours, ordering) the socket doesn't carry.
+    private func apply(snapshot: MatchState, eventID: String) {
+        let existing = results[eventID]
+        let updated = GameResult(
+            eventID: eventID,
+            score: snapshot.rawScore ?? existing?.score,
+            elapsed: existing?.elapsed,
+            period: snapshot.period ?? existing?.period,
+            live: snapshot.isLive,
+            ended: snapshot.ended,
+            teams: existing?.teams ?? []
+        )
+        guard updated != existing else { return }
+        results[eventID] = updated
+        matches = Self.sortedMatches(matches, results: results, now: now())
     }
 
     /// Probes each hero match's broadcast and records the ones that are actually on air.
@@ -195,8 +259,10 @@ public final class EsportsHubViewModel {
 
     // MARK: - Live polling
 
-    /// Starts the results poll while the hub is visible. Safe to call repeatedly.
+    /// Starts the results poll and hero socket subscriptions while the hub is visible.
+    /// Safe to call repeatedly.
     public func startLivePolling() {
+        syncSocketSubscriptions()
         guard pollTask == nil else { return }
         let nanoseconds = UInt64(pollInterval * 1_000_000_000)
         pollTask = Task { [weak self] in
@@ -208,10 +274,12 @@ public final class EsportsHubViewModel {
         }
     }
 
-    /// Stops the results poll (call from `.onDisappear`).
+    /// Stops the results poll and closes all socket subscriptions (call from `.onDisappear`).
     public func stopLivePolling() {
         pollTask?.cancel()
         pollTask = nil
+        for task in socketTasks.values { task.cancel() }
+        socketTasks = [:]
     }
 
     /// Whether the polling loop is currently running (exposed for tests).

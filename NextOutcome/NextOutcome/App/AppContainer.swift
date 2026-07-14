@@ -122,7 +122,8 @@ final class AppContainer {
             fetchAllEvents: FetchAllEventsUseCase(repository: repository),
             fetchGameResults: FetchGameResultsUseCase(repository: repository),
             fetchTrades: FetchActivityTradesUseCase(repository: repository),
-            liveStreamProber: WebLiveStreamProber()
+            liveStreamProber: WebLiveStreamProber(),
+            streamer: SportsSocket()
         )
     }
 
