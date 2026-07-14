@@ -8,15 +8,16 @@
 import SwiftUI
 import WebKit
 import DesignSystem
+import MarketsDomain
 
-/// The hero card's media area: an embedded, muted Twitch player when the match's
-/// `resolutionSource` points at a Twitch channel, otherwise the event image with a
-/// dimming gradient. The player is best-effort — if Twitch declines to embed, its own
-/// iframe shows the error and the surrounding card still works.
+/// The hero card's media area: an embedded, muted player when the match's broadcast is
+/// confirmed live (Twitch or YouTube, per the hub's `LiveStreamProbing` check), otherwise
+/// the event image with a dimming gradient. The player is best-effort — if the site
+/// declines to embed, its own iframe shows the error and the surrounding card still works.
 struct EsportsStreamView: View {
-    /// The Twitch channel to embed, parsed from the event's `resolutionSource`.
-    let twitchChannel: String?
-    /// Fallback artwork when there's no embeddable stream.
+    /// The confirmed-live broadcast to embed, or `nil` to show artwork.
+    let stream: EsportsStream?
+    /// Fallback artwork when there's no live stream.
     let imageURL: URL?
     /// Whether the player starts muted. Autoplay only works muted on iOS.
     @State private var isMuted = true
@@ -24,10 +25,16 @@ struct EsportsStreamView: View {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             #if canImport(UIKit)
-            if let twitchChannel {
-                TwitchPlayerView(channel: twitchChannel, isMuted: isMuted)
+            switch stream {
+            case .twitch(let channel):
+                StreamWebView(embedHTML: Self.twitchHTML(channel: channel, muted: isMuted),
+                              signature: "twitch-\(channel)-\(isMuted)")
                 muteButton
-            } else {
+            case .youtube(let videoID):
+                StreamWebView(embedHTML: Self.youTubeHTML(videoID: videoID, muted: isMuted),
+                              signature: "youtube-\(videoID)-\(isMuted)")
+                muteButton
+            case nil:
                 fallbackImage
             }
             #else
@@ -72,15 +79,43 @@ struct EsportsStreamView: View {
             )
         }
     }
+
+    // MARK: - Embed HTML
+
+    /// Shared skeleton wrapping a full-bleed player iframe on a black page.
+    private static func embedPage(iframeSrc: String) -> String {
+        """
+        <!doctype html><html><head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>html,body{margin:0;padding:0;background:#000;height:100%;overflow:hidden}
+        iframe{border:0;width:100%;height:100%}</style></head><body>
+        <iframe src="\(iframeSrc)" allowfullscreen allow="autoplay; fullscreen"></iframe>
+        </body></html>
+        """
+    }
+
+    /// The Twitch iframe player. `parent` must match the page's `baseURL` host.
+    static func twitchHTML(channel: String, muted: Bool) -> String {
+        embedPage(iframeSrc:
+            "https://player.twitch.tv/?channel=\(channel)&parent=polymarket.com&autoplay=true&muted=\(muted)")
+    }
+
+    /// The YouTube iframe player for a live video id.
+    static func youTubeHTML(videoID: String, muted: Bool) -> String {
+        embedPage(iframeSrc:
+            "https://www.youtube.com/embed/\(videoID)?autoplay=1&mute=\(muted ? 1 : 0)&playsinline=1&controls=1")
+    }
 }
 
 #if canImport(UIKit)
-/// A muted, inline Twitch player embed. Loads the iframe player with
-/// `parent=polymarket.com` and a matching `baseURL`, the pairing Twitch's embed API
-/// validates against.
-private struct TwitchPlayerView: UIViewRepresentable {
-    let channel: String
-    let isMuted: Bool
+/// A muted, inline stream embed. Loads the player HTML with a `polymarket.com` base URL —
+/// the pairing Twitch's embed API validates its `parent` parameter against (YouTube's
+/// embed doesn't care about the referrer).
+private struct StreamWebView: UIViewRepresentable {
+    /// The full embed page HTML.
+    let embedHTML: String
+    /// Changes when the page should re-render (channel/video/mute changes).
+    let signature: String
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -90,35 +125,20 @@ private struct TwitchPlayerView: UIViewRepresentable {
         webView.isOpaque = false
         webView.backgroundColor = .black
         webView.scrollView.isScrollEnabled = false
-        load(into: webView)
+        context.coordinator.signature = signature
+        webView.loadHTMLString(embedHTML, baseURL: URL(string: "https://polymarket.com"))
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        // Re-render only when the channel or mute state changes.
-        let signature = "\(channel)-\(isMuted)"
         if context.coordinator.signature != signature {
             context.coordinator.signature = signature
-            load(into: webView)
+            webView.loadHTMLString(embedHTML, baseURL: URL(string: "https://polymarket.com"))
         }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     final class Coordinator { var signature = "" }
-
-    /// Loads the Twitch iframe player HTML. `baseURL` must match the `parent` parameter.
-    private func load(into webView: WKWebView) {
-        let html = """
-        <!doctype html><html><head>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>html,body{margin:0;padding:0;background:#000;height:100%;overflow:hidden}
-        iframe{border:0;width:100%;height:100%}</style></head><body>
-        <iframe src="https://player.twitch.tv/?channel=\(channel)&parent=polymarket.com&autoplay=true&muted=\(isMuted)"
-                allowfullscreen allow="autoplay; fullscreen"></iframe>
-        </body></html>
-        """
-        webView.loadHTMLString(html, baseURL: URL(string: "https://polymarket.com"))
-    }
 }
 #endif

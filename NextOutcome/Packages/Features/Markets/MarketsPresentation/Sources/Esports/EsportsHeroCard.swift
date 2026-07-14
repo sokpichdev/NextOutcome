@@ -17,6 +17,8 @@ struct EsportsHeroCard: View {
     let event: Event
     /// The live result, when loaded.
     let result: GameResult?
+    /// The confirmed-live broadcast to embed, if any.
+    let stream: EsportsStream?
     /// Recent trades for the ticker, newest first.
     let trades: [ActivityTrade]
 
@@ -38,7 +40,7 @@ struct EsportsHeroCard: View {
         VStack(spacing: 0) {
             ZStack(alignment: .topLeading) {
                 EsportsStreamView(
-                    twitchChannel: Self.channelOverride ?? EsportsCatalog.twitchChannel(from: event.resolutionSource),
+                    stream: Self.channelOverride.map { EsportsStream.twitch(channel: $0) } ?? stream,
                     imageURL: event.imageURL
                 )
                 if result?.live == true {

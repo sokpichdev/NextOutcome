@@ -104,6 +104,47 @@ final class EsportsHubViewModelTests: XCTestCase {
         XCTAssertEqual(vm.liveCount(for: .lol), 0)
     }
 
+    func test_liveStreamProbe_populatesConfirmedStreamsOnly() async {
+        let now = Date()
+        var live = match("live", game: "counter-strike-2", start: now)
+        live = Event(
+            id: live.id, title: live.title, slug: live.slug, markets: live.markets,
+            volume: 0, imageURL: nil, tags: live.tags, gameStartTime: now,
+            resolutionSource: "https://www.twitch.tv/eslcs"
+        )
+        let repo = EsportsFakeRepository(allEvents: [live], gameResults: ["live": result("live", live: true)])
+        let prober = FakeProber(streams: ["https://www.twitch.tv/eslcs": .twitch(channel: "eslcs")])
+        let vm = EsportsHubViewModel(
+            fetchAllEvents: FetchAllEventsUseCase(repository: repo),
+            fetchGameResults: FetchGameResultsUseCase(repository: repo),
+            fetchTrades: FetchActivityTradesUseCase(repository: repo),
+            liveStreamProber: prober,
+            now: { now }
+        )
+        await vm.loadIfNeeded(tagID: "64")
+        XCTAssertEqual(vm.liveStream(for: live), .twitch(channel: "eslcs"))
+    }
+
+    func test_offlineBroadcastYieldsNoStream() async {
+        let now = Date()
+        var m = match("m1", game: "dota-2", start: now)
+        m = Event(
+            id: m.id, title: m.title, slug: m.slug, markets: m.markets,
+            volume: 0, imageURL: nil, tags: m.tags, gameStartTime: now,
+            resolutionSource: "https://www.twitch.tv/offlinechannel"
+        )
+        let repo = EsportsFakeRepository(allEvents: [m])
+        let vm = EsportsHubViewModel(
+            fetchAllEvents: FetchAllEventsUseCase(repository: repo),
+            fetchGameResults: FetchGameResultsUseCase(repository: repo),
+            fetchTrades: FetchActivityTradesUseCase(repository: repo),
+            liveStreamProber: FakeProber(streams: [:]),
+            now: { now }
+        )
+        await vm.loadIfNeeded(tagID: "64")
+        XCTAssertNil(vm.liveStream(for: m))
+    }
+
     func test_pollingLifecycle() async {
         let (vm, _) = makeVM(events: [match("m1", game: "dota-2", start: .init())])
         await vm.loadIfNeeded(tagID: "64")
@@ -134,6 +175,14 @@ final class EsportsHubViewModelTests: XCTestCase {
         XCTAssertEqual(EsportsHubViewModel.seriesScore(from: "2-1")?.home, 2)
         XCTAssertNil(EsportsHubViewModel.seriesScore(from: nil))
         XCTAssertNil(EsportsHubViewModel.seriesScore(from: "Bo3"))
+    }
+}
+
+/// Resolves canned stream URLs to live streams.
+private struct FakeProber: LiveStreamProbing {
+    let streams: [String: EsportsStream]
+    func liveStream(for resolutionSource: String) async -> EsportsStream? {
+        streams[resolutionSource]
     }
 }
 
