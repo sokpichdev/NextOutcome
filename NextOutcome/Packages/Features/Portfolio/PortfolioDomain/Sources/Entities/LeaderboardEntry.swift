@@ -43,6 +43,26 @@ public enum LeaderboardWindow: String, Sendable, CaseIterable {
         case .all: return "All"
         }
     }
+
+    /// The longer menu label used by the Esports leaderboard's period dropdown.
+    public var menuTitle: String {
+        switch self {
+        case .day: return "Daily"
+        case .week: return "Weekly"
+        case .month: return "Monthly"
+        case .all: return "All time"
+        }
+    }
+
+    /// The Data API `/v1/leaderboard` `timePeriod` value for this window.
+    public var timePeriodParam: String {
+        switch self {
+        case .day: return "DAY"
+        case .week: return "WEEK"
+        case .month: return "MONTH"
+        case .all: return "ALL"
+        }
+    }
 }
 
 /// One ranked trader.
@@ -57,13 +77,23 @@ public struct LeaderboardEntry: Identifiable, Hashable, Sendable {
     public let profileImageURL: URL?
     /// The ranking amount — volume or profit depending on the requested metric.
     public let amount: Decimal    // volume or profit, per the requested metric
+    /// The trader's X (Twitter) username, when linked. Only the category-scoped
+    /// `/v1/leaderboard` responses carry this.
+    public let xUsername: String?
+    /// Whether the trader carries Polymarket's verified badge.
+    public let verifiedBadge: Bool
 
     /// Creates a leaderboard entry.
-    public init(id: String, rank: Int, name: String, profileImageURL: URL?, amount: Decimal) {
+    public init(
+        id: String, rank: Int, name: String, profileImageURL: URL?, amount: Decimal,
+        xUsername: String? = nil, verifiedBadge: Bool = false
+    ) {
         self.id = id
         self.rank = rank
         self.name = name
         self.profileImageURL = profileImageURL
         self.amount = amount
+        self.xUsername = xUsername
+        self.verifiedBadge = verifiedBadge
     }
 }

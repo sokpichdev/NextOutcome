@@ -43,5 +43,5 @@ private struct StubRepo: PortfolioRepository {
     func value(address: String) async throws -> Decimal { value }
     func activity(address: String, cursor: String?) async throws -> Page<Activity> { Page(items: [], nextCursor: nil) }
     func closedPositions(address: String) async throws -> [ClosedPosition] { [] }
-    func leaderboard(metric: LeaderboardMetric, window: LeaderboardWindow) async throws -> [LeaderboardEntry] { [] }
+    func leaderboard(metric: LeaderboardMetric, window: LeaderboardWindow, category: String?, limit: Int) async throws -> [LeaderboardEntry] { [] }
 }
