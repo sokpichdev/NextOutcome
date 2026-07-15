@@ -34,6 +34,9 @@ public struct OutcomePill: View {
         self.value = value
     }
 
+    /// The translucent tint painted on the pill's face.
+    private var tint: Color { outcome == .yes ? DSColor.positiveTint : DSColor.negativeTint }
+
     public var body: some View {
         HStack(spacing: 4) {
             Text(outcome == .yes ? "Yes" : "No")
@@ -46,9 +49,6 @@ public struct OutcomePill: View {
         .foregroundStyle(outcome == .yes ? DSColor.positive : DSColor.negative)
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background(
-            outcome == .yes ? DSColor.positiveTint : DSColor.negativeTint
-        )
-        .clipShape(Capsule())
+        .dsRaised(face: tint, lip: DSLip.tint(tint), cornerRadius: DSLayout.chipRadius, depth: DSDepth.medium)
     }
 }

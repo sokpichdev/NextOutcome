@@ -48,16 +48,20 @@ public struct EventCard: View {
                     }
                 }
 
-                if let market = event.markets.first, market.yesOutcome != nil {
+                if let market = event.markets.first, let yes = market.yesOutcome, let no = market.noOutcome {
                     HStack(spacing: DSLayout.spacingSmall) {
                         NavigationLink(value: MarketNavigationTarget(market: market, eventID: event.id)) {
-                            Text("Yes").frame(maxWidth: .infinity)
+                            outcomeLabel(title: "Yes", price: MarketFormatting.centsWhole(yes.price), color: DSColor.positive)
                         }
-                        .buttonStyle(DSBuyYesButtonStyle())
+                        .buttonStyle(
+                            DSRaisedButtonStyle(face: DSColor.positiveTint, lip: DSLip.tint(DSColor.positiveTint), depth: DSDepth.medium)
+                        )
                         NavigationLink(value: MarketNavigationTarget(market: market, eventID: event.id)) {
-                            Text("No").frame(maxWidth: .infinity)
+                            outcomeLabel(title: "No", price: MarketFormatting.centsWhole(no.price), color: DSColor.negative)
                         }
-                        .buttonStyle(DSBuyNoButtonStyle())
+                        .buttonStyle(
+                            DSRaisedButtonStyle(face: DSColor.negativeTint, lip: DSLip.tint(DSColor.negativeTint), depth: DSDepth.medium)
+                        )
                     }
                 }
                 HStack {
@@ -73,6 +77,21 @@ public struct EventCard: View {
         }
     }
     
+    /// A Yes/No trade button's label — outcome name leading, cent price trailing,
+    /// matching `PriceButton`'s default layout so these buttons read as the same
+    /// component as every other trade row in the app.
+    private func outcomeLabel(title: String, price: String, color: Color) -> some View {
+        HStack(spacing: DSLayout.spacingXSmall) {
+            Text(title).font(DSFont.subheadline.bold())
+            Spacer(minLength: DSLayout.spacingXSmall)
+            Text(price).font(DSFont.priceSmall)
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, DSLayout.spacingMedium)
+        .padding(.vertical, DSLayout.spacingSmall)
+        .frame(maxWidth: .infinity)
+    }
+
     /// The event icon, loaded async with a placeholder, or a plain rounded rectangle when
     /// there's no image URL.
     @ViewBuilder
