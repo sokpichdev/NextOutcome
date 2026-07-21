@@ -185,7 +185,7 @@ final class AppContainer {
     /// Builds the view model backing the market search screen.
     /// - Returns: A view model that runs text searches against the market repository.
     func makeSearchViewModel() -> SearchViewModel {
-        SearchViewModel(searchMarkets: SearchMarketsUseCase(repository: repository))
+        SearchViewModel(searchEvents: SearchEventsUseCase(repository: repository))
     }
 
     /// Builds the view model for the portfolio screen (open and closed positions).
