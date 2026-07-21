@@ -57,6 +57,18 @@ private struct FakeMarketStreaming: MarketStreaming {
     }
 }
 
+/// Preset crypto-price streamer: emits the given live points (in order) then finishes, so
+/// tests can assert the view model folds live socket ticks into `spotState`/`currentPrice`.
+private struct FakeCryptoSpotPriceStreaming: CryptoSpotPriceStreaming {
+    var points: [CryptoSpotPricePoint] = []
+    func prices(symbol: String) -> AsyncStream<CryptoSpotPricePoint> {
+        AsyncStream { continuation in
+            points.forEach { continuation.yield($0) }
+            continuation.finish()
+        }
+    }
+}
+
 /// Minimal fake `CryptoSpotPriceRepository`. Returns whatever's currently set on
 /// `points`/`window`, so a test can mutate them between polls to simulate a live update.
 private final class FakeCryptoSpotPriceRepository: CryptoSpotPriceRepository, @unchecked Sendable {
@@ -85,7 +97,8 @@ final class BTCLiveViewModelTests: XCTestCase {
         repository: FakeOrderbookRepository,
         windowEnd: Date,
         symbol: String = "BTC",
-        spotRepository: FakeCryptoSpotPriceRepository = FakeCryptoSpotPriceRepository()
+        spotRepository: FakeCryptoSpotPriceRepository = FakeCryptoSpotPriceRepository(),
+        spotStreamer: FakeCryptoSpotPriceStreaming = FakeCryptoSpotPriceStreaming()
     ) -> BTCLiveViewModel {
         BTCLiveViewModel(
             assetID: "asset-1",
@@ -96,7 +109,7 @@ final class BTCLiveViewModelTests: XCTestCase {
             fetchServerTime: FetchServerTimeUseCase(repository: repository),
             fetchRecentTrades: FetchRecentTradesUseCase(repository: repository),
             observeBook: ObserveOrderBookUseCase(repository: repository, stream: FakeMarketStreaming()),
-            fetchSpotPriceHistory: FetchCryptoSpotPriceHistoryUseCase(repository: spotRepository),
+            observeSpotPrice: ObserveCryptoSpotPriceUseCase(repository: spotRepository, stream: spotStreamer),
             fetchPriceWindow: FetchCryptoPriceWindowUseCase(repository: spotRepository),
             onQuickBet: { _ in }
         )
@@ -213,6 +226,36 @@ final class BTCLiveViewModelTests: XCTestCase {
         XCTAssertEqual(vm.currentPrice, 63_961.25)
         XCTAssertEqual(vm.priceToBeat, 63_945.94, "priceToBeat must prefer the polled dollar window over the probability fallback")
         XCTAssertEqual(vm.priceDelta, 63_961.25 - 63_945.94)
+    }
+
+    /// `currentPrice` must follow the live RTDS socket tick, not just the REST seed — this is
+    /// the whole point of moving off the 5-second poll. We seed the REST history with one
+    /// stale sample, then have the fake streamer emit a newer tick; `currentPrice` must be the
+    /// streamed value.
+    @MainActor
+    func test_start_streamsLiveSpotPrice_updatesCurrentPriceBeyondTheSeed() async {
+        let windowEnd = Date().addingTimeInterval(300)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: Date(), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        spotRepository.points = [CryptoSpotPricePoint(date: Date().addingTimeInterval(-60), price: 63_000)]
+        let streamer = FakeCryptoSpotPriceStreaming(points: [
+            CryptoSpotPricePoint(date: Date(), price: 63_412.75)
+        ])
+
+        let vm = makeVM(
+            repository: repository, windowEnd: windowEnd,
+            spotRepository: spotRepository, spotStreamer: streamer
+        )
+        vm.start()
+        for _ in 0..<50 { await Task.yield() }
+        vm.stop()
+
+        XCTAssertEqual(
+            vm.currentPrice, 63_412.75,
+            "currentPrice must reflect the live streamed tick, not just the REST seed"
+        )
     }
 
     /// `.candles` mode builds from the dollar spot series, not the 0…1 probability

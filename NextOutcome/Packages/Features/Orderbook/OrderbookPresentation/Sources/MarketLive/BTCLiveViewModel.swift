@@ -27,7 +27,8 @@ public final class BTCLiveViewModel {
     /// by appending the order book's midpoint as new snapshots arrive (see `streamBook`).
     public private(set) var state: LoadState<[PriceHistoryPoint]> = .idle
     /// The real dollar BTC spot-price series backing the "Price" and "Candles" chart
-    /// modes, refreshed by polling (see `pollSpotPrice`).
+    /// modes, seeded from REST history then kept live by folding in RTDS socket ticks
+    /// (see `streamSpotPrice`).
     public private(set) var spotState: LoadState<[CryptoSpotPricePoint]> = .idle
     /// The window's dollar open/close snapshot — the source of `priceToBeat`.
     public private(set) var priceWindow: CryptoPriceWindow?
@@ -63,8 +64,10 @@ public final class BTCLiveViewModel {
     private let fetchRecentTrades: FetchRecentTradesUseCase
     /// Use case that streams the live book.
     private let observeBook: ObserveOrderBookUseCase
-    /// Use case that polls the real dollar spot-price series.
-    private let fetchSpotPriceHistory: FetchCryptoSpotPriceHistoryUseCase
+    /// Use case that streams the live dollar spot-price series: seeds via REST, then folds
+    /// live RTDS socket ticks. Replaces the former 5-second spot-price poll so "Current
+    /// Price" ticks in real time, matching web.
+    private let observeSpotPrice: ObserveCryptoSpotPriceUseCase
     /// Use case that polls the window's dollar open/close snapshot.
     private let fetchPriceWindow: FetchCryptoPriceWindowUseCase
     /// Callback invoked when the user taps Up/Down (host opens the trade flow).
@@ -78,8 +81,11 @@ public final class BTCLiveViewModel {
     private var tradesTask: Task<Void, Never>?
     /// Runs the initial history + server-time load.
     private var loadTask: Task<Void, Never>?
-    /// Polls the real dollar spot-price series on a timer.
+    /// Consumes the live dollar spot-price stream.
     private var spotTask: Task<Void, Never>?
+    /// Polls the window's dollar open/close snapshot on a timer (it isn't on the live tick
+    /// feed, so it stays a low-frequency poll).
+    private var windowTask: Task<Void, Never>?
     /// Set once `stop()` runs; guards against a late-completing `load()` resurrecting
     /// the countdown ticker (or spawning other work) after teardown.
     private(set) var isStopped = false
@@ -102,7 +108,7 @@ public final class BTCLiveViewModel {
     ///   - fetchServerTime: Fetches authoritative server time (once).
     ///   - fetchRecentTrades: Polls recent trades.
     ///   - observeBook: Streams the live book.
-    ///   - fetchSpotPriceHistory: Polls the real dollar spot-price series.
+    ///   - observeSpotPrice: Streams the live dollar spot-price series (seed + socket).
     ///   - fetchPriceWindow: Polls the window's dollar open/close snapshot.
     ///   - onQuickBet: Called when the user taps Up/Down.
     public init(
@@ -114,7 +120,7 @@ public final class BTCLiveViewModel {
         fetchServerTime: FetchServerTimeUseCase,
         fetchRecentTrades: FetchRecentTradesUseCase,
         observeBook: ObserveOrderBookUseCase,
-        fetchSpotPriceHistory: FetchCryptoSpotPriceHistoryUseCase,
+        observeSpotPrice: ObserveCryptoSpotPriceUseCase,
         fetchPriceWindow: FetchCryptoPriceWindowUseCase,
         onQuickBet: @escaping @MainActor (BetSide) -> Void
     ) {
@@ -126,7 +132,7 @@ public final class BTCLiveViewModel {
         self.fetchServerTime = fetchServerTime
         self.fetchRecentTrades = fetchRecentTrades
         self.observeBook = observeBook
-        self.fetchSpotPriceHistory = fetchSpotPriceHistory
+        self.observeSpotPrice = observeSpotPrice
         self.fetchPriceWindow = fetchPriceWindow
         self.onQuickBet = onQuickBet
     }
@@ -218,7 +224,8 @@ public final class BTCLiveViewModel {
         loadTask = Task { await load() }
         bookTask = Task { [weak self] in await self?.streamBook() }
         tradesTask = Task { [weak self] in await self?.pollTrades() }
-        spotTask = Task { [weak self] in await self?.pollSpotPrice() }
+        spotTask = Task { [weak self] in await self?.streamSpotPrice() }
+        windowTask = Task { [weak self] in await self?.pollPriceWindow() }
     }
 
     /// Cancels every running task and marks the model stopped. Call from the view's teardown.
@@ -229,6 +236,7 @@ public final class BTCLiveViewModel {
         bookTask?.cancel(); bookTask = nil
         tradesTask?.cancel(); tradesTask = nil
         spotTask?.cancel(); spotTask = nil
+        windowTask?.cancel(); windowTask = nil
     }
 
     /// Inline retry for the price-series/server-time load.
@@ -323,28 +331,35 @@ public final class BTCLiveViewModel {
         }
     }
 
-    /// Polls the real dollar spot-price series (and the window's open/close snapshot)
-    /// every ~5 seconds. There's no WebSocket source for this data, so — like
-    /// `pollTrades` — it's refetched on a timer, keeping the last good state on
-    /// transient errors.
-    private func pollSpotPrice() async {
+    /// Consumes the live dollar spot-price stream, updating `spotState` as the series grows.
+    /// The use case seeds with the REST history (so the chart isn't blank on entry) and then
+    /// folds live RTDS ticks in, so `currentPrice` follows the market in real time instead of
+    /// lagging up to 5s behind a poll.
+    private func streamSpotPrice() async {
+        let eventStart = windowEnd.addingTimeInterval(-windowInterval)
+        for await points in observeSpotPrice.execute(
+            symbol: symbol, eventStart: eventStart, eventEnd: windowEnd
+        ) {
+            if Task.isCancelled { return }
+            spotState = points.isEmpty ? .empty : .loaded(points)
+        }
+    }
+
+    /// Polls the window's dollar open/close snapshot (the "price to beat") every ~5 seconds.
+    /// Unlike the spot price, this isn't carried on the live tick feed — it's a checkpointed
+    /// open/close derived server-side — so, like `pollTrades`, it stays a timer poll that
+    /// keeps the last good value on transient errors.
+    private func pollPriceWindow() async {
         let eventStart = windowEnd.addingTimeInterval(-windowInterval)
         while !Task.isCancelled {
             do {
-                async let historyCall = fetchSpotPriceHistory.execute(
+                let window = try await fetchPriceWindow.execute(
                     symbol: symbol, eventStart: eventStart, eventEnd: windowEnd
                 )
-                async let windowCall = fetchPriceWindow.execute(
-                    symbol: symbol, eventStart: eventStart, eventEnd: windowEnd
-                )
-                let (points, window) = try await (historyCall, windowCall)
-                if !Task.isCancelled {
-                    spotState = points.isEmpty ? .empty : .loaded(points)
-                    priceWindow = window
-                }
+                if !Task.isCancelled { priceWindow = window }
             } catch {
                 if isCancellation(error) { return }
-                // Non-fatal: keep the last good series/window and retry next tick.
+                // Non-fatal: keep the last good window and retry next tick.
             }
             try? await Task.sleep(nanoseconds: 5_000_000_000)
         }
