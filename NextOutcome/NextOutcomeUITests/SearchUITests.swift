@@ -18,7 +18,7 @@ final class SearchUITests: XCTestCase {
 
     private func openSearch(_ app: XCUIApplication) -> XCUIElement {
         app.searchTab.tap()
-        let field = app.searchFields.firstMatch
+        let field = app.searchField
         assertAppears(field, timeout: UIWait.load, "The .searchable field should exist")
         return field
     }
@@ -33,7 +33,7 @@ final class SearchUITests: XCTestCase {
         assertAppears(app.staticTexts["Search NextOutcome markets"], timeout: UIWait.load,
                       "Idle prompt should show before typing")
 
-        let field = app.searchFields.firstMatch
+        let field = app.searchField
         field.tap()
         field.typeText("election")
 
@@ -56,10 +56,16 @@ final class SearchUITests: XCTestCase {
                       "A nonsense query should show the 'No results' state")
         attachScreenshot(of: app, named: "Search — no results")
 
-        // Clear via the field's clear button (or Cancel), back to the prompt.
-        let clear = field.buttons["Clear text"]
-        if clear.exists { clear.tap() } else { field.typeText(XCUIKeyboardKey.delete.rawValue) }
-        if app.buttons["Cancel"].exists { app.buttons["Cancel"].tap() }
+        // Clear via the trailing clear button. It sits beside the field in the same HStack,
+        // not inside it, so it's queried off the app rather than off `field`.
+        let clear = app.buttons["Clear text"]
+        if clear.exists {
+            clear.tap()
+        } else {
+            // Fall back to deleting the query one character at a time.
+            field.tap()
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 20))
+        }
         assertAppears(app.staticTexts["Search NextOutcome markets"], timeout: UIWait.ui,
                       "Clearing the query should restore the idle prompt")
     }
