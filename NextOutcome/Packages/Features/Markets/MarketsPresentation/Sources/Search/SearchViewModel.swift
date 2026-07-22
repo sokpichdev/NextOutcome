@@ -19,8 +19,8 @@ public final class SearchViewModel {
         case idle
         /// A search is running.
         case loading
-        /// Matching markets.
-        case results([Market])
+        /// Matching events.
+        case results([Event])
         /// The query returned nothing.
         case empty
         /// The search failed, with a user-facing message.
@@ -32,15 +32,21 @@ public final class SearchViewModel {
     /// The current search state.
     public private(set) var state: State = .idle
 
-    /// Use case that runs the market search.
-    private var searchMarkets: SearchMarketsUseCase
+    /// Use case that runs the event search.
+    ///
+    /// Events, not markets: Gamma's `/public-search` stopped returning a `markets` key
+    /// entirely — it responds with `{events, pagination}` whatever `type` is passed — so
+    /// decoding a markets envelope always threw and every search reported "Search failed".
+    /// Events are what the endpoint actually serves, and they carry the id needed to push
+    /// a detail screen.
+    private var searchEvents: SearchEventsUseCase
     /// The in-flight debounced search task, cancelled when the query changes.
     private var searchTask: Task<Void, Never>?
 
     /// Creates the view model.
-    /// - Parameter searchMarkets: The search use case.
-    public init(searchMarkets: SearchMarketsUseCase) {
-        self.searchMarkets = searchMarkets
+    /// - Parameter searchEvents: The search use case.
+    public init(searchEvents: SearchEventsUseCase) {
+        self.searchEvents = searchEvents
     }
 
     /// Handles a query change from the search field: cancels any pending search, resets to
@@ -66,7 +72,7 @@ public final class SearchViewModel {
     private func performSearch(_ term: String) async {
         state = .loading
         do {
-            let results = try await searchMarkets.execute(query: term)
+            let results = try await searchEvents.execute(query: term)
             guard !Task.isCancelled else { return }
             state = results.isEmpty ? .empty : .results(results)
         } catch {

@@ -141,6 +141,11 @@ let package = Package(
             name: "PortfolioDataTests",
             dependencies: ["PortfolioData", "PortfolioDomain", "Networking"]
         ),
+        .testTarget(
+            name: "PortfolioPresentationTests",
+            dependencies: ["PortfolioPresentation", "PortfolioDomain", "SharedDomain"],
+            path: "Tests/PortfolioPresentationTests"
+        ),
         .testTarget(name: "TradingDomainTests", dependencies: ["TradingDomain"]),
         .testTarget(
             name: "TradingDataTests",

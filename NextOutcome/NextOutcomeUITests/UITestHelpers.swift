@@ -49,6 +49,12 @@ extension XCUIApplication {
     var breakingTab: XCUIElement { tabBars.buttons.element(boundBy: 2) }
     var portfolioTab: XCUIElement { tabBars.buttons.element(boundBy: 3) }
 
+    /// The Search tab's query input. It is a plain `TextField`, not a system search
+    /// field: the app hides the navigation bar in favour of its custom top bar, so
+    /// `.searchable` renders nothing and `app.searchFields` is always empty. Matched by
+    /// identifier rather than type or placeholder.
+    var searchField: XCUIElement { textFields["search.field"] }
+
     /// Any static text whose label contains "Vol" — the volume caption every
     /// market/event card renders. The cheapest content-agnostic proof that a
     /// feed of real cards is on screen.

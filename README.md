@@ -17,7 +17,12 @@
   <img alt="Swift" src="https://img.shields.io/badge/Swift-5.9-orange"/>
   <img alt="UI" src="https://img.shields.io/badge/UI-SwiftUI-green"/>
   <img alt="Status" src="https://img.shields.io/badge/status-in%20development-yellow"/>
+  <a href="https://www.sokpich.dev/nextoutcome"><img alt="Live preview" src="https://img.shields.io/badge/live_preview-sokpich.dev-black"/></a>
   <img alt="" src="https://komarev.com/ghpvc/?username=sokpichdev&color=blueviolet"/>
+</p>
+
+<p align="center">
+  <b>Live preview →</b> <a href="https://www.sokpich.dev/nextoutcome">www.sokpich.dev/nextoutcome</a>
 </p>
 
 <p align="center">
@@ -89,10 +94,11 @@ watch-only today, with on-chain trading actively on the roadmap.
 - **Crypto hub** — classifies markets into Up/Down, Above/Below, Price Range, and Hit Price, with sort/period/timeframe filters and search. Up/Down cards open a **live BTC detail screen**: server-clock countdown, price-to-beat delta, a Price/Chance/Candles chart, live quick-bet buttons, and a recent-trades ticker.
 - **Live sports stats** — score hero, minute timeline, stats, pitch, lineups, and commentary, streamed from the public sports feed.
 - **World Cup hub** — Games schedule, Props (awards / player H2H / group futures), a Bracket carousel (Groups → knockout rounds), and a Map tab with a rotating, draggable **SceneKit globe** of nation odds.
+- **Esports hub** — live matches with a stream hero (Twitch / YouTube embeds behind a live-status probe with YouTube fallback), match cards, a live trade ticker, and a leaderboard, with scores pushed over the sports WebSocket.
 - **Portfolio (watch-only)** — track any wallet's open/closed positions, activity feed, and the trader leaderboard. No keys, no custody.
 - **Social strip** — comments, top holders, and recent activity per event.
 - **Light/Dark theme** — app-wide toggle from the drawer, persisted locally, independent of system appearance.
-- **Mock trade sheet** — keypad amount entry with a live "to win" payout. **Simulated only** — sends nothing, stores nothing — until real trading lands.
+- **Mock trade sheet** — amount entry on a custom `DSNumberPad` numeric keyboard with tactile 3D "key" buttons and a live "to win" payout. **Simulated only** — sends nothing, stores nothing — until real trading lands.
 
 ---
 
@@ -106,7 +112,7 @@ watch-only today, with on-chain trading actively on the roadmap.
 | **State** | Observation (`@Observable`), MVVM view models |
 | **Networking** | `URLSession` for REST **and** WebSockets (order book + sports feeds) |
 | **Persistence / security** | Keychain (session token), `UserDefaults` (watched wallet) |
-| **Modularization** | Swift Package Manager (one umbrella package, ~18 targets) |
+| **Modularization** | Swift Package Manager (one umbrella package — 17 library modules, 33 targets incl. tests) |
 | **Logging** | `os.Logger` |
 | **Backend** | Polymarket public APIs — **Gamma** (markets/events/tags/comments), **Data** (positions/holders/trades/leaderboard/geoblock), **CLOB** (order book, price history, server time), and the sports/market WebSocket channels |
 
@@ -146,18 +152,20 @@ NextOutcome/
 │   ├── NextOutcome.xcodeproj
 │   ├── NextOutcome/                      # App target (thin shell)
 │   │   └── App/                          # AppContainer, RootView
+│   ├── NextOutcomeUITests/               # XCUITest suite (Home, MarketDetail, Esports, …)
 │   └── Packages/                         # Swift Package (one umbrella)
 │       ├── Package.swift
 │       ├── Core/
-│       │   ├── DesignSystem/             # tokens, components, shell chrome
+│       │   ├── DesignSystem/             # tokens, components, shell chrome, DSNumberPad
 │       │   └── Networking/               # APIClient (actor), Endpoint, sockets, decoding
 │       ├── SharedDomain/                 # LoadState, Page — cross-feature primitives
 │       └── Features/                     # vertical slices: Domain / Data / Presentation
-│           ├── Markets/                  # feed, detail, search, World Cup hub
+│           ├── Markets/                  # feed, detail, search, World Cup + Esports hubs
 │           ├── Orderbook/                # live book, price/candle charts, BTC live
 │           ├── Portfolio/                # watch-only positions, activity, leaderboard
 │           ├── LiveStats/               # live sports stats
 │           └── Trading/                  # order signing + proxy (quarantined)
+├── .github/workflows/                   # CI — package tests + app-target build
 └── .mobile-agents/                       # engineering standards & agent toolkit
 ```
 
@@ -210,7 +218,11 @@ cd NextOutcome/Packages
 swift test
 ```
 
-Each feature slice (Markets, Orderbook, Portfolio, LiveStats, Trading) has its own `*DomainTests` and `*DataTests` targets — Domain tests exercise Use Cases against stub repositories, Data tests exercise DTO decoding against fixture JSON. `Networking` and `DesignSystem` have their own test targets too. There's no CI wiring yet, so `swift test` is run locally before merging; a formal coverage target hasn't been set (see [Roadmap](#roadmap)).
+Each feature slice (Markets, Orderbook, Portfolio, LiveStats, Trading) has its own `*DomainTests` and `*DataTests` targets — Domain tests exercise Use Cases against stub repositories, Data tests exercise DTO decoding against fixture JSON. `Networking` and `DesignSystem` have their own test targets too. These ~420 tests are hermetic (no simulator, no network).
+
+**Continuous integration.** [`.github/workflows/tests.yml`](.github/workflows/tests.yml) runs on every push and PR to `main`: one job runs the package suite (`swift test`), a second compiles the Xcode app target (`xcodebuild`, code-signing off) to catch breaks in `App/`/`AppContainer` that the package suite can't see.
+
+**UI tests.** An XCUITest suite lives in [`NextOutcome/NextOutcomeUITests/`](NextOutcome/NextOutcomeUITests) (Home feed, market detail, Esports, category rail, drawer, World Cup, tab navigation), run locally via `scripts/run-tests.sh`. It's **deliberately excluded from CI** — it drives a simulator against live Polymarket APIs and asserts on transient market data, so it would fail when the market moves rather than when the code breaks. A formal coverage target hasn't been set yet (see [Roadmap](#roadmap)).
 
 ---
 
@@ -224,7 +236,7 @@ Each feature slice (Markets, Orderbook, Portfolio, LiveStats, Trading) has its o
 
 ## Project Status
 
-🚧 **In active development.** Browsing (with a dynamic, tag-resolved category rail), live order books, the Crypto hub with a live BTC detail screen, live sports/World Cup, the watch-only portfolio, and app-wide light/dark theming are implemented. Trading is **mock/simulated** pending wallet + proxy integration and funding.
+🚧 **In active development.** Browsing (with a dynamic, tag-resolved category rail), live order books, the Crypto hub with a live BTC detail screen, live sports/World Cup, the Esports hub, the watch-only portfolio, and app-wide light/dark theming are implemented. Trading is **mock/simulated** pending wallet + proxy integration and funding.
 
 ---
 
@@ -236,14 +248,17 @@ Each feature slice (Markets, Orderbook, Portfolio, LiveStats, Trading) has its o
 - [x] Watch-only portfolio (positions, activity, leaderboard) by wallet address
 - [x] Dynamic category rail — curated categories (e.g. Crypto, Esports) resolved live from Gamma tags
 - [x] Crypto hub — Up/Down, Above/Below, Price Range, Hit Price markets, plus a live BTC detail screen
+- [x] Esports hub — live matches, stream hero, trade ticker, and leaderboard
 - [x] App-wide light/dark theme toggle, persisted locally
 - [x] 1024pt app icon (light/dark/tinted variants)
+- [x] Continuous integration — package tests + app-target build on every push/PR (GitHub Actions)
+- [x] XCUITest UI suite covering core app flows
 - [ ] Real on-chain trading — vetted EIP-712 signer + backend proxy (currently simulated)
 - [ ] Wallet connect & session auth
 - [ ] Portfolio funding and real positions on market detail
 - [ ] Push notifications for price moves and market resolutions
-- [ ] Polished screenshots, demo video, and App Store assets covering the Crypto hub and theming
-- [ ] Expanded test coverage across feature slices, and CI wiring
+- [ ] Polished screenshots, demo video, and App Store assets covering the Crypto/Esports hubs and theming
+- [ ] Expanded test coverage across feature slices and a formal coverage target
 
 ---
 
@@ -278,6 +293,6 @@ To be determined. <!-- TODO: choose a license (e.g. MIT) and add a LICENSE file.
 
 ## Author
 
-**Sok Pich** — [@sokpichdev](https://github.com/sokpichdev)
+**Sok Pich** — [@sokpichdev](https://github.com/sokpichdev) · [sokpich.dev/nextoutcome](https://www.sokpich.dev/nextoutcome)
 
 If you're building something similar or want to talk iOS/prediction markets, open an issue or reach out on GitHub.

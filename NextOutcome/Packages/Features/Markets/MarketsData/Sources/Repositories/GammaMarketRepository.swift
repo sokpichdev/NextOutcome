@@ -91,9 +91,13 @@ public struct GammaMarketRepository: MarketRepository {
             path: "/public-search",
             query: ["q": query, "type": "events", "limit_per_type": "10"]
         )
-        struct SearchEnvelope: Decodable { let events: [EventDTO] }
+        // `events` is optional on purpose: when nothing matches, Gamma omits the key
+        // entirely and returns just `{"pagination": …}`. Decoding it as required turned
+        // every no-match query into a thrown error, so the UI showed "Search failed"
+        // where it should have shown "No results".
+        struct SearchEnvelope: Decodable { let events: [EventDTO]? }
         let envelope: SearchEnvelope = try await client.fetch(endpoint)
-        return envelope.events.map(MarketMapper.event(from:))
+        return (envelope.events ?? []).map(MarketMapper.event(from:))
     }
 
     /// Fetches the top holders of a market's condition from Data `/holders`.

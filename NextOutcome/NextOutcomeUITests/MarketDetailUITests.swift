@@ -24,7 +24,7 @@ final class MarketDetailUITests: XCTestCase {
 
         // Navigate: Search tab → query → first result.
         app.searchTab.tap()
-        let searchField = app.searchFields.firstMatch
+        let searchField = app.searchField
         assertAppears(searchField, timeout: UIWait.load, "Search field should exist")
         searchField.tap()
         searchField.typeText("bitcoin")
@@ -56,7 +56,7 @@ final class MarketDetailUITests: XCTestCase {
         }
 
         app.goBack()
-        assertAppears(app.searchFields.firstMatch, timeout: UIWait.ui,
+        assertAppears(app.searchField, timeout: UIWait.ui,
                       "Back should return to the search results")
     }
 }

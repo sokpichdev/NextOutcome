@@ -1,0 +1,54 @@
+name: Tests
+
+# The UI tests (NextOutcomeUITests) are deliberately NOT run here. They drive a
+# simulator against live Polymarket APIs and assert on transient market data, so
+# they fail when the market moves rather than when the code breaks — which would
+# train everyone to ignore a red build. Run them locally via scripts/run-tests.sh.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A newer push to the same branch supersedes an in-flight run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package-tests:
+    name: Package tests (swift test)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Recorded so a future toolchain bump that changes behaviour is diagnosable
+      # from the log alone. Pin with xcode-select here if drift ever bites.
+      - name: Toolchain versions
+        run: |
+          swift --version
+          xcodebuild -version
+
+      # ~420 hermetic tests, about a second. No simulator, no network.
+      - name: swift test
+        working-directory: NextOutcome/Packages
+        run: swift test
+
+  app-build:
+    name: App target builds
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # `swift test` compiles the packages but NOT the Xcode app target, so it
+      # cannot catch a break in App/ — AppContainer.swift wires every feature
+      # together and is invisible to the package suite. This job covers that gap.
+      # Build only: running tests here would pull in the live-API UI tests.
+      - name: xcodebuild (compile only)
+        run: |
+          xcodebuild build \
+            -project NextOutcome/NextOutcome.xcodeproj \
+            -scheme NextOutcome \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
