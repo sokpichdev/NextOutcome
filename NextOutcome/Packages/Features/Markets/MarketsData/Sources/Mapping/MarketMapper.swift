@@ -45,7 +45,8 @@ enum MarketMapper {
     
     /// Maps a `TagDTO` to a domain `Tag`.
     static func tag(from dto: TagDTO) -> Tag {
-        Tag(id: dto.id, label: dto.label, slug: dto.slug)
+        Tag(id: dto.id, label: dto.label, slug: dto.slug,
+            activeEventsCount: dto.activeEventsCount)
     }
 
     /// Maps a `MoverDTO` to a domain `Mover`, resolving the current probability (first outcome

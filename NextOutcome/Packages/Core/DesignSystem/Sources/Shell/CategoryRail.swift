@@ -2,10 +2,10 @@ import SwiftUI
 
 /// Horizontally scrolling top-level category rail pinned under the top bar.
 ///
-/// Renders one tappable "chip" per tab in `tabs` — the 5 pinned tabs (Trending, World
-/// Cup, Breaking, Politics, Sports) plus any curated categories that have resolved to a
-/// live tag id. Tapping a chip updates the `selected` binding, which the parent view
-/// uses to switch which content feed is shown below.
+/// Renders one tappable "chip" per tab in `tabs`, in the order given. The list is fetched at
+/// runtime from Gamma's `top-navbar` tag, so this view makes no assumptions about which
+/// categories exist or how many there are. Tapping a chip updates the `selected` binding,
+/// which the parent view uses to switch which content feed is shown below.
 public struct CategoryRail: View {
     /// The tabs to render, in order.
     private let tabs: [HubTab]
@@ -16,10 +16,10 @@ public struct CategoryRail: View {
 
     /// Creates the category rail.
     /// - Parameters:
-    ///   - tabs: The tabs to render, in order. Defaults to the 5 pinned tabs.
+    ///   - tabs: The tabs to render, in order. Defaults to the offline fallback rail.
     ///   - selected: A binding to the currently selected tab, shared with the parent view
     ///     that decides what content to show.
-    public init(tabs: [HubTab] = HubTab.pinned, selected: Binding<HubTab>) {
+    public init(tabs: [HubTab] = HubTab.fallbackNav, selected: Binding<HubTab>) {
         self.tabs = tabs
         self._selected = selected
     }

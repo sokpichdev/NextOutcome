@@ -13,11 +13,18 @@ public struct Tag: Identifiable, Hashable {
     public let label: String
     /// The tag's URL slug, used when querying by tag.
     public let slug: String
+    /// How many live events carry this tag, when the source endpoint reports it.
+    ///
+    /// `nil` means "unknown", not "zero" — only the related-tags endpoint returns a count.
+    /// The navigation rows drop tags whose count is `0`, because Gamma keeps dead tags in the
+    /// payload regardless of the `status` query parameter.
+    public let activeEventsCount: Int?
 
     /// Creates a tag.
-    public init(id: String, label: String, slug: String) {
+    public init(id: String, label: String, slug: String, activeEventsCount: Int? = nil) {
         self.id = id
         self.label = label
         self.slug = slug
+        self.activeEventsCount = activeEventsCount
     }
 }

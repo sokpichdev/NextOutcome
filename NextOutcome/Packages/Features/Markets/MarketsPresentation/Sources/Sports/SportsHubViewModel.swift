@@ -110,9 +110,12 @@ public final class SportsHubViewModel {
     }
 
     /// Fetches every event under the general sports tag, derives the league/sport chips from
-    /// their own tags (the tag catalogue endpoint only returns a curated top-nav set and never
-    /// includes league-specific tags — see `TrendingChipDeriver`), groups them into the Live
-    /// tab's sections (highest volume first), then kicks off the initial Futures fetch.
+    /// their own tags, groups them into the Live tab's sections (highest volume first), then
+    /// kicks off the initial Futures fetch.
+    ///
+    /// These chips stay event-derived rather than using Gamma's own sub-topic row: that row
+    /// (`/tags/slug/sports/related-tags/tags`) tops out around 18 broad entries — NFL, Soccer,
+    /// EPL — whereas the Live tab needs a section per league actually playing right now.
     public func load() async {
         state = .loading
         let events = (try? await fetchAllEvents.execute(tagID: Self.sportsTagID, status: .active)) ?? []

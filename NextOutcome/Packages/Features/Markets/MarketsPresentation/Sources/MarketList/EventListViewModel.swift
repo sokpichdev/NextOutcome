@@ -34,27 +34,25 @@ public final class EventListViewModel {
     /// Whether a "load more" page fetch is in flight.
     public private(set) var isLoadingMore = false
 
-    /// Category filter chips. `selectedTagID == nil` means "All".
-    public private(set) var tags: [Tag] = []
+    /// The tag id of the selected category, or `nil` for the unfiltered feed.
     public private(set) var selectedTagID: String?
 
-    /// Trending sub-filter chips, derived from the tags of the unfiltered feed. Shown for
-    /// categories in `categoriesWithSubChips` (Trending, Politics — e.g. Politics's
-    /// "All/Trump/Trump Daily/Midterms" row). `selectedTrendingTagID == nil` means "All".
-    public private(set) var trendingChips: [Tag] = []
-    public private(set) var selectedTrendingTagID: String?
-    private var currentCategory: HubTab = .trending
-    /// Categories that show the sub-filter chip row (derived from the loaded events' tags).
-    private static let categoriesWithSubChips: Set<HubTab> = [.trending, .politics]
+    /// The selected category's sub-topic chips — Gamma's own carousel row for that category
+    /// (e.g. Politics's "Trump / Trump Daily / Midterms"), in the server's rank order.
+    /// `selectedSubTopicTagID == nil` means "All", the synthetic leading chip.
+    public private(set) var subTopicChips: [Tag] = []
+    public private(set) var selectedSubTopicTagID: String?
+    private var currentCategory: HubTab = .all
 
-    /// Whether the sub-filter chip row has anything to show. This row is always visible
-    /// (non-collapsible) once populated — the collapsible control is the advanced filter row
-    /// instead (see `filterRowVisible`).
-    public var showsTrendingChips: Bool { Self.categoriesWithSubChips.contains(currentCategory) && !trendingChips.isEmpty }
+    /// Whether the sub-topic chip row has anything to show. Purely data-driven: several
+    /// categories genuinely have no sub-topics and simply don't render the row. It's always
+    /// visible (non-collapsible) once populated — the collapsible control is the advanced
+    /// filter row instead (see `filterRowVisible`).
+    public var showsSubTopicChips: Bool { !subTopicChips.isEmpty }
 
-    /// The tag actually sent to the API: the trending chip when one is active, else the
+    /// The tag actually sent to the API: the sub-topic chip when one is active, else the
     /// category tag. Pagination reads the same value, so `loadMore` follows the chip filter.
-    private var effectiveTagID: String? { selectedTrendingTagID ?? selectedTagID }
+    private var effectiveTagID: String? { selectedSubTopicTagID ?? selectedTagID }
 
     /// The sort options offered in the secondary filter row. Which subset is offered
     /// depends on `status` — see `options(for:)`.
@@ -178,8 +176,12 @@ public final class EventListViewModel {
         currentCategory = category
 
         let previousEffective = effectiveTagID
-        if category != .trending { selectedTrendingTagID = nil }
+        // A sub-topic belongs to the category it came from, so switching category always
+        // drops it — otherwise Politics's "Midterms" would survive into Tech.
+        selectedSubTopicTagID = nil
         selectedTagID = category.tagID
+
+        await loadSubTopicChips(for: category)
 
         if isInitial || effectiveTagID != previousEffective {
             nextCursor = nil
@@ -187,10 +189,16 @@ public final class EventListViewModel {
         }
     }
 
-    /// Select a trending sub-filter chip (nil = "All") and reload from the top.
-    public func selectTrendingChip(tagID: String?) async {
-        guard Self.categoriesWithSubChips.contains(currentCategory), tagID != selectedTrendingTagID else { return }
-        selectedTrendingTagID = tagID
+    /// Loads the sub-topic carousel for `category`. Best-effort: a failure just leaves the row
+    /// hidden. Cheap to call repeatedly — the repository caches each row by slug.
+    private func loadSubTopicChips(for category: HubTab) async {
+        subTopicChips = (try? await fetchRelatedTags.execute(slug: category.id)) ?? []
+    }
+
+    /// Select a sub-topic chip (nil = "All") and reload from the top.
+    public func selectSubTopicChip(tagID: String?) async {
+        guard tagID != selectedSubTopicTagID else { return }
+        selectedSubTopicTagID = tagID
         nextCursor = nil
         await load()
     }
@@ -253,20 +261,20 @@ public final class EventListViewModel {
 
     /// Use case that fetches event pages.
     private let fetchEvents: FetchEventsUseCase
-    /// Use case that fetches the filter tags.
-    private let fetchTags: FetchTagsUseCase
+    /// Use case that fetches a category's sub-topic chip row.
+    private let fetchRelatedTags: FetchRelatedTagsUseCase
     /// Use case that runs the server-side event search.
     private let searchEvents: SearchEventsUseCase
 
     /// Creates the view model.
     /// - Parameters:
     ///   - fetchEvents: Loads event pages.
-    ///   - fetchTags: Loads the category filter tags.
+    ///   - fetchRelatedTags: Loads the selected category's sub-topic chips.
     ///   - searchEvents: Runs the server-side event search. Defaults to a stub in DEBUG for
     ///     call sites that don't wire search (e.g. existing tests).
-    public init(fetchEvents: FetchEventsUseCase, fetchTags: FetchTagsUseCase, searchEvents: SearchEventsUseCase) {
+    public init(fetchEvents: FetchEventsUseCase, fetchRelatedTags: FetchRelatedTagsUseCase, searchEvents: SearchEventsUseCase) {
         self.fetchEvents = fetchEvents
-        self.fetchTags = fetchTags
+        self.fetchRelatedTags = fetchRelatedTags
         self.searchEvents = searchEvents
     }
 
@@ -304,20 +312,13 @@ public final class EventListViewModel {
         }
     }
 
-    /// Loads the first page for the current filters, and (on the unfiltered trending feed)
-    /// derives the trending sub-filter chips.
+    /// Loads the first page for the current filters.
     public func load() async {
         state = .loading
-        if tags.isEmpty { await loadTags() }
         do {
             let page = try await fetchEvents.execute(tagID: effectiveTagID, sort: domainSort, status: domainStatus, period: domainPeriod)
             nextCursor = page.nextCursor
             state = page.items.isEmpty ? .empty : .loaded(page.items)
-            // Chips come only from the *unfiltered* feed so the row doesn't reshuffle while
-            // the user filters with it.
-            if Self.categoriesWithSubChips.contains(currentCategory) && selectedTrendingTagID == nil && !page.items.isEmpty {
-                trendingChips = TrendingChipDeriver.chips(from: page.items)
-            }
         } catch {
             state = .failed("Couldn't load markets. pull to refresh.")
         }
@@ -325,14 +326,6 @@ public final class EventListViewModel {
 
     /// Reloads from the first page (pull-to-refresh).
     public func refresh() async {
-        nextCursor = nil
-        await load()
-    }
-
-    /// Select a category chip (nil = All) and reload from the top.
-    public func select(tagID: String?) async {
-        guard tagID != selectedTagID else { return }
-        selectedTagID = tagID
         nextCursor = nil
         await load()
     }
@@ -370,18 +363,12 @@ public final class EventListViewModel {
         }
     }
 
-    /// Loads the category filter tags. Best-effort: a failure just hides the filter row.
-    private func loadTags() async {
-        // Tags are a non-critical enhancement — a failure just hides the filter row.
-        tags = (try? await fetchTags.execute()) ?? []
-    }
-
     /// Test seam: build a VM pre-seeded into `.loaded` without a use case round-trip.
     #if DEBUG
     static func makeForTesting(events: [Event]) -> EventListViewModel {
         let vm = EventListViewModel(
             fetchEvents: FetchEventsUseCase.stub,
-            fetchTags: FetchTagsUseCase.stub,
+            fetchRelatedTags: FetchRelatedTagsUseCase.stub,
             searchEvents: SearchEventsUseCase.stub
         )
         vm.state = .loaded(events)

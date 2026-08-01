@@ -38,7 +38,7 @@ public struct ShellChrome<Content: View>: View {
     ///   - onAvatar: Action for the avatar icon (required — typically opens the account menu/drawer).
     ///   - content: A view builder producing the tab's main content.
     public init(
-        tabs: [HubTab] = HubTab.pinned,
+        tabs: [HubTab] = HubTab.fallbackNav,
         selectedCategory: Binding<HubTab>,
         showsCategoryRail: Bool = true,
         onGift: @escaping () -> Void = {},
