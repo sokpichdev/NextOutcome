@@ -67,20 +67,20 @@ final class AppContainer {
     ///
     /// Each `makeXxxViewModel` method injects the use cases a screen needs, keeping the
     /// view model free of any knowledge about how data is fetched.
-    /// - Returns: A view model wired to fetch events and their filter tags.
+    /// - Returns: A view model wired to fetch events and the selected category's sub-topics.
     func makeEventListViewModel() -> EventListViewModel {
         EventListViewModel(
             fetchEvents: FetchEventsUseCase(repository: repository),
-            fetchTags: FetchTagsUseCase(repository: repository),
+            fetchRelatedTags: FetchRelatedTagsUseCase(repository: repository),
             searchEvents: SearchEventsUseCase(repository: repository)
         )
     }
 
-    /// Builds the view model that resolves the home rail's curated additional
-    /// categories (Crypto, Esports, ...) to their live tag ids.
-    /// - Returns: A view model wired to resolve tags by slug.
+    /// Builds the view model that fetches the home rail's categories from Gamma's
+    /// `top-navbar` tag.
+    /// - Returns: A view model wired to fetch a navigation row by slug.
     func makeHubTabsViewModel() -> HubTabsViewModel {
-        HubTabsViewModel(fetchTag: FetchTagUseCase(repository: repository))
+        HubTabsViewModel(fetchRelatedTags: FetchRelatedTagsUseCase(repository: repository))
     }
 
     /// Builds the view model for the Breaking movers feed (biggest 24h movers).

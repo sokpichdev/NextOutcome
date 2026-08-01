@@ -5,8 +5,13 @@
 //  Created by Sok Pich on 19/07/2026.
 //
 //  TC-030, TC-031: the horizontal category rail swaps the Home tab's hub
-//  content in place — never a navigation push — for every pinned chip, and
-//  swipes to reveal the runtime-curated chips (Crypto, Esports, …).
+//  content in place — never a navigation push — and swipes to reveal the
+//  chips further along the row.
+//
+//  The rail is fetched at runtime from Gamma's `top-navbar` tag, so its exact
+//  contents are Polymarket's to change without notice. These tests only assert
+//  on chips that appear in both the live row and `HubTab.fallbackNav`, so they
+//  hold whether or not the fetch succeeded.
 //
 
 import XCTest
@@ -17,25 +22,20 @@ final class CategoryRailUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    /// TC-030: each pinned chip selects in place. After every tap the rail is
-    /// still present, no Back button appeared, and the hub's content anchor
+    /// TC-030: each chip selects in place. After every tap the rail is still
+    /// present, no Back button appeared, and the hub's content anchor
     /// eventually shows.
     @MainActor
-    func testPinnedChipsSwapInPlace() throws {
+    func testChipsSwapInPlace() throws {
         let app = XCUIApplication.launched()
-        assertAppears(app.buttons["Trending"], timeout: UIWait.ui, "Rail should be visible")
+        assertAppears(app.buttons["All"], timeout: UIWait.firstLoad, "Rail should be visible")
 
         // chip label → an anchor that proves that hub rendered.
-        // Breaking rows expose "… percent over 24 hours"; Sports shows the
-        // Odds Format menu; World Cup and Politics render market cards (Vol).
+        // Sports shows the Odds Format menu; All and Politics render market cards (Vol).
         let hubs: [(chip: String, anchor: () -> XCUIElement)] = [
-            ("World Cup", { app.anyVolumeLabel }),
-            ("Breaking", { app.staticTexts
-                .matching(NSPredicate(format: "label CONTAINS[c] %@", "percent over 24 hours"))
-                .firstMatch }),
             ("Politics", { app.anyVolumeLabel }),
             ("Sports", { app.buttons["Odds Format"] }),
-            ("Trending", { app.anyVolumeLabel }),
+            ("All", { app.anyVolumeLabel }),
         ]
 
         for hub in hubs {
@@ -50,34 +50,53 @@ final class CategoryRailUITests: XCTestCase {
         }
     }
 
-    /// TC-031: the rail scrolls horizontally to reveal curated chips resolved
-    /// at runtime from Gamma tags (Crypto, Esports, Finance, …).
+    /// TC-031: the rail scrolls horizontally to reveal the chips further along
+    /// the fetched row (Weather sits near its end).
     @MainActor
-    func testRailScrollsToCuratedChips() throws {
+    func testRailScrollsToLaterChips() throws {
         let app = XCUIApplication.launched()
-        let trendingChip = app.buttons["Trending"]
-        assertAppears(trendingChip, timeout: UIWait.ui, "Rail should be visible")
+        let allChip = app.buttons["All"]
+        assertAppears(allChip, timeout: UIWait.firstLoad, "Rail should be visible")
 
-        // Curated chips need a network round trip to resolve; give the first
-        // one time to exist in the hierarchy before swiping to it.
-        let cryptoChip = app.buttons["Crypto"]
-        _ = cryptoChip.waitForExistence(timeout: UIWait.firstLoad)
+        // The live row needs a network round trip; give the target chip time to
+        // exist in the hierarchy before swiping to it.
+        let weatherChip = app.buttons["Weather"]
+        _ = weatherChip.waitForExistence(timeout: UIWait.firstLoad)
 
-        // Swipe the rail itself (start from the Trending chip so we drag the
+        // Swipe the rail itself (start from the leading chip so we drag the
         // horizontal scroller, not the vertical feed).
         var swipes = 0
-        while !cryptoChip.isHittable && swipes < 6 {
-            trendingChip.coordinate(withNormalizedOffset: CGVector(dx: 2.5, dy: 0.5))
+        while !weatherChip.isHittable && swipes < 6 {
+            allChip.coordinate(withNormalizedOffset: CGVector(dx: 2.5, dy: 0.5))
                 .press(forDuration: 0.1,
-                       thenDragTo: trendingChip.coordinate(withNormalizedOffset: .zero))
+                       thenDragTo: allChip.coordinate(withNormalizedOffset: .zero))
             swipes += 1
         }
 
-        XCTAssertTrue(cryptoChip.exists,
-                      "The curated 'Crypto' chip should be reachable by swiping the rail")
-        attachScreenshot(of: app, named: "Rail — curated chips revealed")
+        XCTAssertTrue(weatherChip.exists,
+                      "The 'Weather' chip should be reachable by swiping the rail")
+        attachScreenshot(of: app, named: "Rail — later chips revealed")
 
-        cryptoChip.tap()
-        XCTAssertFalse(app.backButton.exists, "Curated chips also select in place")
+        weatherChip.tap()
+        XCTAssertFalse(app.backButton.exists, "Later chips also select in place")
+    }
+
+    /// The sub-topic carousel is Gamma's own row for the selected category, so
+    /// selecting a chip from it must filter the feed in place, not push.
+    @MainActor
+    func testSubTopicRowFiltersInPlace() throws {
+        let app = XCUIApplication.launched()
+        assertAppears(app.buttons["All"], timeout: UIWait.firstLoad, "Rail should be visible")
+        assertAppears(app.anyVolumeLabel, timeout: UIWait.firstLoad, "Feed should load")
+
+        // The row always leads with a synthetic "All" chip when it has entries.
+        // It's absent for categories with no sub-topics, which is a valid state.
+        let subTopicAll = app.buttons.matching(identifier: "All").element(boundBy: 1)
+        guard subTopicAll.waitForExistence(timeout: UIWait.ui) else {
+            throw XCTSkip("The selected category has no sub-topic row today")
+        }
+
+        attachScreenshot(of: app, named: "Rail — sub-topic row")
+        XCTAssertFalse(app.backButton.exists, "Sub-topic chips must not push a screen")
     }
 }

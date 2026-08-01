@@ -17,11 +17,17 @@ import SharedDomain
 public struct GammaMarketRepository: MarketRepository {
     /// The shared API client used for all requests.
     private let client: APIClient
+    /// Caches the navigation rows so switching categories doesn't re-request them.
+    private let relatedTagsCache: RelatedTagsCache
 
     /// Creates the repository.
-    /// - Parameter client: The shared `APIClient`.
-    public init(client: APIClient) {
+    /// - Parameters:
+    ///   - client: The shared `APIClient`.
+    ///   - relatedTagsCache: Caches the nav rows. The default gives one instance per
+    ///     repository, which is per-app in practice since `AppContainer` builds one.
+    public init(client: APIClient, relatedTagsCache: RelatedTagsCache = RelatedTagsCache()) {
         self.client = client
+        self.relatedTagsCache = relatedTagsCache
     }
 
     /// Page size for cursor pagination (also how the next cursor is derived).
@@ -245,6 +251,27 @@ public struct GammaMarketRepository: MarketRepository {
         let endpoint = Endpoint(host: .gamma, path: "/tags/slug/\(slug)")
         let dto: TagDTO = try await client.fetch(endpoint)
         return MarketMapper.tag(from: dto)
+    }
+
+    /// Fetches the tags related to `slug` from Gamma `/tags/slug/{slug}/related-tags/tags`,
+    /// in the server's rank order, served from `relatedTagsCache` when still fresh.
+    ///
+    /// The trailing `/tags` matters: the shorter `/related-tags` returns bare relationship
+    /// records (`tagID`/`relatedTagID`/`rank`) with no labels or slugs, which is unusable for
+    /// rendering a chip. `status=active` is sent for forward-compatibility only — today Gamma
+    /// returns the same rows for `active`, `closed` and no value at all, so callers still have
+    /// to drop dead tags by `activeEventsCount` themselves.
+    public func fetchRelatedTags(slug: String) async throws -> [Tag] {
+        if let cached = await relatedTagsCache.value(for: slug) { return cached }
+        let endpoint = Endpoint(
+            host: .gamma,
+            path: "/tags/slug/\(slug)/related-tags/tags",
+            query: ["status": "active"]
+        )
+        let dtos: [TagDTO] = try await client.fetch(endpoint)
+        let tags = dtos.map(MarketMapper.tag(from:))
+        await relatedTagsCache.store(tags, for: slug)
+        return tags
     }
 }
 

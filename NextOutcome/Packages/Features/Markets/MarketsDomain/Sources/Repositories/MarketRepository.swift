@@ -42,6 +42,14 @@ public protocol MarketRepository: Sendable {
     /// Fetches a single tag by its URL slug (e.g. resolving a curated home-rail category
     /// to its live Gamma tag id at runtime), or `nil` if no tag exists at that slug.
     func fetchTag(slug: String) async throws -> Tag?
+    /// Fetches the tags related to the tag at `slug`, in Gamma's server-assigned rank order.
+    ///
+    /// This is how both navigation rows are sourced: a row *is* a curated tag whose related
+    /// tags are its entries. Passing `"top-navbar"` yields the top-level category rail;
+    /// passing a category's own slug yields that category's sub-topic carousel. An empty
+    /// result is a normal answer (several categories genuinely have no sub-topics), not an
+    /// error — the row simply doesn't render.
+    func fetchRelatedTags(slug: String) async throws -> [Tag]
     /// Fetches the top holders of a market's condition.
     func holders(conditionId: String) async throws -> [Holder]
     /// Fetches the comments on an event's discussion thread, sorted and optionally
@@ -63,4 +71,5 @@ public extension MarketRepository {
     func commenterPositions(proxyWallet: String, eventID: String) async throws -> [CommentHolding] { [] }
     func movers(tagID: String?) async throws -> [Mover] { [] }
     func fetchTag(slug: String) async throws -> Tag? { nil }
+    func fetchRelatedTags(slug: String) async throws -> [Tag] { [] }
 }

@@ -30,16 +30,18 @@ final class LaunchAndShellUITests: XCTestCase {
                        "Expected exactly Home, Search, Breaking, Portfolio tabs")
         XCTAssertTrue(app.homeTab.isSelected, "Home should be the initial tab")
 
-        // Pinned category rail chips (fixed order per HubTab.pinned).
-        for chip in ["Trending", "World Cup", "Breaking", "Politics", "Sports"] {
-            assertAppears(app.buttons[chip], timeout: UIWait.ui,
-                          "Expected the pinned '\(chip)' category chip on Home")
+        // The rail is fetched from Gamma's `top-navbar` tag, so its exact contents are
+        // Polymarket's to change. These four lead both the live row and the offline
+        // fallback, so they're the stable subset to assert on.
+        for chip in ["All", "Politics", "Sports", "Crypto"] {
+            assertAppears(app.buttons[chip], timeout: UIWait.firstLoad,
+                          "Expected the '\(chip)' category chip on Home")
         }
 
-        // The Trending feed eventually shows at least one real market card.
+        // "All" is the default and sends no tag filter, so the feed is the full list.
         assertAppears(app.anyVolumeLabel, timeout: UIWait.firstLoad,
-                      "Expected the Trending feed to load at least one card with a Vol label")
-        attachScreenshot(of: app, named: "Launch — Home / Trending")
+                      "Expected the All feed to load at least one card with a Vol label")
+        attachScreenshot(of: app, named: "Launch — Home / All")
     }
 
     /// TC-003: the NOTopBar chrome buttons exist and are hittable. These are

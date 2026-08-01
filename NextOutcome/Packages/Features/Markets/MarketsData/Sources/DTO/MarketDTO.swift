@@ -158,6 +158,14 @@ struct TagDTO: Decodable {
     let label: String
     /// The tag's URL slug.
     let slug: String
+    /// How many live events carry this tag. Only the `related-tags/tags` shape returns it;
+    /// `/tags/slug/{slug}` omits it, hence the optional. Load-bearing for the nav rows:
+    /// Gamma's `status=active` filter is a no-op, so dead tags (count `0`) come back in the
+    /// payload and the client has to drop them itself.
+    let activeEventsCount: Int?
+    /// Whether Gamma marks this tag as the event's headline category. Not a nav-row filter —
+    /// the live top nav contains tags with `forceHide: true` — kept only for breadcrumbs.
+    let forceShow: Bool?
 }
 
 /// Gamma series row — identifies a recurring market family (e.g. "BTC Up or Down 5m").

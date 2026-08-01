@@ -104,7 +104,7 @@ import SwiftUI
 
 #Preview("Shell — Chrome") {
     struct Demo: View {
-        @State var category: HubTab = .trending
+        @State var category: HubTab = .all
         var body: some View {
             ShellChrome(selectedCategory: $category, onAvatar: {}) {
                 ScrollView { Text("Content").foregroundStyle(DSColor.textPrimary).padding() }

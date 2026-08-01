@@ -51,7 +51,7 @@ final class HideSportsPaginationTests: XCTestCase {
 
         let repo = QueuedPageRepository(pages: [page2])
         let fetchEvents = FetchEventsUseCase(repository: repo)
-        let vm = EventListViewModel(fetchEvents: fetchEvents, fetchTags: FetchTagsUseCase.stub, searchEvents: SearchEventsUseCase.stub)
+        let vm = EventListViewModel(fetchEvents: fetchEvents, fetchRelatedTags: FetchRelatedTagsUseCase.stub, searchEvents: SearchEventsUseCase.stub)
 
         // Seed: page1 already loaded, cursor points to page2, hideSports=true
         vm.seedForTesting(

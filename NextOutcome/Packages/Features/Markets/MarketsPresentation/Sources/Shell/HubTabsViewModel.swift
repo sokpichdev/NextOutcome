@@ -2,59 +2,57 @@ import Foundation
 import MarketsDomain
 import DesignSystem
 
-/// Drives the home rail's tab list: the 5 pinned tabs are available immediately;
-/// `loadDynamicTabsIfNeeded()` resolves the curated additional categories (Crypto,
-/// Esports, ...) to their live Gamma tag ids and appends them afterward.
+/// Drives the home rail's tab list.
+///
+/// The rail is whatever Gamma's curated `top-navbar` tag says it is: one request returns every
+/// category's id, label and rank together. Until that lands — and if it fails — the rail shows
+/// `HubTab.fallbackNav` so it's never empty.
 @MainActor
 @Observable
 public final class HubTabsViewModel {
-    /// The tabs to render in the rail, in order. Starts as just the pinned 5; grows once
-    /// `loadDynamicTabsIfNeeded()` resolves.
-    public private(set) var tabs: [HubTab] = HubTab.pinned
+    /// The Gamma tag whose related tags *are* the top navigation row. Found in Polymarket's own
+    /// React Query keys; there is a real tag at this slug labelled "Top Navbar".
+    private static let navigationRowSlug = "top-navbar"
 
-    private let fetchTag: FetchTagUseCase
+    /// The slug of the tag that means "everything". It exists as a real tag, but filtering by
+    /// it returns only the handful of events literally tagged "all" — so its tab sends no
+    /// filter at all. See `HubTab.tagID`.
+    private static let unfilteredSlug = "all"
+
+    /// The tabs to render in the rail, in order. Starts as the offline fallback and is replaced
+    /// wholesale once `loadDynamicTabsIfNeeded()` resolves.
+    public private(set) var tabs: [HubTab] = HubTab.fallbackNav
+
+    private let fetchRelatedTags: FetchRelatedTagsUseCase
     private var hasLoadedDynamicTabs = false
 
     /// Creates the view model.
-    /// - Parameter fetchTag: Resolves a curated category's slug to its live tag id.
-    public init(fetchTag: FetchTagUseCase) {
-        self.fetchTag = fetchTag
+    /// - Parameter fetchRelatedTags: Fetches a navigation row by its tag slug.
+    public init(fetchRelatedTags: FetchRelatedTagsUseCase) {
+        self.fetchRelatedTags = fetchRelatedTags
     }
 
-    /// Resolves `HubTab.curatedAdditional` to live tag ids and appends the ones that
-    /// succeed, in their curated order, after the pinned tabs. Best-effort: any slug that
-    /// fails to resolve (network error, or the slug no longer exists) is silently skipped
-    /// — no error is surfaced, the rail just doesn't grow that entry. Idempotent and safe
-    /// to call from `.task` on every appearance; only the first call does any fetching.
+    /// Replaces the rail with the live navigation row, in the server's rank order.
+    ///
+    /// Best-effort: on failure — or if the row comes back empty, which would blank the rail —
+    /// the fallback stays and no error is surfaced. Idempotent and safe to call from `.task` on
+    /// every appearance; only the first call fetches.
     public func loadDynamicTabsIfNeeded() async {
         guard !hasLoadedDynamicTabs else { return }
         hasLoadedDynamicTabs = true
 
-        let curated = HubTab.curatedAdditional
-        let resolved: [Int: HubTab] = await withTaskGroup(of: (Int, HubTab?).self) { group in
-            for (index, category) in curated.enumerated() {
-                group.addTask { [fetchTag] in
-                    guard let tag = try? await fetchTag.execute(slug: category.slug) else {
-                        return (index, nil)
-                    }
-                    let resolvedTab = HubTab(
-                        id: category.slug,
-                        title: category.title,
-                        glyph: category.glyph,
-                        activeColor: DSColor.textPrimary,
-                        tagID: tag.id
-                    )
-                    return (index, resolvedTab)
-                }
-            }
-            var results: [Int: HubTab] = [:]
-            for await (index, tab) in group {
-                if let tab { results[index] = tab }
-            }
-            return results
-        }
+        guard let tags = try? await fetchRelatedTags.execute(slug: Self.navigationRowSlug),
+              !tags.isEmpty
+        else { return }
 
-        let dynamicTabs = curated.indices.compactMap { resolved[$0] }
-        tabs = HubTab.pinned + dynamicTabs
+        tabs = tags.map { tag in
+            HubTab(
+                id: tag.slug,
+                title: tag.label,
+                glyph: nil,
+                activeColor: DSColor.textPrimary,
+                tagID: tag.slug == Self.unfilteredSlug ? nil : tag.id
+            )
+        }
     }
 }

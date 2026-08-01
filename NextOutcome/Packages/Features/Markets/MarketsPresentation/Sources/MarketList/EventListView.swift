@@ -27,7 +27,7 @@ public struct EventListView: View {
     ///   - politicsHubViewModel: The Politics hub view model, when in the Politics category.
     public init(
         viewModel: EventListViewModel,
-        selectedCategory: HubTab = .trending,
+        selectedCategory: HubTab = .all,
         politicsHubViewModel: PoliticsHubViewModel? = nil
     ) {
         self._viewModel = State(initialValue: viewModel)
@@ -39,11 +39,11 @@ public struct EventListView: View {
         VStack(spacing: 0) {
             SearchFilterRow(viewModel: viewModel)
             // Outside `content` so the row stays visible while a chip re-query is loading.
-            if viewModel.showsTrendingChips {
-                TrendingChipRow(
-                    chips: viewModel.trendingChips,
-                    selectedTagID: viewModel.selectedTrendingTagID,
-                    onSelect: { id in Task { await viewModel.selectTrendingChip(tagID: id) } }
+            if viewModel.showsSubTopicChips {
+                SubTopicChipRow(
+                    chips: viewModel.subTopicChips,
+                    selectedTagID: viewModel.selectedSubTopicTagID,
+                    onSelect: { id in Task { await viewModel.selectSubTopicChip(tagID: id) } }
                 )
             }
             if viewModel.filterRowVisible {

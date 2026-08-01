@@ -92,7 +92,7 @@ struct RootView: View {
                           activeColor: DSColor.accent, tagID: args[index + 2])
         }
         #endif
-        return .trending
+        return .all
     }()
     /// Whether the side drawer is currently slid in over the main content.
     @State private var isDrawerOpen = false
@@ -176,6 +176,14 @@ struct RootView: View {
                     // Home tab content changes depending on the selected shell category.
                     // The view models here are kept at root so the feed state does not
                     // reset when users switch tabs.
+                    //
+                    // Every branch matches on a Gamma tag slug (HubTab equality is id-only),
+                    // and the rail itself is fetched from the `top-navbar` tag. Polymarket
+                    // does not currently list `world-cup` or `esports` there, so those two
+                    // branches are unreachable from the rail right now — they are NOT dead
+                    // code, and light up again the moment those tags reappear in the nav.
+                    // (World Cup is also reachable inside the Sports hub; Breaking has its
+                    // own bottom tab.)
                     if selectedCategory == .worldCup {
                         WorldCupHubView(viewModel: worldCupViewModel)
                     } else if selectedCategory == .breaking {
@@ -233,7 +241,7 @@ struct RootView: View {
     ///   - content: The tab's screen content to embed inside the chrome.
     /// - Returns: The content wrapped in `ShellChrome` with the navigation bar hidden.
     @ViewBuilder
-    private func chrome<C: View>(tabs: [HubTab] = HubTab.pinned, showsCategoryRail: Bool = true, @ViewBuilder _ content: () -> C) -> some View {
+    private func chrome<C: View>(tabs: [HubTab] = HubTab.fallbackNav, showsCategoryRail: Bool = true, @ViewBuilder _ content: () -> C) -> some View {
         // Wrap each screen in the shared chrome UI used across tabs.
         // This adds the top bar (+ category rail, for Home) and the avatar button that opens the drawer.
         ShellChrome(
