@@ -58,6 +58,16 @@ public struct Event: Identifiable, Hashable {
     public let closed: Bool?
     /// When the event's window closes, from Gamma's `endDate`. `nil` when absent.
     public let endDate: Date?
+    /// The recurring series' display name (e.g. `"BTC Up or Down 5m"`), from
+    /// `series[0].title`. `nil` for non-recurring events.
+    ///
+    /// For a recurring market this is the name worth showing: the event's own `title` names a
+    /// single window (`"Bitcoin Up or Down - August 3, 10:15AM-10:20AM ET"`), which is both
+    /// too long for a card and wrong for one that re-points at the next window every few
+    /// minutes. Deliberately *not* folded into `title` — plenty of recurring series have a
+    /// vaguer name than their events (`"Bitcoin Hit Price Daily"` vs `"What price will
+    /// Bitcoin hit on August 3?"`), so which one reads better is the view's call.
+    public let seriesTitle: String?
 
     /// Creates an event. Usually built by the mapping layer from a DTO.
     public init(
@@ -79,7 +89,8 @@ public struct Event: Identifiable, Hashable {
         ended: Bool? = nil,
         live: Bool? = nil,
         closed: Bool? = nil,
-        endDate: Date? = nil
+        endDate: Date? = nil,
+        seriesTitle: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -100,6 +111,7 @@ public struct Event: Identifiable, Hashable {
         self.live = live
         self.closed = closed
         self.endDate = endDate
+        self.seriesTitle = seriesTitle
     }
 
     /// True when at least one market carries a sports section hint (moneyline/spreads/totals/…),

@@ -197,7 +197,8 @@ enum MarketMapper {
             ended: dto.ended,
             live: dto.live,
             closed: dto.closed,
-            endDate: DateParsing.parse(dto.endDate)
+            endDate: DateParsing.parse(dto.endDate),
+            seriesTitle: dto.series.first?.title
         )
     }
 }

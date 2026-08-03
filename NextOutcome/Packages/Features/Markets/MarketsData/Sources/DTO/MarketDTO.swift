@@ -195,6 +195,10 @@ struct TagDTO: Decodable {
 struct SeriesDTO: Decodable {
     /// The series slug, e.g. `"btc-up-or-down-5m"`.
     let slug: String
+    /// The series' display name, e.g. `"BTC Up or Down 5m"` — the name Polymarket's own
+    /// cards show for a recurring market, in place of the timestamped per-window event title
+    /// (`"Bitcoin Up or Down - August 3, 10:15AM-10:20AM ET"`).
+    let title: String?
 }
 
 /// Shared tolerant field helpers for the Gamma wire shape.

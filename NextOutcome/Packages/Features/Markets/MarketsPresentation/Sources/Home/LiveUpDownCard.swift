@@ -33,7 +33,7 @@ public struct LiveUpDownCard: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: DSLayout.spacing) {
                         CardIcon(url: event.imageURL)
-                        Text(event.title).font(DSFont.headline)
+                        Text(event.seriesTitle ?? event.title).font(DSFont.headline)
                             .foregroundStyle(DSColor.textPrimary).lineLimit(1)
                     }
                     HStack {

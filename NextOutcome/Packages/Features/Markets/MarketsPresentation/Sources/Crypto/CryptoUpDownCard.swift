@@ -21,6 +21,15 @@ public struct CryptoUpDownCard: View {
     /// - Parameter event: The event to display.
     public init(event: Event) { self.event = event }
 
+    /// The name to show. A live Up/Down card re-points at a new window every few minutes, so
+    /// the per-window event title (`"Bitcoin Up or Down - August 3, 10:15AM-10:20AM ET"`) is
+    /// both too long for the card and stale the moment the window rolls. The series name
+    /// (`"BTC Up or Down 5m"`) is what the card actually represents, and what Polymarket
+    /// shows. Falls back to the event title for anything without a series.
+    private var cardTitle: String {
+        event.seriesTitle ?? event.title
+    }
+
     /// The event's first market.
     private var market: Market? { event.markets.first }
     /// The "Up" outcome, if the market has one.
@@ -47,7 +56,7 @@ public struct CryptoUpDownCard: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: DSLayout.spacing) {
                             CardIcon(url: event.imageURL)
-                            Text(event.title).font(DSFont.headline)
+                            Text(cardTitle).font(DSFont.headline)
                                 .foregroundStyle(DSColor.textPrimary).lineLimit(1)
                         }
                         HStack {
