@@ -142,25 +142,132 @@ public final class BTCLiveViewModel {
     /// Dollar OHLC candles built from the loaded spot-price series (the "Candles" chart
     /// mode — matches web, which has no probability-candle view).
     ///
-    /// Unlike the probability series, `spotPriceHistory` only ever returns ~1 sample per
-    /// minute for this round (it's a checkpointed oracle price, not tick data), so
-    /// bucketing by a fixed time interval (`CandleAggregator`'s usual approach) puts at
-    /// most one sample per bucket — every candle degenerates to a flat dot with no
-    /// visible body or wick. Instead, each *consecutive pair* of real samples becomes its
-    /// own candle (open = the earlier sample, close = the later one, high/low = their
-    /// span), so every candle reflects an actual price move.
+    /// Bucketed by a time interval chosen from the data, the way the web widens its bars as
+    /// the visible range grows. Previously each *consecutive pair* of samples became its own
+    /// candle, which meant a new bar every time a tick arrived — the chart grew and redrew
+    /// once per second instead of settling.
+    ///
+    /// That pairing existed for a real reason, so it is kept rather than replaced: the REST
+    /// seed is a checkpointed oracle price at roughly one sample per minute, and bucketing at
+    /// or below that rate puts one sample in each bucket, collapsing every candle to a flat
+    /// dot. The two modes therefore split on data density —
+    ///
+    /// - **sparse** (samples arrive no faster than the bucket width): pair consecutive
+    ///   samples, so each candle spans a real move. This is the seed-only case.
+    /// - **dense** (live RTDS ticks folded in): bucket by a span-derived interval, so the
+    ///   bar count settles instead of growing once per tick.
+    ///
+    /// `isSparse(_:relativeTo:)` picks between them.
     public var candles: [Candle] {
         guard case let .loaded(points) = spotState, points.count >= 2 else { return [] }
         let sorted = points.sorted { $0.date < $1.date }
-        return zip(sorted, sorted.dropFirst()).map { previous, current in
+        let span = sorted[sorted.count - 1].date.timeIntervalSince(sorted[0].date)
+        let bySpan = Self.candleInterval(forSpan: span)
+        // When samples arrive no faster than the bucket width, bucketing can only ever put
+        // one sample per bucket, and every candle collapses to a flat dot. Pairing keeps each
+        // candle spanning a real price move, which is what the sparse REST seed needs.
+        guard !Self.isSparse(sorted, relativeTo: bySpan) else { return Self.pairs(sorted) }
+        return Self.bucket(sorted, interval: bySpan)
+    }
+
+    /// Candle widths, finest first. The web doesn't draw one candle per sample either — it
+    /// widens them as the visible range grows, so a five-minute window and a two-hour window
+    /// both show a readable number of bars.
+    nonisolated static let candleIntervals: [TimeInterval] = [1, 5, 15, 30, 60, 300, 900, 1800, 3600, 14_400, 86_400]
+
+    /// Roughly how many candles should fill the chart.
+    nonisolated static let targetCandleCount = 30
+
+    /// The narrowest ladder step that keeps a `span`-long series at or under
+    /// `targetCandleCount` candles. Falls back to the coarsest step for very long spans.
+    ///
+    /// Deriving the width from the span rather than the sample rate is what stops the chart
+    /// re-drawing on every incoming tick: new samples land inside the *existing* bucket and
+    /// only mutate its high/low/close, so the bar count holds steady instead of creeping up
+    /// once per second.
+    nonisolated static func candleInterval(forSpan span: TimeInterval) -> TimeInterval {
+        guard span > 0 else { return candleIntervals[0] }
+        return candleIntervals.first { span / $0 <= Double(targetCandleCount) }
+            ?? candleIntervals[candleIntervals.count - 1]
+    }
+
+    /// Whether samples arrive too slowly for `interval` to hold more than one each.
+    nonisolated static func isSparse(_ points: [CryptoSpotPricePoint], relativeTo interval: TimeInterval) -> Bool {
+        guard points.count >= 2 else { return true }
+        let gaps = zip(points, points.dropFirst()).map { $1.date.timeIntervalSince($0.date) }.sorted()
+        return gaps[gaps.count / 2] >= interval
+    }
+
+    /// One candle per consecutive pair of samples — the rendering for a series too sparse to
+    /// bucket. Each candle spans a real move rather than degenerating to a flat dot.
+    nonisolated static func pairs(_ points: [CryptoSpotPricePoint]) -> [Candle] {
+        zip(points, points.dropFirst()).map { previous, current in
             Candle(
                 open: previous.price,
-                high: max(previous.price, current.price),
-                low: min(previous.price, current.price),
+                high: Swift.max(previous.price, current.price),
+                low: Swift.min(previous.price, current.price),
                 close: current.price,
                 start: previous.date
             )
         }
+    }
+
+    /// The bucket width for a concrete series: wide enough for the span, but never finer
+    /// than the samples actually arrive.
+    ///
+    /// The floor is what keeps sparse data honest. The REST seed lands about once a minute,
+    /// so a span-derived 15-second bucket would leave most buckets empty and the rest holding
+    /// a single sample — a row of flat dots. Flooring at the median gap means every bucket
+    /// has something in it.
+    nonisolated static func bucketInterval(for points: [CryptoSpotPricePoint]) -> TimeInterval {
+        guard points.count >= 2 else { return candleIntervals[0] }
+        let span = points[points.count - 1].date.timeIntervalSince(points[0].date)
+        let gaps = zip(points, points.dropFirst())
+            .map { $1.date.timeIntervalSince($0.date) }
+            .sorted()
+        let medianGap = gaps[gaps.count / 2]
+        let bySpan = candleInterval(forSpan: span)
+        // Snap the floor up to a ladder step so both inputs speak the same vocabulary.
+        let byDensity = candleIntervals.first { $0 >= medianGap } ?? candleIntervals[candleIntervals.count - 1]
+        return Swift.max(bySpan, byDensity)
+    }
+
+    /// Groups a price series into fixed-width buckets, one candle each.
+    ///
+    /// Buckets are anchored to absolute time (`floor(t / interval)`), not to the first
+    /// sample, so a candle keeps its boundaries as the series grows — otherwise every new
+    /// point would shift every bar.
+    /// - Parameters:
+    ///   - points: The price series, ascending by date.
+    ///   - interval: The bucket width in seconds.
+    /// - Returns: One candle per non-empty bucket, ascending.
+    nonisolated static func bucket(_ points: [CryptoSpotPricePoint], interval: TimeInterval) -> [Candle] {
+        guard interval > 0 else { return [] }
+        var candles: [Candle] = []
+        var bucketStart: Date?
+        var open: Decimal = 0, high: Decimal = 0, low: Decimal = 0, close: Decimal = 0
+
+        for point in points {
+            let slot = (point.date.timeIntervalSince1970 / interval).rounded(.down) * interval
+            let start = Date(timeIntervalSince1970: slot)
+            if start != bucketStart {
+                if let bucketStart {
+                    candles.append(Candle(open: open, high: high, low: low, close: close, start: bucketStart))
+                }
+                bucketStart = start
+                open = point.price
+                high = point.price
+                low = point.price
+            } else {
+                high = Swift.max(high, point.price)
+                low = Swift.min(low, point.price)
+            }
+            close = point.price
+        }
+        if let bucketStart {
+            candles.append(Candle(open: open, high: high, low: low, close: close, start: bucketStart))
+        }
+        return candles
     }
 
     /// The dollar "price to beat" — the window's open price. Before the first
