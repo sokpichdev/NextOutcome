@@ -134,9 +134,12 @@ public final class CryptoHubViewModel {
         async let live: Void = loadLiveWindow()
         do {
             let events = try await fetchAllEvents.execute(tagID: tagID)
-            classifiedEvents = events
+            let classified = events
                 .map { (event: $0, kind: CryptoMarketKind.classify($0)) }
                 .filter { $0.kind != .other }
+            // Gamma pre-creates ~24h of windows per cadence series, so this is the difference
+            // between listing 7 recurring markets and listing 127 windows of the same 7.
+            classifiedEvents = RecurringWindowCollapse.collapse(classified, asOf: now())
             loadedTagID = tagID
             state = .loaded
         } catch {
