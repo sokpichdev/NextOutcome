@@ -120,11 +120,22 @@ struct EventDTO: Decodable {
     let creationDate: String?
     /// The event's resolution source URL — for esports matches, the official stream.
     let resolutionSource: String?
+    /// Whether a sports/esports fixture has finished. **Orthogonal to `closed`**: a match that
+    /// has ended but is still awaiting UMA resolution reports `ended: true, closed: false`, so
+    /// the `closed=false` list filter does not keep finished games out of the feed. Absent
+    /// (`nil`) on ordinary markets — treat that as "not a fixture", never as "still running".
+    let ended: Bool?
+    /// Whether a sports/esports fixture is currently in play. Absent on ordinary markets.
+    let live: Bool?
+    /// The event-level closed flag. Distinct from `MarketDTO.closed`, which is per-market —
+    /// `Event.isResolved` needs *every* market closed, which is false for a finished fixture.
+    let closed: Bool?
 
     /// JSON keys for `EventDTO`.
     enum CodingKeys: String, CodingKey {
         case id, title, slug, markets, volume, image, tags, gameStartTime, description, series,
              volume24hr, liquidity, competitive, creationDate, resolutionSource
+        case ended, live, closed
     }
 
     /// Tolerant decoder falling back to the slug for a missing title and to empty
@@ -147,6 +158,9 @@ struct EventDTO: Decodable {
         competitive = try? c.decode(Double.self, forKey: .competitive)
         creationDate = try? c.decode(String.self, forKey: .creationDate)
         resolutionSource = try? c.decode(String.self, forKey: .resolutionSource)
+        ended = try? c.decode(Bool.self, forKey: .ended)
+        live = try? c.decode(Bool.self, forKey: .live)
+        closed = try? c.decode(Bool.self, forKey: .closed)
     }
 }
 

@@ -193,7 +193,10 @@ enum MarketMapper {
             liquidity: dto.liquidity,
             competitive: dto.competitive,
             creationDate: DateParsing.parse(dto.creationDate),
-            resolutionSource: dto.resolutionSource
+            resolutionSource: dto.resolutionSource,
+            ended: dto.ended,
+            live: dto.live,
+            closed: dto.closed
         )
     }
 }

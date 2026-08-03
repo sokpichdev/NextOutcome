@@ -21,6 +21,7 @@ public struct MultiOutcomeCard: View {
                     Text(event.title).font(DSFont.headline)
                         .foregroundStyle(DSColor.textPrimary).lineLimit(1)
                     Spacer()
+                    EventStatusBadge(event: event)
                 }
                 ForEach(topMarkets) { market in
                     NavigationLink(value: MarketNavigationTarget(market: market, eventID: event.id)) {

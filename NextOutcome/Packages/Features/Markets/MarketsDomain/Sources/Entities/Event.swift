@@ -47,6 +47,15 @@ public struct Event: Identifiable, Hashable {
     /// esports matches this is the official stream (e.g. `https://www.twitch.tv/<channel>`),
     /// which the Esports hub embeds. `nil`/empty for most events.
     public let resolutionSource: String?
+    /// Gamma's raw `ended` flag for sports/esports fixtures. `nil` on ordinary markets.
+    /// Prefer `isEnded`, which applies the closed-implies-ended fallback.
+    public let ended: Bool?
+    /// Gamma's raw `live` flag for sports/esports fixtures. `nil` on ordinary markets.
+    /// Prefer `isLive`.
+    public let live: Bool?
+    /// Gamma's event-level `closed` flag. `nil` when absent. Distinct from `isResolved`,
+    /// which is derived from the embedded markets.
+    public let closed: Bool?
 
     /// Creates an event. Usually built by the mapping layer from a DTO.
     public init(
@@ -64,7 +73,10 @@ public struct Event: Identifiable, Hashable {
         liquidity: Decimal = 0,
         competitive: Double? = nil,
         creationDate: Date? = nil,
-        resolutionSource: String? = nil
+        resolutionSource: String? = nil,
+        ended: Bool? = nil,
+        live: Bool? = nil,
+        closed: Bool? = nil
     ) {
         self.id = id
         self.title = title
@@ -81,6 +93,9 @@ public struct Event: Identifiable, Hashable {
         self.competitive = competitive
         self.creationDate = creationDate
         self.resolutionSource = resolutionSource
+        self.ended = ended
+        self.live = live
+        self.closed = closed
     }
 
     /// True when at least one market carries a sports section hint (moneyline/spreads/totals/…),
@@ -89,4 +104,18 @@ public struct Event: Identifiable, Hashable {
 
     /// True when every market has closed. False for an event with no markets.
     public var isResolved: Bool { !markets.isEmpty && markets.allSatisfy(\.isResolved) }
+
+    /// True when a sports/esports fixture has finished.
+    ///
+    /// Not the same as `isResolved`: a match can be over while its markets are still open
+    /// awaiting UMA resolution, which is exactly the case Gamma reports as
+    /// `ended: true, closed: false`. Because `ended` is orthogonal to `closed`, the API's
+    /// `closed=false` list filter still returns finished games — this is the flag that
+    /// distinguishes them. Falls back to `closed` when `ended` is absent, matching
+    /// Polymarket's own web client; `nil` on both means "not a fixture", so `false`.
+    public var isEnded: Bool { ended ?? closed ?? false }
+
+    /// True when a sports/esports fixture is currently in play. A closed event is never
+    /// live; anything without the flag is treated as not live.
+    public var isLive: Bool { live ?? false }
 }

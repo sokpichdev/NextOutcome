@@ -83,15 +83,23 @@ struct GameCard: View {
 
     // MARK: status
 
+    /// Whether the game is in play. Prefers the loaded `GameResult`, falling back to the
+    /// event's own Gamma flags — the Home feed never loads `/events/results`, so without the
+    /// fallback every fixture there renders as if it hadn't started.
+    private var isLive: Bool { result?.live ?? event.isLive }
+
+    /// Whether the game has finished, with the same `GameResult`-then-event fallback as `isLive`.
+    private var isEnded: Bool { result?.ended ?? event.isEnded }
+
     /// The top row: live/final/kickoff status on the left, volume on the right.
     private var statusRow: some View {
         HStack(spacing: DSLayout.spacingSmall) {
-            if result?.live == true {
+            if isLive {
                 Circle().fill(DSColor.negative).frame(width: 6, height: 6)
                 Text(liveStatusText)
                     .font(DSFont.caption.bold())
                     .foregroundStyle(DSColor.negative)
-            } else if result?.ended == true {
+            } else if isEnded {
                 Text("Final")
                     .font(DSFont.caption.bold())
                     .foregroundStyle(DSColor.textSecondary)

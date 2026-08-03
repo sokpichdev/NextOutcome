@@ -31,11 +31,15 @@ public struct EventCard: View {
                             .font(DSFont.headline)
                             .foregroundStyle(DSColor.textPrimary)
                             .lineLimit(2)
-                        if let market = event.markets.first,
-                           let countdown = MarketFormatting.countdown(to: market.endDate) {
-                            Text(countdown)
-                                .font(DSFont.caption)
-                                .foregroundStyle(DSColor.textSecondary)
+                        HStack(spacing: DSLayout.spacingSmall) {
+                            EventStatusBadge(event: event)
+                            // A finished fixture's countdown is meaningless — the badge says it.
+                            if !event.isEnded, let market = event.markets.first,
+                               let countdown = MarketFormatting.countdown(to: market.endDate) {
+                                Text(countdown)
+                                    .font(DSFont.caption)
+                                    .foregroundStyle(DSColor.textSecondary)
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
