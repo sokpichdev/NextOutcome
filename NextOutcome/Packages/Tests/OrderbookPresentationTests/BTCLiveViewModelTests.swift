@@ -311,15 +311,19 @@ final class BTCLiveViewModelTests: XCTestCase {
         for _ in 0..<20 { await Task.yield() }
         vm.stop()
 
+        // Superseded expectation. This used to assert 3 candles from 4 samples, because
+        // candles were one-per-consecutive-pair — chosen to avoid the flat dots that a 60s
+        // bucket produced on this ~1-sample-per-minute feed. That model was wrong: a candle
+        // is the betting window itself, so four samples inside one 5-minute window are one
+        // candle, forming in place. It still spans a real move (the wick carries the extremes
+        // across the whole window), which is what the old assertion was really protecting.
         let candles = vm.candles
-        XCTAssertEqual(candles.count, 3, "4 one-minute-spaced samples must produce 3 candles, not 4 flat ones bucketed by a 60s window")
-        for candle in candles {
-            XCTAssertNotEqual(candle.high, candle.low, "each candle must span an actual price move, not degenerate to a flat dot")
-        }
-        XCTAssertEqual(candles[0].open, 63_900)
-        XCTAssertEqual(candles[0].close, 63_950)
-        XCTAssertEqual(candles[2].open, 63_890)
-        XCTAssertEqual(candles[2].close, 64_010)
+        XCTAssertEqual(candles.count, 1, "four samples inside one 5-minute window are one candle")
+        XCTAssertNotEqual(candles[0].high, candles[0].low, "the candle must still span a real price move")
+        XCTAssertEqual(candles[0].open, 63_900, "opens at the window's first price")
+        XCTAssertEqual(candles[0].close, 64_010, "closes at the latest price")
+        XCTAssertEqual(candles[0].high, 64_010)
+        XCTAssertEqual(candles[0].low, 63_890)
     }
 
     /// Regression test: this screen opens for any Up/Down crypto market (BTC, ETH, SOL,

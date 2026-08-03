@@ -329,6 +329,23 @@ public struct BTCLiveView: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                     .foregroundStyle(DSColor.textSecondary)
             }
+            // The live price line: the value that actually moves while a window is open,
+            // labelled at the right edge the way the web does it. Coloured against the price
+            // to beat, so the line and the forming candle agree on who is winning.
+            if let current = viewModel.currentPrice {
+                RuleMark(y: .value("Current price", doubleValue(current)))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                    .foregroundStyle(currentPriceColor)
+                    .annotation(position: .trailing, alignment: .trailing, spacing: 0) {
+                        Text(usdLabel(current))
+                            .font(DSFont.caption2.bold())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(currentPriceColor)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                    }
+            }
         }
         .chartYScale(domain: domain)
         .chartYAxis {
@@ -377,6 +394,15 @@ public struct BTCLiveView: View {
         guard upper - lower < minHeight else { return (lower, upper) }
         let mid = (lower + upper) / 2
         return (mid - minHeight / 2, mid + minHeight / 2)
+    }
+
+    /// The live price line's colour: green while the price is at or above the window's open,
+    /// red once it falls below — the same test the forming candle's body uses.
+    private var currentPriceColor: Color {
+        guard let current = viewModel.currentPrice, let target = viewModel.priceToBeat else {
+            return DSColor.textSecondary
+        }
+        return current >= target ? DSColor.positive : DSColor.negative
     }
 
     /// Green if the candle closed at or above its open, red otherwise.

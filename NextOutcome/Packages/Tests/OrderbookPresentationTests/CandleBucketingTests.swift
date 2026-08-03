@@ -2,140 +2,94 @@ import XCTest
 import OrderbookDomain
 @testable import OrderbookPresentation
 
-/// Candles are bucketed by time, not drawn one per sample — the web widens its bars as the
-/// range grows rather than adding one per tick. See `docs/polymarket-live-chart-study.md`.
+/// A candle here is the 5-minute betting window itself, not an arbitrary chart bucket. During
+/// an open window that means exactly one candle, forming in place.
+/// See `docs/polymarket-live-chart-study.md`.
 final class CandleBucketingTests: XCTestCase {
     private func point(_ offset: TimeInterval, _ price: Decimal) -> CryptoSpotPricePoint {
         CryptoSpotPricePoint(date: Date(timeIntervalSince1970: offset), price: price)
     }
 
-    // MARK: interval selection
+    /// The headline property: a whole window is one candle, whatever the sample rate.
+    ///
+    /// The price feed is window-scoped — asking it for two hours still returns only the
+    /// current window — so anything finer chops one real window into invented sub-candles.
+    func test_oneWindowIsOneCandle() {
+        // 0…240s — five samples inside one 300s window (300 would open the next one).
+        let oncePerMinute = (0..<5).map { point(Double($0) * 60, 63_800 + Decimal($0)) }
+        XCTAssertEqual(BTCLiveViewModel.bucket(oncePerMinute, interval: 300).count, 1)
 
-    /// A five-minute window stays on a fine bar; a multi-hour range widens.
-    func test_intervalWidensWithSpan() {
-        XCTAssertEqual(BTCLiveViewModel.candleInterval(forSpan: 300), 15)      // 5m  -> 20 bars
-        XCTAssertEqual(BTCLiveViewModel.candleInterval(forSpan: 3_600), 300)   // 1h  -> 12 bars
-        XCTAssertEqual(BTCLiveViewModel.candleInterval(forSpan: 7_200), 300)   // 2h  -> 24 bars
-        XCTAssertEqual(BTCLiveViewModel.candleInterval(forSpan: 86_400), 3_600) // 24h -> 24 bars
+        let onceASecond = (0..<300).map { point(Double($0), 63_800 + Decimal($0 % 5)) }
+        XCTAssertEqual(BTCLiveViewModel.bucket(onceASecond, interval: 300).count, 1)
     }
 
-    /// Whatever the span, the chart stays in a readable band rather than growing forever.
-    func test_intervalKeepsCandleCountBounded() {
-        for span in [60.0, 300, 900, 3_600, 21_600, 86_400, 604_800, 2_592_000] {
-            let interval = BTCLiveViewModel.candleInterval(forSpan: span)
-            XCTAssertLessThanOrEqual(
-                span / interval, Double(BTCLiveViewModel.targetCandleCount),
-                "span \(span) produced \(span / interval) candles"
-            )
+    /// The candle's open is the window's opening price and its close the latest — the two
+    /// values the header shows as "price to beat" and "current price".
+    func test_candleOpensAtTheWindowOpenAndClosesAtTheLatestPrice() {
+        let points = [point(0, 63_800), point(60, 63_900), point(120, 63_700), point(180, 63_850)]
+        let candle = BTCLiveViewModel.bucket(points, interval: 300)[0]
+        XCTAssertEqual(candle.open, 63_800)
+        XCTAssertEqual(candle.close, 63_850)
+        XCTAssertEqual(candle.high, 63_900)
+        XCTAssertEqual(candle.low, 63_700)
+    }
+
+    /// New ticks mutate the forming candle rather than adding bars — the whole point of the
+    /// change. Its close follows the price and its high/low stretch to the extremes.
+    func test_ticksFormTheCandleInPlaceInsteadOfAddingBars() {
+        var points = [point(0, 63_800)]
+        for second in stride(from: 1.0, through: 240, by: 1) {
+            points.append(point(second, 63_800 + Decimal(Int(second) % 60)))
         }
+        let candles = BTCLiveViewModel.bucket(points, interval: 300)
+        XCTAssertEqual(candles.count, 1, "240 ticks inside one window must stay one candle")
+        XCTAssertEqual(candles[0].open, 63_800)
+        XCTAssertEqual(candles[0].high, 63_859)
     }
 
-    /// Degenerate spans must not divide by zero or return nothing.
-    func test_zeroSpanFallsBackToFinestInterval() {
-        XCTAssertEqual(BTCLiveViewModel.candleInterval(forSpan: 0), BTCLiveViewModel.candleIntervals[0])
+    /// Colour is a function of close vs open, so a candle flips as the price crosses back
+    /// over the window's opening price. (The view maps this to green/red.)
+    func test_candleDirectionFlipsAsPriceCrossesTheOpen() {
+        let up = BTCLiveViewModel.bucket([point(0, 63_800), point(60, 63_900)], interval: 300)[0]
+        XCTAssertGreaterThan(up.close, up.open, "above the open reads as up")
+
+        let down = BTCLiveViewModel.bucket([point(0, 63_800), point(60, 63_700)], interval: 300)[0]
+        XCTAssertLessThan(down.close, down.open, "below the open reads as down")
     }
 
-    // MARK: bucketing
-
-    /// OHLC is taken across the whole bucket, not just its endpoints — the wick has to carry
-    /// the extremes, which the old adjacent-pair approach could never show.
-    func test_bucketTakesOHLCAcrossTheWholeBucket() {
-        let points = [
-            point(0, 100),   // open
-            point(10, 130),  // high
-            point(20, 90),   // low
-            point(30, 110),  // close
-        ]
-        let candles = BTCLiveViewModel.bucket(points, interval: 60)
-        XCTAssertEqual(candles.count, 1)
-        XCTAssertEqual(candles[0].open, 100)
-        XCTAssertEqual(candles[0].high, 130)
-        XCTAssertEqual(candles[0].low, 90)
-        XCTAssertEqual(candles[0].close, 110)
-    }
-
-    /// Points falling in different windows become separate candles.
-    func test_pointsSplitAcrossBuckets() {
-        let candles = BTCLiveViewModel.bucket([point(0, 100), point(59, 105), point(60, 200)], interval: 60)
+    /// Consecutive windows are separate candles, so a longer feed would render one bar per
+    /// window — two hours as 24 five-minute candles, matching the web.
+    func test_consecutiveWindowsBecomeSeparateCandles() {
+        let points = [point(0, 63_800), point(299, 63_850), point(300, 63_900), point(599, 63_950)]
+        let candles = BTCLiveViewModel.bucket(points, interval: 300)
         XCTAssertEqual(candles.count, 2)
-        XCTAssertEqual(candles[0].close, 105)
-        XCTAssertEqual(candles[1].open, 200)
+        XCTAssertEqual(candles[0].close, 63_850)
+        XCTAssertEqual(candles[1].open, 63_900)
     }
 
-    /// Buckets are anchored to absolute time, so a candle keeps its boundaries as the series
-    /// grows. Anchoring to the first sample instead would shift every bar on each new point.
+    /// Buckets anchor to absolute time, so a candle keeps its boundaries as the window fills.
+    /// Anchoring to the first sample would shift the bar on every new point.
     func test_bucketsAnchorToAbsoluteTimeNotFirstSample() {
-        let candles = BTCLiveViewModel.bucket([point(90, 100), point(150, 110)], interval: 60)
-        XCTAssertEqual(candles[0].start, Date(timeIntervalSince1970: 60))
-        XCTAssertEqual(candles[1].start, Date(timeIntervalSince1970: 120))
+        let candles = BTCLiveViewModel.bucket([point(360, 100), point(660, 110)], interval: 300)
+        XCTAssertEqual(candles[0].start, Date(timeIntervalSince1970: 300))
+        XCTAssertEqual(candles[1].start, Date(timeIntervalSince1970: 600))
     }
 
-    /// The point of the change: ticks arriving inside the current bucket update it in place
-    /// rather than adding bars, so the chart stops redrawing every second.
-    func test_newTicksInsideABucketDoNotAddCandles() {
-        var points = [point(0, 100)]
-        let before = BTCLiveViewModel.bucket(points, interval: 60).count
-        for second in stride(from: 1.0, through: 50, by: 1) {
-            points.append(point(second, 100 + Decimal(second)))
-        }
-        let after = BTCLiveViewModel.bucket(points, interval: 60)
-        XCTAssertEqual(after.count, before, "50 ticks in one bucket must stay one candle")
-        XCTAssertEqual(after[0].high, 150, "but the bucket's high must track them")
-        XCTAssertEqual(after[0].close, 150)
-    }
-
-    /// A bucket holding a single sample is a valid flat candle, not a dropped one.
-    func test_singlePointBucketIsAFlatCandle() {
-        let candles = BTCLiveViewModel.bucket([point(0, 100)], interval: 60)
+    /// A window with one sample so far is a valid flat candle, not a dropped one — this is
+    /// what a window looks like the instant it opens.
+    func test_freshWindowWithOneSampleIsAFlatCandle() {
+        let candles = BTCLiveViewModel.bucket([point(0, 63_800)], interval: 300)
         XCTAssertEqual(candles.count, 1)
         XCTAssertEqual(candles[0].open, candles[0].close)
         XCTAssertEqual(candles[0].high, candles[0].low)
     }
 
     func test_emptySeriesProducesNoCandles() {
-        XCTAssertTrue(BTCLiveViewModel.bucket([], interval: 60).isEmpty)
+        XCTAssertTrue(BTCLiveViewModel.bucket([], interval: 300).isEmpty)
     }
 
     /// A non-positive interval would divide by zero.
     func test_nonPositiveIntervalIsRejected() {
         XCTAssertTrue(BTCLiveViewModel.bucket([point(0, 100)], interval: 0).isEmpty)
-    }
-}
-
-/// The density floor: bucketing must never be finer than the samples actually arrive, or a
-/// sparse series turns into a row of flat dots in mostly-empty buckets.
-final class CandleDensityFloorTests: XCTestCase {
-    private func point(_ offset: TimeInterval, _ price: Decimal) -> CryptoSpotPricePoint {
-        CryptoSpotPricePoint(date: Date(timeIntervalSince1970: offset), price: price)
-    }
-
-    /// The REST seed lands about once a minute. A span-derived 15s bucket would leave most
-    /// buckets empty; the floor lifts it to the sample rate.
-    func test_sparseSeriesFloorsToTheSampleRate() {
-        let oncePerMinute = (0..<5).map { point(Double($0) * 60, 100 + Decimal($0)) }
-        let interval = BTCLiveViewModel.bucketInterval(for: oncePerMinute)
-        XCTAssertGreaterThanOrEqual(interval, 60, "must not bucket finer than samples arrive")
-    }
-
-    /// Every bucket must contain at least one sample — no empty bars.
-    func test_sparseSeriesProducesNoEmptyBuckets() {
-        let oncePerMinute = (0..<5).map { point(Double($0) * 60, 100 + Decimal($0)) }
-        let candles = BTCLiveViewModel.bucket(oncePerMinute, interval: BTCLiveViewModel.bucketInterval(for: oncePerMinute))
-        XCTAssertLessThanOrEqual(candles.count, oncePerMinute.count)
-        XCTAssertFalse(candles.isEmpty)
-    }
-
-    /// Dense live tick data is driven by the span instead, so the bar count stays readable.
-    func test_denseSeriesIsDrivenBySpan() {
-        let perSecond = (0..<300).map { point(Double($0), 100 + Decimal($0 % 7)) }
-        let interval = BTCLiveViewModel.bucketInterval(for: perSecond)
-        let candles = BTCLiveViewModel.bucket(perSecond, interval: interval)
-        XCTAssertLessThanOrEqual(candles.count, BTCLiveViewModel.targetCandleCount + 1)
-        XCTAssertGreaterThan(candles.count, 1, "a 5-minute tick series should still show bars")
-    }
-
-    /// A one-sample series can't imply a rate; it must not crash or divide by zero.
-    func test_singleSampleIsSafe() {
-        XCTAssertEqual(BTCLiveViewModel.bucketInterval(for: [point(0, 100)]), BTCLiveViewModel.candleIntervals[0])
     }
 }
