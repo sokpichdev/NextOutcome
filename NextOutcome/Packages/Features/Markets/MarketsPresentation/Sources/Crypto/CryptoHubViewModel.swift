@@ -56,12 +56,62 @@ public final class CryptoHubViewModel {
     /// Case-insensitive substring match against the event title.
     public var searchQuery: String = ""
 
+    /// The currently-open BTC Up/Down 5m window, pinned above the list.
+    ///
+    /// Kept separate from `classifiedEvents` because it can't come from the same place: a
+    /// live 5-minute market has zero volume and liquidity and is invisible to every list
+    /// query, so it's resolved by computing its slug from the clock. See
+    /// `ClockGriddedSeries` and `docs/polymarket-crypto-hub-gaps.md`.
+    public private(set) var liveWindow: Event?
+
+    /// The series the pinned card tracks.
+    public let liveSeries: ClockGriddedSeries = .bitcoinUpDown5m
+
     private let fetchAllEvents: FetchAllEventsUseCase
+    private let fetchLiveWindow: FetchLiveWindowUseCase
+    /// Injected clock, so window-boundary behaviour is testable without sleeping.
+    private let now: @Sendable () -> Date
 
     /// Creates the view model.
-    /// - Parameter fetchAllEvents: Loads a tag's events, unpaginated.
-    public init(fetchAllEvents: FetchAllEventsUseCase) {
+    /// - Parameters:
+    ///   - fetchAllEvents: Loads a tag's events, unpaginated.
+    ///   - fetchLiveWindow: Resolves the live recurring window pinned above the list.
+    ///   - now: Supplies the current time; override in tests.
+    public init(
+        fetchAllEvents: FetchAllEventsUseCase,
+        fetchLiveWindow: FetchLiveWindowUseCase,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
         self.fetchAllEvents = fetchAllEvents
+        self.fetchLiveWindow = fetchLiveWindow
+        self.now = now
+    }
+
+    /// Loads (or reloads) the pinned live window. Best-effort — never surfaces an error.
+    public func loadLiveWindow() async {
+        liveWindow = await fetchLiveWindow.execute(series: liveSeries, now: now())
+    }
+
+    /// When the current window closes and the pinned card should be re-fetched.
+    ///
+    /// Scheduling on the boundary keeps the card aligned with the grid; a fixed-interval
+    /// timer would drift and eventually show a settled window as live.
+    public var nextLiveWindowBoundary: Date { liveSeries.nextBoundary(after: now()) }
+
+    /// Whether the pinned live card should render.
+    ///
+    /// It's a pin, so it hides as soon as it would contradict what the user asked for —
+    /// same principle as the curated rows on the Home feed. `.upDown` and the 5-minute
+    /// timeframe are the filters it genuinely belongs to; anything narrower than that, or a
+    /// search that doesn't match it, hides it.
+    public var showsLiveWindow: Bool {
+        guard let liveWindow else { return false }
+        guard selectedSubTab == .all || selectedSubTab == .upDown else { return false }
+        guard selectedTimeframe == .all || selectedTimeframe == .fiveMin else { return false }
+        guard period == .all else { return false }
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.isEmpty || liveWindow.title.localizedCaseInsensitiveContains(query) else { return false }
+        return true
     }
 
     /// Fetches `tagID`'s events and classifies them, unless already loaded for this tag id.
@@ -79,6 +129,9 @@ public final class CryptoHubViewModel {
 
     private func load(tagID: String) async {
         state = .loading
+        // Run alongside the list: the pinned window is a separate request that must not
+        // delay the hub, and must not fail it either (`loadLiveWindow` can't throw).
+        async let live: Void = loadLiveWindow()
         do {
             let events = try await fetchAllEvents.execute(tagID: tagID)
             classifiedEvents = events
@@ -89,12 +142,19 @@ public final class CryptoHubViewModel {
         } catch {
             state = .failed("Couldn't load Crypto. Pull to refresh.")
         }
+        await live
     }
 
     /// `classifiedEvents` filtered by `selectedSubTab`/`period`/`selectedTimeframe`/
     /// `searchQuery`, sorted by `sortOption`.
     public var visibleEvents: [(event: Event, kind: CryptoMarketKind)] {
         var events = classifiedEvents
+        // The pinned window renders above the list; drop it here so it can't appear twice.
+        // Today the tag list never contains it, but that's a property of Gamma's ordering,
+        // not a guarantee.
+        if showsLiveWindow, let pinned = liveWindow {
+            events = events.filter { $0.event.id != pinned.id }
+        }
         if let kind = selectedSubTab.kind {
             events = events.filter { $0.kind == kind }
         }

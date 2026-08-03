@@ -32,6 +32,7 @@ public struct CryptoHubView: View {
                     searchField
                 }
                 subTabRow
+                liveWindowCard
                 content
             }
             .padding(.horizontal, DSLayout.margin)
@@ -56,6 +57,7 @@ public struct CryptoHubView: View {
         .task {
             if let tagID { await viewModel.loadIfNeeded(tagID: tagID) }
         }
+        .task { await followLiveWindow() }
         .refreshable { await viewModel.refresh() }
     }
 
@@ -280,6 +282,38 @@ public struct CryptoHubView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// Keeps the pinned card on the current window for as long as the hub is on screen.
+    ///
+    /// Sleeps to the *window boundary* rather than on a fixed interval: a repeating 5-minute
+    /// timer started mid-window would settle permanently out of phase and keep showing a
+    /// resolved window as live. The small grace period covers clock skew and the moment
+    /// Gamma needs to publish the next slot. Cancelled automatically when the view goes away.
+    private func followLiveWindow() async {
+        /// Seconds past the boundary before asking for the next window.
+        let grace: TimeInterval = 2
+        while !Task.isCancelled {
+            let wait = viewModel.nextLiveWindowBoundary.timeIntervalSinceNow + grace
+            do {
+                try await Task.sleep(nanoseconds: UInt64(max(wait, 1) * 1_000_000_000))
+            } catch {
+                return  // cancelled
+            }
+            await viewModel.loadLiveWindow()
+        }
+    }
+
+    /// The pinned BTC Up/Down 5m card, matching the card `polymarket.com/crypto` leads with.
+    ///
+    /// Rendered outside `content` so it survives the list's loading/empty states — the
+    /// window is resolved by a separate request and shouldn't blink out while the tag list
+    /// reloads.
+    @ViewBuilder
+    private var liveWindowCard: some View {
+        if viewModel.showsLiveWindow, let event = viewModel.liveWindow {
+            CryptoUpDownCard(event: event)
         }
     }
 

@@ -39,7 +39,7 @@ final class CryptoHubViewModelTests: XCTestCase {
     private func makeVM(events: [Event]) -> (CryptoHubViewModel, CryptoFakeRepository) {
         let repo = CryptoFakeRepository()
         repo.events = events
-        let vm = CryptoHubViewModel(fetchAllEvents: FetchAllEventsUseCase(repository: repo))
+        let vm = CryptoHubViewModel(fetchAllEvents: FetchAllEventsUseCase(repository: repo), fetchLiveWindow: FetchLiveWindowUseCase(repository: repo))
         return (vm, repo)
     }
 
