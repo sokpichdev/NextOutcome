@@ -267,6 +267,7 @@ final class AppContainer {
                     repository: cryptoSpotPriceRepository, stream: cryptoPriceStream
                 ),
                 fetchPriceWindow: FetchCryptoPriceWindowUseCase(repository: cryptoSpotPriceRepository),
+                fetchCandles: FetchCryptoCandlesUseCase(repository: cryptoSpotPriceRepository),
                 onQuickBet: onQuickBet
             )
         }
