@@ -15,10 +15,21 @@ public struct BTCLiveView: View {
     /// The view model driving the whole screen.
     @State private var viewModel: BTCLiveViewModel
 
+    /// Moves the user on once this window has closed. `nil` leaves the closed state as a
+    /// dead end with an explanatory label rather than a button that goes nowhere.
+    ///
+    /// Injected rather than resolved here: finding the next window is a Markets concern
+    /// (`ClockGriddedSeries`), and this screen lives in the Orderbook slice, which has no
+    /// business depending on it.
+    private let onNextWindow: (() -> Void)?
+
     /// Creates the view.
-    /// - Parameter viewModel: The BTC-live view model (usually from `btcLiveFactory`).
-    public init(viewModel: BTCLiveViewModel) {
+    /// - Parameters:
+    ///   - viewModel: The BTC-live view model (usually from `btcLiveFactory`).
+    ///   - onNextWindow: Invoked when the user taps through from a closed window.
+    public init(viewModel: BTCLiveViewModel, onNextWindow: (() -> Void)? = nil) {
         self._viewModel = State(initialValue: viewModel)
+        self.onNextWindow = onNextWindow
     }
 
     public var body: some View {
@@ -43,12 +54,16 @@ public struct BTCLiveView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: DSLayout.spacingXSmall) {
-                Text("Time remaining")
+                Text(viewModel.hasSettled ? "Window closed" : "Time remaining")
                     .font(DSFont.caption)
                     .foregroundStyle(DSColor.textSecondary)
-                Text(viewModel.countdown)
-                    .font(DSFont.price)
-                    .foregroundStyle(viewModel.isCountdownUrgent ? DSColor.negative : DSColor.textPrimary)
+                if let settlement = viewModel.settlement {
+                    settlementLabel(settlement)
+                } else {
+                    Text(viewModel.countdown)
+                        .font(DSFont.price)
+                        .foregroundStyle(viewModel.isCountdownUrgent ? DSColor.negative : DSColor.textPrimary)
+                }
             }
             Spacer()
             HStack(alignment: .firstTextBaseline, spacing: DSLayout.spacing) {
@@ -246,21 +261,54 @@ public struct BTCLiveView: View {
         candle.close >= candle.open ? DSColor.positive : DSColor.negative
     }
 
+    /// The settled result in place of the countdown: which side the window finished on.
+    @ViewBuilder
+    private func settlementLabel(_ settlement: BTCLiveViewModel.Settlement) -> some View {
+        switch settlement {
+        case .up:
+            Text("Up won").font(DSFont.price).foregroundStyle(DSColor.positive)
+        case .down:
+            Text("Down won").font(DSFont.price).foregroundStyle(DSColor.negative)
+        case .undetermined:
+            Text("Settled").font(DSFont.price).foregroundStyle(DSColor.textSecondary)
+        }
+    }
+
     // MARK: Quick bet
 
     /// The Up/Down quick-bet buttons showing the current live cents for each side.
+    ///
+    /// Replaced once the window closes: a closed window's book empties out, so the buttons
+    /// would read "--" and do nothing — which is exactly what made the ended screen look
+    /// broken. The whole screen intentionally stays put on the window the user opened,
+    /// showing how it finished, with one tap to move on.
+    @ViewBuilder
     private var quickBet: some View {
-        HStack(spacing: DSLayout.spacing) {
-            PriceButton(
-                title: "Up",
-                price: centsButtonLabel(viewModel.upCents),
-                style: .yes
-            ) { viewModel.quickBet(.up) }
-            PriceButton(
-                title: "Down",
-                price: centsButtonLabel(viewModel.downCents),
-                style: .no
-            ) { viewModel.quickBet(.down) }
+        if viewModel.hasSettled {
+            Button(action: { onNextWindow?() }) {
+                Text(onNextWindow == nil ? "This window has closed" : "Next window →")
+                    .font(DSFont.subheadline.bold())
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DSLayout.spacingMedium)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(onNextWindow == nil ? DSColor.textSecondary : DSColor.accent)
+            .background(DSColor.surfaceElevated)
+            .clipShape(RoundedRectangle(cornerRadius: DSLayout.cardRadius))
+            .disabled(onNextWindow == nil)
+        } else {
+            HStack(spacing: DSLayout.spacing) {
+                PriceButton(
+                    title: "Up",
+                    price: centsButtonLabel(viewModel.upCents),
+                    style: .yes
+                ) { viewModel.quickBet(.up) }
+                PriceButton(
+                    title: "Down",
+                    price: centsButtonLabel(viewModel.downCents),
+                    style: .no
+                ) { viewModel.quickBet(.down) }
+            }
         }
     }
 

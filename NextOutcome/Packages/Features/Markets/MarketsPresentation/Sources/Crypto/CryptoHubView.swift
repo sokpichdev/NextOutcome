@@ -45,9 +45,20 @@ public struct CryptoHubView: View {
         }
         .navigationDestination(for: CryptoUpDownNavigationTarget.self) { target in
             if let btcLiveFactory {
-                BTCLiveView(viewModel: btcLiveFactory(target.liveContext) { side in
-                    tradeContext = TradeSheetContext(market: target.market, side: side == .up ? .yes : .no)
-                })
+                BTCLiveView(
+                    viewModel: btcLiveFactory(target.liveContext) { side in
+                        tradeContext = TradeSheetContext(market: target.market, side: side == .up ? .yes : .no)
+                    },
+                    // Pop back to the hub, whose pinned card is already following the live
+                    // window on the grid boundary — so returning lands on the current one.
+                    // Refreshed first so the card can't be a window behind on arrival.
+                    onNextWindow: {
+                        Task {
+                            await viewModel.loadLiveWindow()
+                            dismiss()
+                        }
+                    }
+                )
             }
         }
         .sheet(isPresented: $showsMoreSheet) { CryptoMoreSheetPlaceholder() }
@@ -60,6 +71,9 @@ public struct CryptoHubView: View {
         .task { await followLiveWindow() }
         .refreshable { await viewModel.refresh() }
     }
+
+    /// Pops the pushed live-window screen when the user taps through a closed window.
+    @Environment(\.dismiss) private var dismiss
 
     /// Whether the row-2 search field is currently revealed.
     @State private var isSearching = false

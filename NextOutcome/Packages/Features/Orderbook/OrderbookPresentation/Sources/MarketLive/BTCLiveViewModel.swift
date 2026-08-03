@@ -206,6 +206,37 @@ public final class BTCLiveViewModel {
     /// applied in the view via a DS token — this flag only carries the intent.
     public var isCountdownUrgent: Bool { remainingSeconds > 0 && remainingSeconds < 60 }
 
+    /// How a closed window turned out.
+    public enum Settlement: Equatable {
+        /// The price finished above where it started.
+        case up
+        /// The price finished at or below where it started.
+        case down
+        /// The window is closed but we never learned enough prices to say which.
+        case undetermined
+    }
+
+    /// Whether this window has closed.
+    ///
+    /// The countdown is anchored to server time, so this flips at the same instant the
+    /// market stops accepting orders rather than whenever the device thinks it should.
+    /// Guarded on the clock having been anchored at all — before the first load
+    /// `remainingSeconds` is still `0` and the window has not ended, it just isn't known yet.
+    public var hasSettled: Bool { currentServerTime != nil && remainingSeconds == 0 }
+
+    /// Which side won, once the window has closed.
+    ///
+    /// Derived from the same two dollar prices the header already shows rather than from the
+    /// order book: once a window closes its book empties out, which is exactly why the screen
+    /// went to "--". `priceToBeat` is the window's open and `currentPrice` its last tick, so
+    /// they still tell the story after trading stops. Polymarket resolves ties as Down —
+    /// the price has to strictly exceed the open for Up to win.
+    public var settlement: Settlement? {
+        guard hasSettled else { return nil }
+        guard let currentPrice, let priceToBeat else { return .undetermined }
+        return currentPrice > priceToBeat ? .up : .down
+    }
+
     /// The current server time, computed as `serverAnchor + elapsed monotonic time`.
     /// `nil` until the anchors are set by the initial load.
     private var currentServerTime: Date? {
