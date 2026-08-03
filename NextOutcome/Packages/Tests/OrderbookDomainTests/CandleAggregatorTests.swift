@@ -2,6 +2,8 @@
 //  CandleAggregatorTests.swift
 //  NextOutcome
 //
+//  Created by Sok Pich on 03/07/2026.
+//
 
 import XCTest
 import Foundation
@@ -44,5 +46,60 @@ final class CandleAggregatorTests: XCTestCase {
         XCTAssertEqual(cs[0].start, Date(timeIntervalSince1970: 60))
         XCTAssertEqual(cs[0].open, 0.40)
         XCTAssertEqual(cs[0].close, 0.50)
+    }
+
+    // MARK: - Live-tick folding (drives the forming candle on the BTC live chart)
+
+    /// A tick inside the last candle's bucket mutates that candle in place: close follows
+    /// the tick, high/low stretch to include it, and no new candle appears.
+    func testFoldingTickInsideLastBucketUpdatesFormingCandle() {
+        let start = Date(timeIntervalSince1970: 600)
+        let seed = [Candle(open: 0.50, high: 0.55, low: 0.48, close: 0.52, start: start)]
+        let tick = CryptoSpotPricePoint(date: start.addingTimeInterval(45), price: 0.60)
+
+        let folded = CandleAggregator.folding(seed, with: tick, interval: 300)
+
+        XCTAssertEqual(folded.count, 1)
+        XCTAssertEqual(folded[0].close, 0.60)
+        XCTAssertEqual(folded[0].high, 0.60)
+        XCTAssertEqual(folded[0].low, 0.48)
+        XCTAssertEqual(folded[0].open, 0.50, "the forming candle's open never moves")
+        XCTAssertEqual(folded[0].start, start)
+    }
+
+    /// A tick past the last candle's bucket boundary starts a new candle whose OHLC all
+    /// equal the tick — this is how the chart rolls into the next 5-minute window live.
+    func testFoldingTickPastBoundaryStartsNewCandle() {
+        let start = Date(timeIntervalSince1970: 600)
+        let seed = [Candle(open: 0.50, high: 0.55, low: 0.48, close: 0.52, start: start)]
+        let tick = CryptoSpotPricePoint(date: start.addingTimeInterval(300), price: 0.53)
+
+        let folded = CandleAggregator.folding(seed, with: tick, interval: 300)
+
+        XCTAssertEqual(folded.count, 2)
+        XCTAssertEqual(folded[1].start, Date(timeIntervalSince1970: 900))
+        XCTAssertEqual([folded[1].open, folded[1].high, folded[1].low, folded[1].close], [0.53, 0.53, 0.53, 0.53])
+        XCTAssertEqual(folded[0].close, 0.52, "the closed candle must stay frozen")
+    }
+
+    /// A stale tick (older than the forming candle's bucket) is dropped rather than
+    /// rewriting history.
+    func testFoldingStaleTickIsIgnored() {
+        let start = Date(timeIntervalSince1970: 600)
+        let seed = [Candle(open: 0.50, high: 0.55, low: 0.48, close: 0.52, start: start)]
+        let tick = CryptoSpotPricePoint(date: start.addingTimeInterval(-1), price: 0.99)
+
+        XCTAssertEqual(CandleAggregator.folding(seed, with: tick, interval: 300), seed)
+    }
+
+    /// Folding into an empty series starts the first candle from the tick.
+    func testFoldingIntoEmptySeriesStartsFirstCandle() {
+        let tick = CryptoSpotPricePoint(date: Date(timeIntervalSince1970: 630), price: 0.44)
+
+        let folded = CandleAggregator.folding([], with: tick, interval: 300)
+
+        XCTAssertEqual(folded.count, 1)
+        XCTAssertEqual(folded[0].start, Date(timeIntervalSince1970: 600))
+        XCTAssertEqual([folded[0].open, folded[0].high, folded[0].low, folded[0].close], [0.44, 0.44, 0.44, 0.44])
     }
 }
