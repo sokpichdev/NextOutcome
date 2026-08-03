@@ -156,8 +156,71 @@ public struct BTCLiveView: View {
         case let .failed(message):
             emptyOrError(message, showRetry: true)
         case let .loaded(points):
-            PriceChart(data: points.map { PricePoint(date: $0.date, price: fractionValue($0.price)) })
+            chanceLineChart(points)
         }
+    }
+
+    /// The "Chance" line: probability over the window, as a percent.
+    ///
+    /// Bespoke rather than the shared `PriceChart` because that one pins its Y-axis to the
+    /// full 0…100%, which flattens a window that only ever moves between 30% and 55% into a
+    /// nearly straight line. Web scales this axis to the data too. Everything else — the
+    /// monotone curve, the area fill, the last-point dot — matches the dollar chart so the
+    /// three tabs read as one family.
+    private func chanceLineChart(_ points: [PriceHistoryPoint]) -> some View {
+        let values = points.map { fractionValue($0.price) }
+        return Chart {
+            ForEach(points, id: \.date) { point in
+                AreaMark(
+                    x: .value("Time", point.date),
+                    y: .value("Chance", fractionValue(point.price))
+                )
+                .foregroundStyle(DSGradient.positiveArea)
+                .interpolationMethod(.monotone)
+                LineMark(
+                    x: .value("Time", point.date),
+                    y: .value("Chance", fractionValue(point.price))
+                )
+                .foregroundStyle(DSColor.positive)
+                .lineStyle(StrokeStyle(lineWidth: 2))
+                .interpolationMethod(.monotone)
+            }
+            if let last = points.last {
+                PointMark(
+                    x: .value("Time", last.date),
+                    y: .value("Chance", fractionValue(last.price))
+                )
+                .foregroundStyle(DSColor.positive)
+                .symbolSize(60)
+            }
+        }
+        .chartYScale(domain: chanceDomain(low: values.min(), high: values.max()))
+        .chartYAxis {
+            AxisMarks(values: .automatic(desiredCount: 3)) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                    .foregroundStyle(DSColor.separator)
+                AxisValueLabel {
+                    if let fraction = value.as(Double.self) {
+                        Text("\(Int((fraction * 100).rounded()))%")
+                            .foregroundStyle(DSColor.textSecondary)
+                            .font(DSFont.caption2)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Y range for the chance chart: fitted to the window's own movement, then clamped to
+    /// 0…1 so padding can't produce a negative or >100% axis label.
+    private func chanceDomain(low: Double?, high: Double?) -> ClosedRange<Double> {
+        let lo = low ?? 0
+        let hi = high ?? 1
+        guard hi > lo else {
+            let pad = 0.05
+            return max(0, lo - pad)...min(1, hi + pad)
+        }
+        let pad = (hi - lo) * 0.15
+        return max(0, lo - pad)...min(1, hi + pad)
     }
 
     /// The "Price"/"Candles" mode body: the dollar spot-price line or candles, driven by
@@ -185,19 +248,30 @@ public struct BTCLiveView: View {
     /// charts elsewhere), auto-scaled to the spot-price range, plus a dashed
     /// price-to-beat line.
     private func dollarLineChart(_ points: [CryptoSpotPricePoint]) -> some View {
-        Chart {
+        let values = points.map { doubleValue($0.price) }
+        return Chart {
             ForEach(points, id: \.date) { point in
                 AreaMark(
                     x: .value("Time", point.date),
                     y: .value("Price", doubleValue(point.price))
                 )
                 .foregroundStyle(DSGradient.positiveArea)
+                .interpolationMethod(.monotone)
                 LineMark(
                     x: .value("Time", point.date),
                     y: .value("Price", doubleValue(point.price))
                 )
                 .foregroundStyle(DSColor.positive)
                 .lineStyle(StrokeStyle(lineWidth: 2))
+                .interpolationMethod(.monotone)
+            }
+            if let last = points.last {
+                PointMark(
+                    x: .value("Time", last.date),
+                    y: .value("Price", doubleValue(last.price))
+                )
+                .foregroundStyle(DSColor.positive)
+                .symbolSize(60)
             }
             if let target = viewModel.priceToBeat {
                 RuleMark(y: .value("Price to beat", doubleValue(target)))
@@ -205,6 +279,7 @@ public struct BTCLiveView: View {
                     .foregroundStyle(DSColor.textSecondary)
             }
         }
+        .chartYScale(domain: dollarDomain(low: values.min(), high: values.max()))
         .chartYAxis {
             AxisMarks(values: .automatic(desiredCount: 3)) {
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
@@ -221,8 +296,18 @@ public struct BTCLiveView: View {
     /// The Y domain is auto-scaled to the price range (unlike the old probability-based
     /// candles, which were fixed to 0...1).
     private var candleChart: some View {
-        Chart {
-            ForEach(Array(viewModel.candles.enumerated()), id: \.offset) { _, candle in
+        let candles = viewModel.candles
+        let domain = dollarDomain(
+            low: candles.map { doubleValue($0.low) }.min(),
+            high: candles.map { doubleValue($0.high) }.max()
+        )
+        // A body thin enough to leave gaps at any count, but never a hairline.
+        let bodyWidth = max(3.0, min(14.0, 240.0 / Double(max(candles.count, 1))))
+        // Open == close would give a zero-height rectangle, which draws nothing. Floor the
+        // body to a sliver of the visible range so a flat candle still reads as a candle.
+        let minBody = (domain.upperBound - domain.lowerBound) * 0.004
+        return Chart {
+            ForEach(Array(candles.enumerated()), id: \.offset) { _, candle in
                 // High–low wick.
                 RuleMark(
                     x: .value("Time", candle.start),
@@ -233,9 +318,9 @@ public struct BTCLiveView: View {
                 // Open–close body.
                 RectangleMark(
                     x: .value("Time", candle.start),
-                    yStart: .value("Open", doubleValue(candle.open)),
-                    yEnd: .value("Close", doubleValue(candle.close)),
-                    width: .fixed(6)
+                    yStart: .value("Open", bodyBounds(candle, minHeight: minBody).lower),
+                    yEnd: .value("Close", bodyBounds(candle, minHeight: minBody).upper),
+                    width: .fixed(bodyWidth)
                 )
                 .foregroundStyle(candleColor(candle))
             }
@@ -245,6 +330,7 @@ public struct BTCLiveView: View {
                     .foregroundStyle(DSColor.textSecondary)
             }
         }
+        .chartYScale(domain: domain)
         .chartYAxis {
             AxisMarks(values: .automatic(desiredCount: 3)) {
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
@@ -254,6 +340,43 @@ public struct BTCLiveView: View {
                     .font(DSFont.caption2)
             }
         }
+    }
+
+    /// Y-axis range for the dollar charts, fitted to the data.
+    ///
+    /// Without this Swift Charts picks its own domain, and both `AreaMark` and
+    /// `RectangleMark` anchor to zero — which put a ~$63,800 series on a 0…100,000 axis and
+    /// turned the price line into a flat slab and the candles into a hairline.
+    ///
+    /// `priceToBeat` is folded in so the target line can never sit off-screen, and the band
+    /// is padded so the extremes aren't glued to the frame edge.
+    private func dollarDomain(low: Double?, high: Double?) -> ClosedRange<Double> {
+        var lo = low ?? 0
+        var hi = high ?? 1
+        if let target = viewModel.priceToBeat {
+            let value = doubleValue(target)
+            lo = min(lo, value)
+            hi = max(hi, value)
+        }
+        guard hi > lo else {
+            // A perfectly flat series still needs a band, or the line lands on the frame edge.
+            let pad = max(abs(hi) * 0.001, 1)
+            return (lo - pad)...(hi + pad)
+        }
+        let pad = (hi - lo) * 0.08
+        return (lo - pad)...(hi + pad)
+    }
+
+    /// The candle body's drawn bounds, widened to `minHeight` when open and close are equal
+    /// so a flat candle still renders instead of collapsing to nothing.
+    private func bodyBounds(_ candle: Candle, minHeight: Double) -> (lower: Double, upper: Double) {
+        let open = doubleValue(candle.open)
+        let close = doubleValue(candle.close)
+        let lower = min(open, close)
+        let upper = max(open, close)
+        guard upper - lower < minHeight else { return (lower, upper) }
+        let mid = (lower + upper) / 2
+        return (mid - minHeight / 2, mid + minHeight / 2)
     }
 
     /// Green if the candle closed at or above its open, red otherwise.
