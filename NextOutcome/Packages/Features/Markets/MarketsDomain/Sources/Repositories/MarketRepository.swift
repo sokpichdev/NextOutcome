@@ -14,6 +14,12 @@ public protocol MarketRepository: Sendable {
     /// Fetches one page of events, optionally filtered by tag, sorted/scoped, and bounded
     /// to events that started within `period`.
     func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod) async throws -> Page<Event>
+    /// Polymarket's curated "featured" list, in editorial rank order (`featuredOrder` 1 first).
+    ///
+    /// This is a hand-maintained ranking, not a computed one — it's what the web homepage
+    /// pins above its volume-sorted feed, and it's the reason the web leads with headline
+    /// markets while a raw `volume24hr` feed leads with whatever sports fixture traded most.
+    func fetchFeaturedEvents(limit: Int) async throws -> [Event]
     /// All events of a Gamma series (e.g. a tournament). Bounded, unpaginated.
     func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event]
     /// All events under a Gamma tag (e.g. the "midterms" tag). Bounded, unpaginated — for hub
@@ -65,6 +71,7 @@ public extension MarketRepository {
     /// Defaults so existing conformers (stubs, test fakes) need no change; the live Gamma
     /// repository overrides these.
     func fetchTeams(league: String) async throws -> [GameTeam] { [] }
+    func fetchFeaturedEvents(limit: Int) async throws -> [Event] { [] }
     func fetchCompletedEvents(seriesID: String, limit: Int) async throws -> [Event] { [] }
     func fetchAllEvents(tagID: String, status: EventStatus) async throws -> [Event] { [] }
     func searchEvents(query: String) async throws -> [Event] { [] }

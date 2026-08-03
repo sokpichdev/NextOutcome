@@ -72,7 +72,8 @@ final class AppContainer {
         EventListViewModel(
             fetchEvents: FetchEventsUseCase(repository: repository),
             fetchRelatedTags: FetchRelatedTagsUseCase(repository: repository),
-            searchEvents: SearchEventsUseCase(repository: repository)
+            searchEvents: SearchEventsUseCase(repository: repository),
+            fetchFeaturedEvents: FetchFeaturedEventsUseCase(repository: repository)
         )
     }
 
