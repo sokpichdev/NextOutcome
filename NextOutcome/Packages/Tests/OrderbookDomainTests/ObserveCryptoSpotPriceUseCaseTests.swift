@@ -1,3 +1,10 @@
+//
+//  ObserveCryptoSpotPriceUseCaseTests.swift
+//  NextOutcome
+//
+//  Created by Sok Pich on 13/07/2026.
+//
+
 import XCTest
 @testable import OrderbookDomain
 import Foundation
@@ -33,6 +40,10 @@ private struct FakeCryptoSpotPriceRepository: CryptoSpotPriceRepository {
 
     func priceWindow(symbol: String, eventStart: Date, eventEnd: Date) async throws -> CryptoPriceWindow {
         CryptoPriceWindow(openPrice: nil, closePrice: nil, timestamp: Date(), completed: false)
+    }
+
+    func candles(symbol: String, interval: CandleInterval, before: Date?) async throws -> [Candle] {
+        []
     }
 }
 

@@ -63,6 +63,36 @@ public struct PolymarketCryptoPriceRepository: CryptoSpotPriceRepository {
         return OrderbookMapper.priceWindow(from: dto)
     }
 
+    /// Fetches one page of OHLC candles from `GET /api/chainlink-candles` — the feed the
+    /// web's candlestick chart draws from. The server requires `limit` to be exactly the
+    /// page size; paging back is done with an exclusive millisecond `endTime` cursor
+    /// (`before - 1ms`), mirroring how the web requests older pages.
+    public func candles(
+        symbol: String,
+        interval: CandleInterval,
+        before: Date?
+    ) async throws -> [Candle] {
+        var query = [
+            "symbol": symbol,
+            "interval": Self.wireInterval(interval),
+            "limit": String(FetchCryptoCandlesUseCase.pageSize)
+        ]
+        if let before {
+            query["endTime"] = String(Int(before.timeIntervalSince1970 * 1000) - 1)
+        }
+        let endpoint = Endpoint(host: .web, path: "/api/chainlink-candles", query: query)
+        let dto: ChainlinkCandlesResponseDTO = try await client.fetch(endpoint)
+        return OrderbookMapper.candles(from: dto)
+    }
+
+    /// The candle feed's wire name for an interval ("5m"/"15m").
+    private static func wireInterval(_ interval: CandleInterval) -> String {
+        switch interval {
+        case .fiveMinute: return "5m"
+        case .fifteenMinute: return "15m"
+        }
+    }
+
     /// Seconds-precision UTC ISO 8601 (e.g. `2026-07-03T15:30:00Z`), matching the exact
     /// shape the web app sends — no fractional seconds.
     private static let iso8601: ISO8601DateFormatter = {

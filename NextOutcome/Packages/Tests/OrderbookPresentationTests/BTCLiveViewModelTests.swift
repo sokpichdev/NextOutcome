@@ -89,6 +89,10 @@ private final class FakeCryptoSpotPriceRepository: CryptoSpotPriceRepository, @u
         requestedSymbols.append(symbol)
         return window
     }
+
+    func candles(symbol: String, interval: CandleInterval, before: Date?) async throws -> [Candle] {
+        []
+    }
 }
 
 final class BTCLiveViewModelTests: XCTestCase {
