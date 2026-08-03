@@ -130,12 +130,17 @@ struct EventDTO: Decodable {
     /// The event-level closed flag. Distinct from `MarketDTO.closed`, which is per-market —
     /// `Event.isResolved` needs *every* market closed, which is false for a finished fixture.
     let closed: Bool?
+    /// When the event's window closes, as a full ISO8601 timestamp. Load-bearing for spotting
+    /// abandoned events: Gamma leaves plenty of long-past events with `closed: false`, and
+    /// this is the only field that reveals them. Same key caveat as `MarketDTO.endDate` —
+    /// decode `endDate`, never `endDateIso`, which is a date with no time component.
+    let endDate: String?
 
     /// JSON keys for `EventDTO`.
     enum CodingKeys: String, CodingKey {
         case id, title, slug, markets, volume, image, tags, gameStartTime, description, series,
              volume24hr, liquidity, competitive, creationDate, resolutionSource
-        case ended, live, closed
+        case ended, live, closed, endDate
     }
 
     /// Tolerant decoder falling back to the slug for a missing title and to empty
@@ -161,6 +166,7 @@ struct EventDTO: Decodable {
         ended = try? c.decode(Bool.self, forKey: .ended)
         live = try? c.decode(Bool.self, forKey: .live)
         closed = try? c.decode(Bool.self, forKey: .closed)
+        endDate = try? c.decode(String.self, forKey: .endDate)
     }
 }
 

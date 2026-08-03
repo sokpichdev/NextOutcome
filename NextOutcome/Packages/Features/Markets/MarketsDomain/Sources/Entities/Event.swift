@@ -56,6 +56,8 @@ public struct Event: Identifiable, Hashable {
     /// Gamma's event-level `closed` flag. `nil` when absent. Distinct from `isResolved`,
     /// which is derived from the embedded markets.
     public let closed: Bool?
+    /// When the event's window closes, from Gamma's `endDate`. `nil` when absent.
+    public let endDate: Date?
 
     /// Creates an event. Usually built by the mapping layer from a DTO.
     public init(
@@ -76,7 +78,8 @@ public struct Event: Identifiable, Hashable {
         resolutionSource: String? = nil,
         ended: Bool? = nil,
         live: Bool? = nil,
-        closed: Bool? = nil
+        closed: Bool? = nil,
+        endDate: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -96,6 +99,7 @@ public struct Event: Identifiable, Hashable {
         self.ended = ended
         self.live = live
         self.closed = closed
+        self.endDate = endDate
     }
 
     /// True when at least one market carries a sports section hint (moneyline/spreads/totals/…),
@@ -118,4 +122,22 @@ public struct Event: Identifiable, Hashable {
     /// True when a sports/esports fixture is currently in play. A closed event is never
     /// live; anything without the flag is treated as not live.
     public var isLive: Bool { live ?? false }
+
+    /// True when the event claims to still be open but has plainly been abandoned.
+    ///
+    /// Gamma leaves a long tail of events whose window closed but which were never marked
+    /// `closed`, so a `closed=false` query keeps returning them — the Crypto tag's list is
+    /// full of 5-minute windows from December 2025 still reported as open. They crowd out
+    /// live markets and inflate every "how many of these are there?" count.
+    ///
+    /// Both conditions are required. A past `endDate` alone would also drop matches that
+    /// finished minutes ago and are awaiting resolution, which are still worth showing;
+    /// requiring *no trading at all in the last 24 hours* narrows it to events nobody has
+    /// touched. An event with no `endDate` is never stale — absence of evidence isn't
+    /// evidence, and dropping those would silently hide open-ended markets.
+    /// - Parameter now: The instant to judge against.
+    public func isAbandoned(asOf now: Date) -> Bool {
+        guard let endDate else { return false }
+        return endDate < now && volume24hr == 0
+    }
 }

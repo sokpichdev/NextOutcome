@@ -393,11 +393,20 @@ public enum GammaEventQuery {
 
     /// Params for fetching all events under a tag (e.g. Politics hub's "midterms" tag) in
     /// bounded 100-item pages.
+    ///
+    /// `order` is load-bearing despite every caller re-sorting client-side. The fetch is
+    /// capped at 5 pages, so the order decides *which 500 events the hub ever sees* — and
+    /// Gamma's default is creation order, which fills the window with the oldest rows in the
+    /// tag. Measured on the Crypto tag: the unordered window spanned 2024-12-31 → 2026-08-02
+    /// and its head was airdrop markets trading $0–105/day, while the tag's real leaders
+    /// trade $500k+. Sorting by 24h volume makes the cap select the events that matter.
     public static func tagParams(tagID: String, offset: Int, status: EventStatus) -> [String: String] {
         var query: [String: String] = [
             "tag_id": tagID,
             "limit": "100",
             "offset": "\(offset)",
+            "order": "volume24hr",
+            "ascending": "false",
         ]
         if status == .active {
             query["closed"] = "false"

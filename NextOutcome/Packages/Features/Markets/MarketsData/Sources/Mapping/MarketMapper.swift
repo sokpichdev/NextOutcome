@@ -196,7 +196,8 @@ enum MarketMapper {
             resolutionSource: dto.resolutionSource,
             ended: dto.ended,
             live: dto.live,
-            closed: dto.closed
+            closed: dto.closed,
+            endDate: DateParsing.parse(dto.endDate)
         )
     }
 }
