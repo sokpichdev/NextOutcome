@@ -1,3 +1,10 @@
+//
+//  CryptoHubView.swift
+//  NextOutcome
+//
+//  Created by Sok Pich on 10/07/2026.
+//
+
 import SwiftUI
 import MarketsDomain
 import DesignSystem
@@ -45,20 +52,24 @@ public struct CryptoHubView: View {
         }
         .navigationDestination(for: CryptoUpDownNavigationTarget.self) { target in
             if let btcLiveFactory {
-                BTCLiveView(
-                    viewModel: btcLiveFactory(target.liveContext) { side in
-                        tradeContext = TradeSheetContext(market: target.market, side: side == .up ? .yes : .no)
-                    },
-                    // Pop back to the hub, whose pinned card is already following the live
-                    // window on the grid boundary — so returning lands on the current one.
-                    // Refreshed first so the card can't be a window behind on arrival.
-                    onNextWindow: {
-                        Task {
-                            await viewModel.loadLiveWindow()
-                            dismiss()
+                // The pop must come from *inside* the pushed screen: this hub is the
+                // stack's root, so its own `dismiss` is a no-op — reading it out here is
+                // exactly what made "Next window →" do nothing.
+                LiveWindowDestination { pop in
+                    BTCLiveView(
+                        viewModel: btcLiveFactory(target.liveContext) { side in
+                            tradeContext = TradeSheetContext(market: target.market, side: side == .up ? .yes : .no)
+                        },
+                        // Pop back to the hub, whose pinned card follows the live window on
+                        // the grid boundary — so returning lands on the current one. The
+                        // refresh runs in the background rather than gating the pop: a slow
+                        // request otherwise leaves the tap looking dead.
+                        onNextWindow: {
+                            Task { await viewModel.loadLiveWindow() }
+                            pop()
                         }
-                    }
-                )
+                    )
+                }
             }
         }
         .sheet(isPresented: $showsMoreSheet) { CryptoMoreSheetPlaceholder() }
@@ -71,9 +82,6 @@ public struct CryptoHubView: View {
         .task { await followLiveWindow() }
         .refreshable { await viewModel.refresh() }
     }
-
-    /// Pops the pushed live-window screen when the user taps through a closed window.
-    @Environment(\.dismiss) private var dismiss
 
     /// Whether the row-2 search field is currently revealed.
     @State private var isSearching = false
@@ -338,6 +346,22 @@ public struct CryptoHubView: View {
         } else {
             CryptoStrikeCard(event: event, kind: kind)
         }
+    }
+}
+
+/// Hosts a pushed live-window screen and hands it a working "pop back" closure.
+///
+/// `dismiss` has to be read from a view that is *itself* the pushed destination —
+/// `CryptoHubView` is the stack's root, so its `dismiss` silently does nothing. This
+/// wrapper exists purely to give the destination its own environment to read.
+private struct LiveWindowDestination<Content: View>: View {
+    /// Pops this pushed screen off the navigation stack.
+    @Environment(\.dismiss) private var dismiss
+    /// Builds the pushed screen, given a closure that pops back to the hub.
+    let content: (_ pop: @escaping () -> Void) -> Content
+
+    var body: some View {
+        content { dismiss() }
     }
 }
 
