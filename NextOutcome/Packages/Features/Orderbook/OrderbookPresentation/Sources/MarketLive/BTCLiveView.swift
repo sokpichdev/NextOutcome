@@ -2,6 +2,8 @@
 //  BTCLiveView.swift
 //  NextOutcome
 //
+//  Created by Sok Pich on 03/07/2026.
+//
 
 import SwiftUI
 import Charts
@@ -291,23 +293,48 @@ public struct BTCLiveView: View {
         }
     }
 
-    /// The candlestick chart: a wick (high–low) and body (open–close) per dollar candle,
-    /// plus a dashed price-to-beat line. Green when the candle closed up, red when down.
-    /// The Y domain is auto-scaled to the price range (unlike the old probability-based
-    /// candles, which were fixed to 0...1).
+    /// How many candles fit in the chart frame at once; older candles scroll in from the
+    /// left. 24 five-minute candles ≈ two hours on screen, matching the web's default zoom.
+    private static let visibleCandleCount = 24
+
+    /// The candlestick chart: a wick (high–low) and body (open–close) per 5-minute
+    /// candle, plus a dashed price-to-beat line and the live current-price line.
+    /// Green when the candle closed up, red when down.
+    ///
+    /// Scrolls horizontally through the seeded history (several hours; see
+    /// `BTCLiveViewModel.seedCandlePages`), starting anchored at the newest candle.
+    ///
+    /// Deliberately **not** bound to `chartScrollPosition(x:)`: with live ticks mutating
+    /// the forming candle many times a second, Swift Charts desyncs that binding from its
+    /// real viewport — renders then alternate between the two positions (a once-a-second
+    /// flicker) and prepending older pages teleports the view hours back. Scrolling stays
+    /// entirely inside the chart's own gesture handling; only `initialX` anchors it once.
+    @ViewBuilder
     private var candleChart: some View {
+        if viewModel.candles.isEmpty {
+            ProgressView().frame(maxWidth: .infinity)
+        } else {
+            candleChartBody
+        }
+    }
+
+    private var candleChartBody: some View {
         let candles = viewModel.candles
+        let interval = viewModel.windowInterval
+        let visibleSpan = interval * Double(Self.visibleCandleCount)
         let domain = dollarDomain(
             low: candles.map { doubleValue($0.low) }.min(),
             high: candles.map { doubleValue($0.high) }.max()
         )
-        // A body thin enough to leave gaps at any count, but never a hairline.
-        let bodyWidth = max(3.0, min(14.0, 240.0 / Double(max(candles.count, 1))))
+        // The left edge that puts the newest candle at the right edge of the frame.
+        let trailingAnchor = (candles.last?.start ?? .now).addingTimeInterval(interval - visibleSpan)
+        // A body thin enough to leave gaps between the visible candles, but never a hairline.
+        let bodyWidth = max(3.0, min(14.0, 260.0 / Double(Self.visibleCandleCount)))
         // Open == close would give a zero-height rectangle, which draws nothing. Floor the
         // body to a sliver of the visible range so a flat candle still reads as a candle.
         let minBody = (domain.upperBound - domain.lowerBound) * 0.004
         return Chart {
-            ForEach(Array(candles.enumerated()), id: \.offset) { _, candle in
+            ForEach(candles, id: \.start) { candle in
                 // High–low wick.
                 RuleMark(
                     x: .value("Time", candle.start),
@@ -347,7 +374,22 @@ public struct BTCLiveView: View {
                     }
             }
         }
+        .chartScrollableAxes(.horizontal)
+        .chartXVisibleDomain(length: visibleSpan)
+        .chartScrollPosition(initialX: trailingAnchor)
+        // `initialX` alone is not reliably honoured (the chart can still open at its
+        // oldest candle), so also anchor the underlying scroll view to the trailing edge.
+        .defaultScrollAnchor(.trailing)
         .chartYScale(domain: domain)
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                    .foregroundStyle(DSColor.separator)
+                AxisValueLabel(format: .dateTime.hour().minute())
+                    .foregroundStyle(DSColor.textSecondary)
+                    .font(DSFont.caption2)
+            }
+        }
         .chartYAxis {
             AxisMarks(values: .automatic(desiredCount: 3)) {
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
