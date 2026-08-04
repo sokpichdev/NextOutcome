@@ -177,6 +177,46 @@ public final class BTCLiveViewModel {
         return Self.bucket(points.sorted { $0.date < $1.date }, interval: windowInterval)
     }
 
+    /// The stabilised dollar y-range for the candle chart, or `nil` before any candles
+    /// have loaded (the view then falls back to fitting the data directly).
+    ///
+    /// Lives here rather than in the view because it is *stateful*: the band only moves
+    /// when the price actually leaves it, and that hysteresis — the thing that stops the
+    /// chart rescaling on every RTDS tick — is the part worth unit-testing. See
+    /// `CandleChartScale`.
+    public private(set) var candleDomain: ClosedRange<Double>?
+
+    /// The hysteresis state behind `candleDomain`.
+    private var candleScale = CandleChartScale()
+
+    /// Re-derives `candleDomain` from the current series and the price to beat.
+    ///
+    /// Publishes only when the band actually moved, so a tick that lands inside the
+    /// existing band costs the chart nothing at all.
+    private func refreshCandleDomain() {
+        let series = candles
+        guard !series.isEmpty else { return }
+        var lo = series.map { Self.double($0.low) }.min() ?? 0
+        var hi = series.map { Self.double($0.high) }.max() ?? 1
+        // Fold in the target so the price-to-beat line can never sit off-screen.
+        //
+        // Deliberately the server's dollar open rather than `priceToBeat`: that property
+        // falls back to the *probability* series (0…1) before the window poll lands, and
+        // folding a 0.42 into a $63,000 axis collapses the candles into a hairline at the
+        // top of the frame. A zero open is likewise not a real price.
+        if let open = priceWindow?.openPrice, open > 0 {
+            let value = Self.double(open)
+            lo = Swift.min(lo, value)
+            hi = Swift.max(hi, value)
+        }
+        if candleScale.absorb(low: lo, high: hi) { candleDomain = candleScale.domain }
+    }
+
+    /// Converts a dollar `Decimal` to a `Double` for the chart's y-axis.
+    nonisolated static func double(_ value: Decimal) -> Double {
+        NSDecimalNumber(decimal: value).doubleValue
+    }
+
     /// The candle width to request, derived from this market's window length.
     private var candleInterval: CandleInterval {
         windowInterval >= 900 ? .fifteenMinute : .fiveMinute
@@ -380,10 +420,16 @@ public final class BTCLiveViewModel {
     }
 
     /// Recomputes `remainingSeconds` and `countdown` from the server-anchored clock.
-    private func refreshCountdown() {
+    ///
+    /// Assigns only on change: the `@Observable` macro republishes on *every* setter call,
+    /// not only when the value differs, so unguarded writes here invalidated the whole
+    /// screen — candle chart included — once a second even when the string was identical.
+    func refreshCountdown() {
         guard let now = currentServerTime else { return }
-        remainingSeconds = max(0, Int(windowEnd.timeIntervalSince(now)))
-        countdown = CountdownFormatter.string(until: windowEnd, now: now)
+        let seconds = max(0, Int(windowEnd.timeIntervalSince(now)))
+        if remainingSeconds != seconds { remainingSeconds = seconds }
+        let text = CountdownFormatter.string(until: windowEnd, now: now)
+        if countdown != text { countdown = text }
     }
 
     /// Consumes the live book stream, updating `book` on each new snapshot and appending
@@ -438,6 +484,7 @@ public final class BTCLiveViewModel {
             if !candleSeries.isEmpty, let tick = points.last {
                 candleSeries = CandleAggregator.folding(candleSeries, with: tick, interval: candleInterval.seconds)
             }
+            refreshCandleDomain()
         }
     }
 
@@ -458,6 +505,7 @@ public final class BTCLiveViewModel {
             guard !Task.isCancelled, !isStopped else { return }
             candleSeries = page
             hasMoreCandles = page.count >= FetchCryptoCandlesUseCase.pageSize
+            refreshCandleDomain()
         } catch {
             // Non-fatal: `candles` falls back to bucketing the window-scoped spot series,
             // which still shows the current forming candle.
@@ -485,6 +533,7 @@ public final class BTCLiveViewModel {
             // at/after the oldest we already have would corrupt the series' ordering.
             candleSeries = page.filter { $0.start < oldest.start } + candleSeries
             hasMoreCandles = page.count >= FetchCryptoCandlesUseCase.pageSize
+            refreshCandleDomain()
         } catch {
             // Non-fatal: keep hasMoreCandles as-is so a later call can retry.
         }
@@ -501,7 +550,10 @@ public final class BTCLiveViewModel {
                 let window = try await fetchPriceWindow.execute(
                     symbol: symbol, eventStart: eventStart, eventEnd: windowEnd
                 )
-                if !Task.isCancelled { priceWindow = window }
+                if !Task.isCancelled {
+                    priceWindow = window
+                    refreshCandleDomain()
+                }
             } catch {
                 if isCancellation(error) { return }
                 // Non-fatal: keep the last good window and retry next tick.

@@ -527,4 +527,146 @@ final class BTCLiveViewModelTests: XCTestCase {
         XCTAssertEqual(spotRepository.candleBeforeCursors[1], oldestLoaded, "paging must cursor from the oldest loaded candle")
         XCTAssertFalse(vm.hasMoreCandles, "a short page means history is exhausted")
     }
+
+    // MARK: - Candle chart y-band stability
+
+    /// A page of `count` 5-minute candles spanning `low`…`high`, so the band has a real
+    /// span to quantise (unlike `candlePage`, whose candles are flat).
+    private func spreadCandlePage(
+        endingAt lastStart: Date, count: Int, low: Decimal, high: Decimal
+    ) -> [Candle] {
+        (0..<count).map { offset in
+            let start = lastStart.addingTimeInterval(-300 * Double(count - 1 - offset))
+            return Candle(open: low, high: high, low: low, close: high, start: start)
+        }
+    }
+
+    /// The regression test for the shimmying chart: live ticks that stay inside the band
+    /// must not move the y-domain. Any movement rescales every candle and — via the
+    /// y-axis label width — shifts them sideways too.
+    @MainActor
+    func test_candleDomainSurvivesTicksInsideTheBand() async {
+        let windowEnd = Date(timeIntervalSince1970: 999_900)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: windowEnd.addingTimeInterval(-60), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        let lastStart = Date(timeIntervalSince1970: 999_600)
+        spotRepository.candlePages = [
+            spreadCandlePage(endingAt: lastStart, count: 5, low: 63_000, high: 64_000)
+        ]
+        spotRepository.window = CryptoPriceWindow(
+            openPrice: 63_500, closePrice: nil, timestamp: windowEnd, completed: false
+        )
+        // Ticks wandering well inside the loaded 63,000…64,000 series.
+        let streamer = FakeCryptoSpotPriceStreaming(points: (0..<20).map { step in
+            CryptoSpotPricePoint(
+                date: lastStart.addingTimeInterval(Double(step) * 10),
+                price: 63_400 + Decimal(step % 7) * 10
+            )
+        })
+
+        let vm = makeVM(
+            repository: repository, windowEnd: windowEnd,
+            spotRepository: spotRepository, spotStreamer: streamer
+        )
+        vm.start()
+        for _ in 0..<200 { await Task.yield() }
+        let settled = vm.candleDomain
+        for _ in 0..<200 { await Task.yield() }
+        vm.stop()
+
+        XCTAssertNotNil(settled)
+        XCTAssertEqual(vm.candleDomain, settled, "an in-band tick must not move the y-domain")
+        XCTAssertTrue(settled!.contains(63_000), "the band must still show the series' low")
+        XCTAssertTrue(settled!.contains(64_000), "the band must still show the series' high")
+    }
+
+    /// The band is stable, not frozen: a price that genuinely escapes it must widen it,
+    /// or the live line would draw outside the plot.
+    @MainActor
+    func test_candleDomainWidensWhenAPriceEscapesIt() async {
+        let windowEnd = Date(timeIntervalSince1970: 999_900)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: windowEnd.addingTimeInterval(-60), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        let lastStart = Date(timeIntervalSince1970: 999_600)
+        spotRepository.candlePages = [
+            spreadCandlePage(endingAt: lastStart, count: 5, low: 63_000, high: 64_000)
+        ]
+        spotRepository.window = CryptoPriceWindow(
+            openPrice: 63_500, closePrice: nil, timestamp: windowEnd, completed: false
+        )
+        let streamer = FakeCryptoSpotPriceStreaming(points: [
+            CryptoSpotPricePoint(date: lastStart.addingTimeInterval(30), price: 70_000)
+        ])
+
+        let vm = makeVM(
+            repository: repository, windowEnd: windowEnd,
+            spotRepository: spotRepository, spotStreamer: streamer
+        )
+        vm.start()
+        for _ in 0..<200 { await Task.yield() }
+        vm.stop()
+
+        XCTAssertNotNil(vm.candleDomain)
+        XCTAssertTrue(vm.candleDomain!.contains(70_000), "a breakout price must stay on-screen")
+    }
+
+    /// The price-to-beat line must never sit off-screen, so the window's dollar open is
+    /// folded into the band even when it lies outside the candles' own extremes.
+    @MainActor
+    func test_candleDomainAlwaysContainsThePriceToBeat() async {
+        let windowEnd = Date(timeIntervalSince1970: 999_900)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: windowEnd.addingTimeInterval(-60), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        let lastStart = Date(timeIntervalSince1970: 999_600)
+        spotRepository.candlePages = [
+            spreadCandlePage(endingAt: lastStart, count: 5, low: 63_000, high: 64_000)
+        ]
+        // Well below every candle the chart has loaded.
+        spotRepository.window = CryptoPriceWindow(
+            openPrice: 61_000, closePrice: nil, timestamp: windowEnd, completed: false
+        )
+
+        let vm = makeVM(repository: repository, windowEnd: windowEnd, spotRepository: spotRepository)
+        vm.start()
+        for _ in 0..<200 { await Task.yield() }
+        vm.stop()
+
+        XCTAssertNotNil(vm.candleDomain)
+        XCTAssertTrue(vm.candleDomain!.contains(61_000), "the price-to-beat line must stay on-screen")
+        XCTAssertTrue(vm.candleDomain!.contains(64_000))
+    }
+
+    /// `@Observable` republishes on every setter call, so an unguarded countdown write
+    /// invalidated the whole screen — candle chart included — once a second even when the
+    /// value was identical. Only a genuine second change may notify.
+    @MainActor
+    func test_countdownDoesNotRepublishAnUnchangedSecond() async {
+        let windowEnd = Date(timeIntervalSince1970: 1_000_000)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: windowEnd.addingTimeInterval(-60), price: 0.5)]
+        repository.serverNow = windowEnd.addingTimeInterval(-120)
+
+        let vm = makeVM(repository: repository, windowEnd: windowEnd)
+        vm.start()
+        for _ in 0..<50 { await Task.yield() }
+        vm.stop()
+
+        var notified = false
+        withObservationTracking {
+            _ = vm.countdown
+            _ = vm.remainingSeconds
+        } onChange: {
+            notified = true
+        }
+        // The monotonic clock has barely advanced, so both values are unchanged.
+        vm.refreshCountdown()
+
+        XCTAssertFalse(notified, "an unchanged countdown must not invalidate observers")
+    }
 }

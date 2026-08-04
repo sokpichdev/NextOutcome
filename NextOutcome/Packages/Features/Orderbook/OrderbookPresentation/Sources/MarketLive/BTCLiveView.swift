@@ -17,6 +17,11 @@ public struct BTCLiveView: View {
     /// The view model driving the whole screen.
     @State private var viewModel: BTCLiveViewModel
 
+    /// The candle chart's opening scroll position, captured once the first series lands.
+    /// Held in `@State` rather than recomputed per body pass so `chartScrollPosition`'s
+    /// "initial" value is genuinely initial — see `candleChartBody`.
+    @State private var initialAnchor: Date?
+
     /// Moves the user on once this window has closed. `nil` leaves the closed state as a
     /// dead end with an explanatory label rather than a button that goes nowhere.
     ///
@@ -37,67 +42,19 @@ public struct BTCLiveView: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSLayout.spacingLarge) {
-                header
+                // Each section is its own View struct so its observation scope is its own:
+                // the 1 Hz countdown and the per-frame order book must not invalidate the
+                // candle chart. See `BTCLiveSections.swift`.
+                BTCLiveHeaderSection(viewModel: viewModel)
                 chartCard
-                quickBet
-                tradesTicker
+                BTCLiveQuickBetSection(viewModel: viewModel, onNextWindow: onNextWindow)
+                BTCLiveTradesTicker(viewModel: viewModel)
             }
             .padding(DSLayout.spacing)
         }
         .background(DSColor.background.ignoresSafeArea())
         .onAppear { viewModel.start() }
         .onDisappear { viewModel.stop() }
-    }
-
-    // MARK: Header (countdown + price to beat)
-
-    /// The header: the countdown on the left (red when urgent), and the dollar
-    /// price-to-beat + current price on the right (with a colored delta, matching web).
-    private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: DSLayout.spacingXSmall) {
-                Text(viewModel.hasSettled ? "Window closed" : "Time remaining")
-                    .font(DSFont.caption)
-                    .foregroundStyle(DSColor.textSecondary)
-                if let settlement = viewModel.settlement {
-                    settlementLabel(settlement)
-                } else {
-                    Text(viewModel.countdown)
-                        .font(DSFont.price)
-                        .foregroundStyle(viewModel.isCountdownUrgent ? DSColor.negative : DSColor.textPrimary)
-                }
-            }
-            Spacer()
-            HStack(alignment: .firstTextBaseline, spacing: DSLayout.spacing) {
-                if let target = viewModel.priceToBeat {
-                    VStack(alignment: .trailing, spacing: DSLayout.spacingXSmall) {
-                        Text("Price to beat")
-                            .font(DSFont.caption)
-                            .foregroundStyle(DSColor.textSecondary)
-                        Text(usdLabel(target))
-                            .font(DSFont.priceSmall)
-                            .foregroundStyle(DSColor.textPrimary)
-                    }
-                }
-                if let current = viewModel.currentPrice {
-                    VStack(alignment: .trailing, spacing: DSLayout.spacingXSmall) {
-                        HStack(spacing: 4) {
-                            Text("Current Price")
-                                .font(DSFont.caption)
-                                .foregroundStyle(DSColor.textSecondary)
-                            if let delta = viewModel.priceDelta {
-                                Text(deltaLabel(delta))
-                                    .font(DSFont.caption)
-                                    .foregroundStyle(delta >= 0 ? DSColor.positive : DSColor.negative)
-                            }
-                        }
-                        Text(usdLabel(current))
-                            .font(DSFont.priceSmall)
-                            .foregroundStyle(DSColor.textPrimary)
-                    }
-                }
-            }
-        }
     }
 
     // MARK: Chart
@@ -302,13 +259,27 @@ public struct BTCLiveView: View {
     /// Green when the candle closed up, red when down.
     ///
     /// Scrolls horizontally through the seeded history (several hours; see
-    /// `BTCLiveViewModel.seedCandlePages`), starting anchored at the newest candle.
+    /// `BTCLiveViewModel.seedCandlePages`), opening anchored at the newest candle and then
+    /// holding wherever the user leaves it.
     ///
-    /// Deliberately **not** bound to `chartScrollPosition(x:)`: with live ticks mutating
-    /// the forming candle many times a second, Swift Charts desyncs that binding from its
-    /// real viewport — renders then alternate between the two positions (a once-a-second
-    /// flicker) and prepending older pages teleports the view hours back. Scrolling stays
-    /// entirely inside the chart's own gesture handling; only `initialX` anchors it once.
+    /// **Everything here exists to keep the candles still.** A live tick must move the
+    /// current-price line and nothing else, so nothing whose size or value depends on the
+    /// price may participate in the chart's layout:
+    ///
+    /// - The price chip is a `chartOverlay`, not an `.annotation` (`priceTagOverlay`), and
+    ///   the y-axis labels have a reserved width. Both otherwise sit *outside* the plot
+    ///   rect, so their width — which changes with the digits, `Font.caption2` having
+    ///   proportional figures — resized the plot and slid every candle sideways.
+    /// - The y-domain comes from `BTCLiveViewModel.candleDomain`, which only moves when the
+    ///   price leaves its band, rather than refitting the series on every tick.
+    /// - `initialAnchor` is captured once; `trailingScrollAnchor()` anchors the scroll view
+    ///   at the newest candle without re-anchoring when a candle appends.
+    ///
+    /// Deliberately **not** bound to `chartScrollPosition(x:)` either: with live ticks
+    /// mutating the forming candle many times a second, Swift Charts desyncs that binding
+    /// from its real viewport — renders then alternate between the two positions, and
+    /// prepending older pages teleports the view hours back. Scrolling stays entirely
+    /// inside the chart's own gesture handling.
     @ViewBuilder
     private var candleChart: some View {
         if viewModel.candles.isEmpty {
@@ -322,7 +293,10 @@ public struct BTCLiveView: View {
         let candles = viewModel.candles
         let interval = viewModel.windowInterval
         let visibleSpan = interval * Double(Self.visibleCandleCount)
-        let domain = dollarDomain(
+        // The stabilised band from the view model: it only moves when the price actually
+        // leaves it, so an ordinary tick can't rescale the chart. `dollarDomain` remains
+        // the fallback for the brief pre-seed window (and for the two line charts).
+        let domain = viewModel.candleDomain ?? dollarDomain(
             low: candles.map { doubleValue($0.low) }.min(),
             high: candles.map { doubleValue($0.high) }.max()
         )
@@ -356,31 +330,32 @@ public struct BTCLiveView: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                     .foregroundStyle(DSColor.textSecondary)
             }
-            // The live price line: the value that actually moves while a window is open,
-            // labelled at the right edge the way the web does it. Coloured against the price
-            // to beat, so the line and the forming candle agree on who is winning.
+            // The live price line: the value that actually moves while a window is open.
+            // Coloured against the price to beat, so the line and the forming candle agree
+            // on who is winning. Its label is drawn in `.chartOverlay` below, not as an
+            // `.annotation` — see `priceTagOverlay`.
             if let current = viewModel.currentPrice {
                 RuleMark(y: .value("Current price", doubleValue(current)))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
                     .foregroundStyle(currentPriceColor)
-                    .annotation(position: .trailing, alignment: .trailing, spacing: 0) {
-                        Text(usdLabel(current))
-                            .font(DSFont.caption2.bold())
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(currentPriceColor)
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                    }
             }
         }
+        .chartOverlay { proxy in priceTagOverlay(proxy) }
         .chartScrollableAxes(.horizontal)
         .chartXVisibleDomain(length: visibleSpan)
-        .chartScrollPosition(initialX: trailingAnchor)
-        // `initialX` alone is not reliably honoured (the chart can still open at its
-        // oldest candle), so also anchor the underlying scroll view to the trailing edge.
-        .defaultScrollAnchor(.trailing)
+        // Captured once, on the first non-empty series. Recomputing `trailingAnchor` every
+        // body pass meant this modifier's value changed each time a new 5-minute bucket
+        // opened, and Swift Charts can re-apply an "initial" position when it does.
+        .chartScrollPosition(initialX: initialAnchor ?? trailingAnchor)
+        .trailingScrollAnchor()
         .chartYScale(domain: domain)
+        // Tick-driven data changes must never animate: an interpolating chart is a moving
+        // chart. No implicit-animation source lives in this file, but ancestor
+        // transactions (the enclosing ScrollView's layout, a mode-chip tap) propagate.
+        .transaction { $0.animation = nil }
+        // This body only exists once `candles` is non-empty (see `candleChart`), so its
+        // first appearance is exactly the moment the opening anchor becomes meaningful.
+        .onAppear { if initialAnchor == nil { initialAnchor = trailingAnchor } }
         .chartXAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { _ in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
@@ -391,14 +366,91 @@ public struct BTCLiveView: View {
             }
         }
         .chartYAxis {
-            AxisMarks(values: .automatic(desiredCount: 3)) {
+            AxisMarks(values: .automatic(desiredCount: 3)) { value in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                     .foregroundStyle(DSColor.separator)
-                AxisValueLabel()
-                    .foregroundStyle(DSColor.textSecondary)
-                    .font(DSFont.caption2)
+                // A reserved width and tabular figures. The axis gutter is the *other*
+                // thing whose size feeds back into the plot width — and therefore into
+                // every candle's x position — so it must not depend on how many digits
+                // the current band happens to print.
+                AxisValueLabel {
+                    Text(LiveFormat.axis(value.as(Double.self)))
+                        .font(DSFont.caption2)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .foregroundStyle(DSColor.textSecondary)
+                        .frame(width: Self.axisLabelWidth, alignment: .trailing)
+                }
             }
         }
+    }
+
+    // MARK: Candle chart chrome
+
+    /// A fixed width for the y-axis labels. Reserved rather than measured because the axis
+    /// gutter is laid out *outside* the plot, so a label that changed width with the digits
+    /// would change the plot width — and therefore every candle's x position.
+    private static let axisLabelWidth: CGFloat = 46
+
+    /// The gap between the price chip and the right edge of the visible plot.
+    private static let priceTagInset: CGFloat = 2
+
+    /// What Swift Charts reserves on the trailing side for the y-axis: the fixed label
+    /// width plus the small gap it leaves between the plot and its labels. The chart
+    /// overlay's bounds span plot *and* gutter, so this is how the overlay recovers where
+    /// the visible plot actually ends.
+    private static let yAxisGutter: CGFloat = axisLabelWidth + 4
+
+    /// The live price chip, drawn on top of the plot at the current-price line.
+    ///
+    /// Deliberately an overlay rather than the `.annotation` this used to be: Swift Charts
+    /// lays annotations out *outside* the plot rect, so the label's width was subtracted
+    /// from the plot width. With proportional figures, `$63,911.11` and `$63,988.88` are
+    /// different widths, so every tick resized the plot, rescaled `chartXVisibleDomain`,
+    /// and slid every candle sideways — the reported "flickering forward backward".
+    /// Overlays contribute nothing to chart layout.
+    ///
+    /// It also fixes a correctness bug the annotation had: `plotFrame` spans the whole
+    /// scroll *content*, so its trailing edge is hours off-screen once the user scrolls
+    /// back through history — the chip simply vanished. Clamping to the overlay's own
+    /// bounds, which are the viewport, keeps it pinned to the right edge of what's visible.
+    @ViewBuilder
+    private func priceTagOverlay(_ proxy: ChartProxy) -> some View {
+        GeometryReader { geometry in
+            if let current = viewModel.currentPrice,
+               let anchor = proxy.plotFrame,
+               let offset = proxy.position(forY: doubleValue(current)) {
+                let plot = geometry[anchor]
+                // `plot.maxX` is the trailing edge of the scroll *content*, which only
+                // coincides with the viewport while the chart sits at its trailing anchor;
+                // scrolled back, it is hours off to the right and the chip vanished. Cap it
+                // at the visible plot edge so the chip lands identically either way.
+                let plotRight = min(plot.maxX, geometry.size.width - Self.yAxisGutter)
+                let rightEdge = max(1, plotRight - Self.priceTagInset)
+                // Right-aligned inside a frame ending at `rightEdge`, so the chip's own
+                // width never enters the calculation — no magic constant to outgrow.
+                priceTag(current)
+                    .fixedSize()
+                    .frame(width: rightEdge, alignment: .trailing)
+                    .position(x: rightEdge / 2, y: plot.minY + offset)
+            }
+        }
+        // The chart owns the horizontal drag; an overlay that swallowed touches would kill
+        // scroll-back through history.
+        .allowsHitTesting(false)
+    }
+
+    /// The price chip itself. `monospacedDigit` keeps it from twitching as the digits
+    /// change — cosmetic now that it's an overlay, but it costs nothing.
+    private func priceTag(_ value: Decimal) -> some View {
+        Text(usdLabel(value))
+            .font(DSFont.caption2.bold())
+            .monospacedDigit()
+            .lineLimit(1)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(currentPriceColor, in: RoundedRectangle(cornerRadius: 4))
     }
 
     /// Y-axis range for the dollar charts, fitted to the data.
@@ -452,87 +504,6 @@ public struct BTCLiveView: View {
         candle.close >= candle.open ? DSColor.positive : DSColor.negative
     }
 
-    /// The settled result in place of the countdown: which side the window finished on.
-    @ViewBuilder
-    private func settlementLabel(_ settlement: BTCLiveViewModel.Settlement) -> some View {
-        switch settlement {
-        case .up:
-            Text("Up won").font(DSFont.price).foregroundStyle(DSColor.positive)
-        case .down:
-            Text("Down won").font(DSFont.price).foregroundStyle(DSColor.negative)
-        case .undetermined:
-            Text("Settled").font(DSFont.price).foregroundStyle(DSColor.textSecondary)
-        }
-    }
-
-    // MARK: Quick bet
-
-    /// The Up/Down quick-bet buttons showing the current live cents for each side.
-    ///
-    /// Replaced once the window closes: a closed window's book empties out, so the buttons
-    /// would read "--" and do nothing — which is exactly what made the ended screen look
-    /// broken. The whole screen intentionally stays put on the window the user opened,
-    /// showing how it finished, with one tap to move on.
-    @ViewBuilder
-    private var quickBet: some View {
-        if viewModel.hasSettled {
-            Button(action: { onNextWindow?() }) {
-                Text(onNextWindow == nil ? "This window has closed" : "Next window →")
-                    .font(DSFont.subheadline.bold())
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, DSLayout.spacingMedium)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(onNextWindow == nil ? DSColor.textSecondary : DSColor.accent)
-            .background(DSColor.surfaceElevated)
-            .clipShape(RoundedRectangle(cornerRadius: DSLayout.cardRadius))
-            .disabled(onNextWindow == nil)
-        } else {
-            HStack(spacing: DSLayout.spacing) {
-                PriceButton(
-                    title: "Up",
-                    price: centsButtonLabel(viewModel.upCents),
-                    style: .yes
-                ) { viewModel.quickBet(.up) }
-                PriceButton(
-                    title: "Down",
-                    price: centsButtonLabel(viewModel.downCents),
-                    style: .no
-                ) { viewModel.quickBet(.down) }
-            }
-        }
-    }
-
-    // MARK: Recent trades ticker
-
-    /// The recent-trades list (up to 8 rows), hidden entirely when there are no trades.
-    @ViewBuilder
-    private var tradesTicker: some View {
-        if !viewModel.recentTrades.isEmpty {
-            DSCard {
-                VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
-                    Text("Recent trades")
-                        .font(DSFont.headline)
-                        .foregroundStyle(DSColor.textPrimary)
-                    ForEach(viewModel.recentTrades.prefix(8)) { trade in
-                        HStack {
-                            Text(trade.side == .buy ? "Buy" : "Sell")
-                                .font(DSFont.caption)
-                                .foregroundStyle(trade.side == .buy ? DSColor.positive : DSColor.negative)
-                            Text(trade.outcome)
-                                .font(DSFont.caption)
-                                .foregroundStyle(DSColor.textSecondary)
-                            Spacer()
-                            Text(centsLabel(trade.price))
-                                .font(DSFont.priceSmall)
-                                .foregroundStyle(DSColor.textPrimary)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     /// A centered message, optionally with a retry button, for the empty and error states.
     /// - Parameters:
     ///   - message: The text to show.
@@ -551,45 +522,39 @@ public struct BTCLiveView: View {
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: Formatting (Decimal stays domain-side; Double/labels only here)
+    // MARK: Formatting
 
-    /// Clamps a domain `Decimal` price into a 0…1 `Double` for the chart's y-axis.
-    private func fractionValue(_ value: Decimal) -> Double {
-        min(1, max(0, NSDecimalNumber(decimal: value).doubleValue))
-    }
+    // Thin call-site aliases onto `LiveFormat` (shared with the section views), so the
+    // chart code below reads as `doubleValue(candle.low)` rather than a qualified call.
 
-    /// Formats a 0…1 price as a whole-cent label (e.g. "62¢").
-    private func centsLabel(_ value: Decimal) -> String {
-        "\(Int((fractionValue(value) * 100).rounded()))¢"
-    }
+    /// Clamps a domain `Decimal` price into a 0…1 `Double` for the probability chart's axis.
+    private func fractionValue(_ value: Decimal) -> Double { LiveFormat.fraction(value) }
 
-    /// Formats an optional cents value for a quick-bet button, showing "--" when unknown.
-    private func centsButtonLabel(_ cents: Int?) -> String {
-        cents.map { "\($0)¢" } ?? "--"
-    }
-
-    /// Converts a dollar `Decimal` to an unclamped `Double` for the spot-price charts
-    /// (unlike `fractionValue`, which clamps into 0…1 for probability charts).
-    private func doubleValue(_ value: Decimal) -> Double {
-        NSDecimalNumber(decimal: value).doubleValue
-    }
+    /// Converts a dollar `Decimal` to an unclamped `Double` for the spot-price charts.
+    private func doubleValue(_ value: Decimal) -> Double { LiveFormat.double(value) }
 
     /// Formats a dollar `Decimal` as USD (e.g. "$63,945.94").
-    private func usdLabel(_ value: Decimal) -> String {
-        Self.usdFormatter.string(from: NSDecimalNumber(decimal: value)) ?? "$--"
-    }
+    private func usdLabel(_ value: Decimal) -> String { LiveFormat.usd(value) }
+}
 
-    /// Formats a signed dollar delta with an arrow (e.g. "▲$15", "▼$8").
-    private func deltaLabel(_ value: Decimal) -> String {
-        let magnitude = usdLabel(abs(value))
-        return value >= 0 ? "▲\(magnitude)" : "▼\(magnitude)"
+/// Anchors a scrollable chart at its trailing edge **once**, without re-anchoring later.
+///
+/// `defaultScrollAnchor(_:)` maintains the anchor across content-size changes, so every
+/// appended candle yanked a scrolled-back user forward to the newest one. The
+/// `.initialOffset` role expresses what we actually want — open on the newest candle, then
+/// leave the offset alone. The app deploys to iOS 26; the `else` branch only exists to
+/// honour the package's iOS 17 floor.
+private struct TrailingScrollAnchor: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, macOS 15.0, *) {
+            content.defaultScrollAnchor(.trailing, for: .initialOffset)
+        } else {
+            content.defaultScrollAnchor(.trailing)
+        }
     }
+}
 
-    /// A shared USD currency formatter for `usdLabel`/`deltaLabel`.
-    private static let usdFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        return formatter
-    }()
+private extension View {
+    /// Applies `TrailingScrollAnchor`.
+    func trailingScrollAnchor() -> some View { modifier(TrailingScrollAnchor()) }
 }
