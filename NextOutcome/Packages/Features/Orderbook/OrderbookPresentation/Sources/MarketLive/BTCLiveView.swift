@@ -300,8 +300,15 @@ public struct BTCLiveView: View {
             low: candles.map { doubleValue($0.low) }.min(),
             high: candles.map { doubleValue($0.high) }.max()
         )
+        // The x-domain, stated explicitly and carried one whole interval past the newest
+        // candle. Left to infer it, Swift Charts ends the domain at `last.start` — and
+        // because a `RectangleMark` is *centred* on its x value, the newest candle then
+        // straddles the plot's right edge and gets sliced in half. The extra interval is
+        // the same one `trailingAnchor` already assumes, so the two now agree.
+        let lastStart = candles.last?.start ?? .now
+        let xDomain = (candles.first?.start ?? lastStart)...lastStart.addingTimeInterval(interval)
         // The left edge that puts the newest candle at the right edge of the frame.
-        let trailingAnchor = (candles.last?.start ?? .now).addingTimeInterval(interval - visibleSpan)
+        let trailingAnchor = lastStart.addingTimeInterval(interval - visibleSpan)
         // A body thin enough to leave gaps between the visible candles, but never a hairline.
         let bodyWidth = max(3.0, min(14.0, 260.0 / Double(Self.visibleCandleCount)))
         // Open == close would give a zero-height rectangle, which draws nothing. Floor the
@@ -342,6 +349,7 @@ public struct BTCLiveView: View {
         }
         .chartOverlay { proxy in priceTagOverlay(proxy) }
         .chartScrollableAxes(.horizontal)
+        .chartXScale(domain: xDomain)
         .chartXVisibleDomain(length: visibleSpan)
         // Captured once, on the first non-empty series. Recomputing `trailingAnchor` every
         // body pass meant this modifier's value changed each time a new 5-minute bucket
@@ -379,7 +387,7 @@ public struct BTCLiveView: View {
                         .monospacedDigit()
                         .lineLimit(1)
                         .foregroundStyle(DSColor.textSecondary)
-                        .frame(width: Self.axisLabelWidth, alignment: .trailing)
+                        .frame(width: Self.axisGutterWidth, alignment: .trailing)
                 }
             }
         }
@@ -387,19 +395,17 @@ public struct BTCLiveView: View {
 
     // MARK: Candle chart chrome
 
-    /// A fixed width for the y-axis labels. Reserved rather than measured because the axis
-    /// gutter is laid out *outside* the plot, so a label that changed width with the digits
-    /// would change the plot width — and therefore every candle's x position.
-    private static let axisLabelWidth: CGFloat = 46
+    /// The width of the trailing gutter: the y-axis labels' frame and the live price chip
+    /// both take it, so the chip lands exactly in the axis column.
+    ///
+    /// Fixed rather than measured because the gutter is laid out *outside* the plot — a
+    /// label that changed width with the digits would change the plot width, and therefore
+    /// every candle's x position. Sized for a seven-figure price ("104,250") so neither the
+    /// labels nor the chip can ever be forced to truncate.
+    private static let axisGutterWidth: CGFloat = 52
 
-    /// The gap between the price chip and the right edge of the visible plot.
+    /// The gap between the price chip and the trailing edge of the chart.
     private static let priceTagInset: CGFloat = 2
-
-    /// What Swift Charts reserves on the trailing side for the y-axis: the fixed label
-    /// width plus the small gap it leaves between the plot and its labels. The chart
-    /// overlay's bounds span plot *and* gutter, so this is how the overlay recovers where
-    /// the visible plot actually ends.
-    private static let yAxisGutter: CGFloat = axisLabelWidth + 4
 
     /// The live price chip, drawn on top of the plot at the current-price line.
     ///
@@ -421,18 +427,14 @@ public struct BTCLiveView: View {
                let anchor = proxy.plotFrame,
                let offset = proxy.position(forY: doubleValue(current)) {
                 let plot = geometry[anchor]
-                // `plot.maxX` is the trailing edge of the scroll *content*, which only
-                // coincides with the viewport while the chart sits at its trailing anchor;
-                // scrolled back, it is hours off to the right and the chip vanished. Cap it
-                // at the visible plot edge so the chip lands identically either way.
-                let plotRight = min(plot.maxX, geometry.size.width - Self.yAxisGutter)
-                let rightEdge = max(1, plotRight - Self.priceTagInset)
-                // Right-aligned inside a frame ending at `rightEdge`, so the chip's own
-                // width never enters the calculation — no magic constant to outgrow.
+                // Pinned to the chart's own trailing edge, not `plot.maxX`: the chip
+                // belongs in the y-axis gutter, beside the other value labels, so it never
+                // covers the newest candles. (`plot.maxX` is the trailing edge of the
+                // scroll *content* anyway — hours off-screen once the user scrolls back,
+                // which is why the old annotation simply vanished.)
+                let rightEdge = geometry.size.width - Self.priceTagInset
                 priceTag(current)
-                    .fixedSize()
-                    .frame(width: rightEdge, alignment: .trailing)
-                    .position(x: rightEdge / 2, y: plot.minY + offset)
+                    .position(x: rightEdge - Self.axisGutterWidth / 2, y: plot.minY + offset)
             }
         }
         // The chart owns the horizontal drag; an overlay that swallowed touches would kill
@@ -440,16 +442,20 @@ public struct BTCLiveView: View {
         .allowsHitTesting(false)
     }
 
-    /// The price chip itself. `monospacedDigit` keeps it from twitching as the digits
-    /// change — cosmetic now that it's an overlay, but it costs nothing.
+    /// The price chip itself: the live price in the y-axis's own format and column width,
+    /// so it reads as a highlighted axis value rather than a callout floating over the
+    /// candles. The header carries the full `US$63,820.30` with cents.
+    ///
+    /// `monospacedDigit` keeps the text from shifting inside the fixed frame as the digits
+    /// change.
     private func priceTag(_ value: Decimal) -> some View {
-        Text(usdLabel(value))
+        Text(LiveFormat.axis(doubleValue(value)))
             .font(DSFont.caption2.bold())
             .monospacedDigit()
             .lineLimit(1)
             .foregroundStyle(.white)
-            .padding(.horizontal, 5)
             .padding(.vertical, 2)
+            .frame(width: Self.axisGutterWidth)
             .background(currentPriceColor, in: RoundedRectangle(cornerRadius: 4))
     }
 
