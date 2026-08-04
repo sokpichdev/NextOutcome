@@ -19,29 +19,53 @@ public struct GammaMarketRepository: MarketRepository {
     private let client: APIClient
     /// Caches the navigation rows so switching categories doesn't re-request them.
     private let relatedTagsCache: RelatedTagsCache
+    /// Caches the curated featured list so every cold feed load doesn't re-request it.
+    private let featuredEventsCache: FeaturedEventsCache
 
     /// Creates the repository.
     /// - Parameters:
     ///   - client: The shared `APIClient`.
     ///   - relatedTagsCache: Caches the nav rows. The default gives one instance per
     ///     repository, which is per-app in practice since `AppContainer` builds one.
-    public init(client: APIClient, relatedTagsCache: RelatedTagsCache = RelatedTagsCache()) {
+    ///   - featuredEventsCache: Caches the curated featured list, same lifetime story.
+    public init(
+        client: APIClient,
+        relatedTagsCache: RelatedTagsCache = RelatedTagsCache(),
+        featuredEventsCache: FeaturedEventsCache = FeaturedEventsCache()
+    ) {
         self.client = client
         self.relatedTagsCache = relatedTagsCache
+        self.featuredEventsCache = featuredEventsCache
     }
 
     /// Page size for cursor pagination (also how the next cursor is derived).
     private static let pageSize = 10
 
-    /// Fetches one page of events from Gamma `/events`, applying the tag/sort/status/period filters.
+    /// Fetches one page of events from Gamma `/events/keyset`, applying the
+    /// tag/sort/status/period filters.
+    ///
+    /// Uses cursor pagination rather than offsets. The feed is sorted by `volume24hr`, which
+    /// changes continuously, so an offset window slides between requests — events duplicate
+    /// across pages or get skipped entirely. The opaque cursor pins the last row's sort
+    /// position instead, so consecutive pages never overlap. `Page.nextCursor` is now Gamma's
+    /// real `next_cursor` rather than a count-derived guess, so "is there more?" is answered
+    /// by the server instead of inferred from a full page.
     public func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod) async throws -> Page<Event> {
-        let offset = cursor.flatMap(Int.init) ?? 0
-        let query = GammaEventQuery.params(offset: offset, tagID: tagID, sort: sort, status: status, period: period)
-        let endpoint = Endpoint(host: .gamma, path: "/events", query: query)
-        let dtos: [EventDTO] = try await client.fetch(endpoint)
-        let events = dtos.map(MarketMapper.event(from:))
-        let nextCursor = dtos.count == Self.pageSize ? "\(offset + Self.pageSize)" : nil
-        return Page(items: events, nextCursor: nextCursor)
+        let query = GammaEventQuery.keysetParams(cursor: cursor, tagID: tagID, sort: sort, status: status, period: period)
+        let endpoint = Endpoint(host: .gamma, path: "/events/keyset", query: query)
+        let page: EventKeysetPageDTO = try await client.fetch(endpoint)
+        return Page(items: page.events.map(MarketMapper.event(from:)), nextCursor: page.nextCursor)
+    }
+
+    /// Fetches Polymarket's curated featured list — the editorial ranking the web homepage
+    /// pins above its volume-sorted feed. Served from a 5-minute cache.
+    public func fetchFeaturedEvents(limit: Int) async throws -> [Event] {
+        if let cached = await featuredEventsCache.value() { return cached }
+        let endpoint = Endpoint(host: .gamma, path: "/events/keyset", query: GammaEventQuery.featuredParams(limit: limit))
+        let page: EventKeysetPageDTO = try await client.fetch(endpoint)
+        let events = page.events.map(MarketMapper.event(from:))
+        await featuredEventsCache.store(events)
+        return events
     }
 
     /// Fetches one page of markets by flattening the markets out of an events page.
@@ -277,8 +301,10 @@ public struct GammaMarketRepository: MarketRepository {
 
 /// Pure, testable mapper from domain query params to Gamma API query dictionary.
 public enum GammaEventQuery {
-    /// The page size used for the events list query.
+    /// The page size used for the offset-paged `/events` queries (`fetchMarkets`).
     private static let pageSize = 10
+    /// The page size used for the cursor-paged feed, matching the web client's `limit=20`.
+    private static let keysetPageSize = 20
 
     /// Builds the query dictionary for the paged `/events` list.
     /// - Parameters:
@@ -289,10 +315,39 @@ public enum GammaEventQuery {
     ///   - period: How far back an event must have started to be included.
     /// - Returns: The query dictionary.
     public static func params(offset: Int, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod = .all) -> [String: String] {
+        var query = sharedParams(tagID: tagID, sort: sort, status: status, period: period)
+        query["limit"] = "\(pageSize)"
+        query["offset"] = "\(offset)"
+        return query
+    }
+
+    /// Builds the query dictionary for the cursor-paged `/events/keyset` feed.
+    ///
+    /// Keyset is what the Polymarket web client uses, and it's the only correct way to page
+    /// a `volume24hr`-sorted list: volumes move constantly, so an offset window slides under
+    /// you between requests and the same event can appear on two pages or none. The cursor
+    /// encodes the last row's sort position instead, so pages never overlap.
+    ///
+    /// `offset` must never be sent — keyset endpoints reject it outright with HTTP 422
+    /// (`"offset is not allowed on keyset endpoints"`).
+    /// - Parameters:
+    ///   - cursor: The opaque `next_cursor` from the previous page, or `nil` for the first.
+    ///   - tagID: An optional tag filter.
+    ///   - sort: The sort order (mapped to Gamma's order/ascending params).
+    ///   - status: Which events to include by lifecycle status.
+    ///   - period: How far back an event must have started to be included.
+    /// - Returns: The query dictionary.
+    public static func keysetParams(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod = .all) -> [String: String] {
+        var query = sharedParams(tagID: tagID, sort: sort, status: status, period: period)
+        query["limit"] = "\(keysetPageSize)"
+        if let cursor, !cursor.isEmpty { query["after_cursor"] = cursor }
+        return query
+    }
+
+    /// The filter/sort params common to the offset and keyset list shapes.
+    private static func sharedParams(tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod) -> [String: String] {
         let (order, ascending) = sortParams(for: sort)
         var query: [String: String] = [
-            "limit": "\(pageSize)",
-            "offset": "\(offset)",
             "order": order,
             "ascending": ascending,
         ]
@@ -338,16 +393,45 @@ public enum GammaEventQuery {
 
     /// Params for fetching all events under a tag (e.g. Politics hub's "midterms" tag) in
     /// bounded 100-item pages.
+    ///
+    /// `order` is load-bearing despite every caller re-sorting client-side. The fetch is
+    /// capped at 5 pages, so the order decides *which 500 events the hub ever sees* — and
+    /// Gamma's default is creation order, which fills the window with the oldest rows in the
+    /// tag. Measured on the Crypto tag: the unordered window spanned 2024-12-31 → 2026-08-02
+    /// and its head was airdrop markets trading $0–105/day, while the tag's real leaders
+    /// trade $500k+. Sorting by 24h volume makes the cap select the events that matter.
     public static func tagParams(tagID: String, offset: Int, status: EventStatus) -> [String: String] {
         var query: [String: String] = [
             "tag_id": tagID,
             "limit": "100",
             "offset": "\(offset)",
+            "order": "volume24hr",
+            "ascending": "false",
         ]
         if status == .active {
             query["closed"] = "false"
         }
         return query
+    }
+
+    /// Params for Polymarket's curated "featured" list — the hand-ranked editorial order the
+    /// web homepage pins above its algorithmic feed.
+    ///
+    /// `featured_order=true` is what switches Gamma into that ranking; `order=featuredOrder`
+    /// with `ascending=true` then reads it lowest-first, so `featuredOrder: 1` comes back
+    /// first. This is a curated list, not a computed one — it does not respond to volume.
+    /// - Parameter limit: How many rows to request.
+    /// - Returns: The query dictionary.
+    public static func featuredParams(limit: Int) -> [String: String] {
+        [
+            "limit": "\(limit)",
+            "order": "featuredOrder",
+            "featured_order": "true",
+            "ascending": "true",
+            "active": "true",
+            "closed": "false",
+            "archived": "false",
+        ]
     }
 
     /// Maps a domain `EventSort` to Gamma's `(order, ascending)` query values.

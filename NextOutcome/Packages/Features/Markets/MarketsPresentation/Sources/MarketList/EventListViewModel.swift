@@ -136,8 +136,46 @@ public final class EventListViewModel {
     /// Whether the feed is currently in search mode (non-empty query).
     public var isSearchActive: Bool { !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
+    /// Polymarket's curated featured list, in editorial rank order. Loaded best-effort —
+    /// a failure leaves this empty and the feed renders exactly as it did before.
+    public private(set) var featuredEvents: [Event] = []
+
+    /// How many curated rows to pin above the feed.
+    ///
+    /// Polymarket's web client splices several pin types (featured markets, a sports strip,
+    /// the BTC 5m slot) into the first few slots; we implement the featured-markets pin only,
+    /// and three matches the number of curated cards the web shows before its feed proper
+    /// begins. Pinning all twenty would bury the volume feed entirely.
+    private static let pinnedFeaturedCount = 3
+
+    /// Whether the curated rows apply right now.
+    ///
+    /// Only on the default feed — no category, no sub-topic, no search, default sort/status.
+    /// Mirrors the web's `visibilityRules: [{ type: "default-feed" }]`: a curated ranking is
+    /// meaningless once the user has asked for something specific.
+    private var showsFeatured: Bool {
+        !isSearchActive
+            && selectedTagID == nil
+            && selectedSubTopicTagID == nil
+            && sort == .volume24h
+            && status == .active
+            && period == .all
+    }
+
+    /// Whether an event survives the hide-sports/crypto/earnings toggles.
+    private func passesHideFilters(_ event: Event) -> Bool {
+        if hideSports && HomeCardKind.isSports(event) { return false }
+        if hideCrypto && HomeCardKind.isCrypto(event) { return false }
+        if hideEarnings && HomeCardKind.isEarnings(event) { return false }
+        return true
+    }
+
     /// The events to show: server-side search results while searching, else the loaded
-    /// feed page — with the hide-sports/crypto/earnings client filters applied either way.
+    /// feed page — with the hide-sports/crypto/earnings client filters applied either way,
+    /// and the curated featured rows pinned on top of the default feed.
+    ///
+    /// Pinned rows are removed from the body of the feed so a featured event can't appear
+    /// twice, matching how the web de-duplicates its pins against the main list.
     public var visibleEvents: [Event] {
         let source: [Event]
         if isSearchActive {
@@ -146,12 +184,12 @@ public final class EventListViewModel {
             guard case .loaded(let events) = state else { return [] }
             source = events
         }
-        return source.filter { event in
-            if hideSports && HomeCardKind.isSports(event) { return false }
-            if hideCrypto && HomeCardKind.isCrypto(event) { return false }
-            if hideEarnings && HomeCardKind.isEarnings(event) { return false }
-            return true
-        }
+        let filtered = source.filter(passesHideFilters)
+        guard showsFeatured else { return filtered }
+        let pinned = featuredEvents.filter(passesHideFilters).prefix(Self.pinnedFeaturedCount)
+        guard !pinned.isEmpty else { return filtered }
+        let pinnedIDs = Set(pinned.map(\.id))
+        return Array(pinned) + filtered.filter { !pinnedIDs.contains($0.id) }
     }
 
     /// Whether a search request is currently in flight.
@@ -265,6 +303,8 @@ public final class EventListViewModel {
     private let fetchRelatedTags: FetchRelatedTagsUseCase
     /// Use case that runs the server-side event search.
     private let searchEvents: SearchEventsUseCase
+    /// Use case that loads the curated featured list pinned above the default feed.
+    private let fetchFeaturedEvents: FetchFeaturedEventsUseCase
 
     /// Creates the view model.
     /// - Parameters:
@@ -272,10 +312,17 @@ public final class EventListViewModel {
     ///   - fetchRelatedTags: Loads the selected category's sub-topic chips.
     ///   - searchEvents: Runs the server-side event search. Defaults to a stub in DEBUG for
     ///     call sites that don't wire search (e.g. existing tests).
-    public init(fetchEvents: FetchEventsUseCase, fetchRelatedTags: FetchRelatedTagsUseCase, searchEvents: SearchEventsUseCase) {
+    ///   - fetchFeaturedEvents: Loads the curated featured rows.
+    public init(
+        fetchEvents: FetchEventsUseCase,
+        fetchRelatedTags: FetchRelatedTagsUseCase,
+        searchEvents: SearchEventsUseCase,
+        fetchFeaturedEvents: FetchFeaturedEventsUseCase
+    ) {
         self.fetchEvents = fetchEvents
         self.fetchRelatedTags = fetchRelatedTags
         self.searchEvents = searchEvents
+        self.fetchFeaturedEvents = fetchFeaturedEvents
     }
 
     /// The domain sort corresponding to the selected `MarketSort`.
@@ -312,9 +359,10 @@ public final class EventListViewModel {
         }
     }
 
-    /// Loads the first page for the current filters.
+    /// Loads the first page for the current filters, and the curated rows alongside it.
     public func load() async {
         state = .loading
+        async let featured = loadFeatured()
         do {
             let page = try await fetchEvents.execute(tagID: effectiveTagID, sort: domainSort, status: domainStatus, period: domainPeriod)
             nextCursor = page.nextCursor
@@ -322,6 +370,17 @@ public final class EventListViewModel {
         } catch {
             state = .failed("Couldn't load markets. pull to refresh.")
         }
+        await featured
+    }
+
+    /// Loads the curated featured rows, best-effort.
+    ///
+    /// Deliberately never surfaces an error: the featured row is an enhancement, and a
+    /// failure here must not take down a feed that loaded fine. Skipped entirely when the
+    /// user has filtered or searched, since the rows wouldn't be shown anyway.
+    private func loadFeatured() async {
+        guard showsFeatured else { return }
+        featuredEvents = (try? await fetchFeaturedEvents.execute()) ?? []
     }
 
     /// Reloads from the first page (pull-to-refresh).
@@ -369,7 +428,8 @@ public final class EventListViewModel {
         let vm = EventListViewModel(
             fetchEvents: FetchEventsUseCase.stub,
             fetchRelatedTags: FetchRelatedTagsUseCase.stub,
-            searchEvents: SearchEventsUseCase.stub
+            searchEvents: SearchEventsUseCase.stub,
+            fetchFeaturedEvents: FetchFeaturedEventsUseCase.stub
         )
         vm.state = .loaded(events)
         return vm

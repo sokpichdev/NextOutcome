@@ -2,6 +2,8 @@
 //  CandleAggregator.swift
 //  NextOutcome
 //
+//  Created by Sok Pich on 03/07/2026.
+//
 
 import Foundation
 
@@ -80,5 +82,43 @@ public enum CandleAggregator {
             bucket += interval
         }
         return result
+    }
+
+    /// Folds one live price tick into an existing candle series.
+    ///
+    /// - A tick inside the newest candle's bucket mutates that forming candle: close
+    ///   follows the tick and high/low stretch to include it (the open never moves).
+    /// - A tick in a later bucket appends a fresh candle whose OHLC all equal the tick.
+    /// - A stale tick (from before the newest bucket) is dropped — live ticks never
+    ///   rewrite closed candles.
+    /// - Parameters:
+    ///   - candles: The series so far, oldest first.
+    ///   - tick: The live price sample to fold in.
+    ///   - interval: The candle width in seconds.
+    /// - Returns: The updated series.
+    public static func folding(
+        _ candles: [Candle], with tick: CryptoSpotPricePoint, interval: TimeInterval
+    ) -> [Candle] {
+        guard interval > 0 else { return candles }
+        let slot = (tick.date.timeIntervalSince1970 / interval).rounded(.down) * interval
+        let bucketStart = Date(timeIntervalSince1970: slot)
+
+        guard let last = candles.last else {
+            return [Candle(open: tick.price, high: tick.price, low: tick.price, close: tick.price, start: bucketStart)]
+        }
+        if bucketStart > last.start {
+            return candles + [Candle(open: tick.price, high: tick.price, low: tick.price, close: tick.price, start: bucketStart)]
+        }
+        guard bucketStart == last.start else { return candles }
+
+        var updated = candles
+        updated[updated.count - 1] = Candle(
+            open: last.open,
+            high: Swift.max(last.high, tick.price),
+            low: Swift.min(last.low, tick.price),
+            close: tick.price,
+            start: last.start
+        )
+        return updated
     }
 }

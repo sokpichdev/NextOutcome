@@ -2,6 +2,8 @@
 //  BTCLiveViewModel.swift
 //  NextOutcome
 //
+//  Created by Sok Pich on 03/07/2026.
+//
 
 import Foundation
 import OrderbookDomain
@@ -34,6 +36,12 @@ public final class BTCLiveViewModel {
     public private(set) var priceWindow: CryptoPriceWindow?
     /// The chart mode the user has selected.
     public var chartMode: ChartMode = .price
+    /// Whether older candle pages may still exist server-side — `false` once a page
+    /// comes back short, which is the feed's "end of history" signal.
+    public private(set) var hasMoreCandles = false
+    /// Whether a `loadMoreCandles()` page fetch is currently in flight (drives the
+    /// chart's left-edge loading affordance and debounces scroll-triggered loads).
+    public private(set) var isLoadingMoreCandles = false
     /// The formatted countdown string (e.g. "3:47") shown in the header.
     public private(set) var countdown: String = "--:--"
     /// Seconds left until the window closes, per the server-anchored clock.
@@ -70,6 +78,8 @@ public final class BTCLiveViewModel {
     private let observeSpotPrice: ObserveCryptoSpotPriceUseCase
     /// Use case that polls the window's dollar open/close snapshot.
     private let fetchPriceWindow: FetchCryptoPriceWindowUseCase
+    /// Use case that pages the real OHLC candle history (the chainlink-candles feed).
+    private let fetchCandles: FetchCryptoCandlesUseCase
     /// Callback invoked when the user taps Up/Down (host opens the trade flow).
     private let onQuickBet: @MainActor (BetSide) -> Void
 
@@ -86,6 +96,13 @@ public final class BTCLiveViewModel {
     /// Polls the window's dollar open/close snapshot on a timer (it isn't on the live tick
     /// feed, so it stays a low-frequency poll).
     private var windowTask: Task<Void, Never>?
+    /// Loads the initial candle-history page.
+    private var candlesTask: Task<Void, Never>?
+    /// The real candle history from the chainlink-candles feed, oldest first, with the
+    /// forming (newest) candle kept live by folding in RTDS ticks. Empty until the seed
+    /// page arrives (or forever, if the feed fails — `candles` then falls back to
+    /// bucketing the window-scoped spot series).
+    private var candleSeries: [Candle] = []
     /// Set once `stop()` runs; guards against a late-completing `load()` resurrecting
     /// the countdown ticker (or spawning other work) after teardown.
     private(set) var isStopped = false
@@ -110,6 +127,7 @@ public final class BTCLiveViewModel {
     ///   - observeBook: Streams the live book.
     ///   - observeSpotPrice: Streams the live dollar spot-price series (seed + socket).
     ///   - fetchPriceWindow: Polls the window's dollar open/close snapshot.
+    ///   - fetchCandles: Pages the real OHLC candle history.
     ///   - onQuickBet: Called when the user taps Up/Down.
     public init(
         assetID: String,
@@ -122,6 +140,7 @@ public final class BTCLiveViewModel {
         observeBook: ObserveOrderBookUseCase,
         observeSpotPrice: ObserveCryptoSpotPriceUseCase,
         fetchPriceWindow: FetchCryptoPriceWindowUseCase,
+        fetchCandles: FetchCryptoCandlesUseCase,
         onQuickBet: @escaping @MainActor (BetSide) -> Void
     ) {
         self.assetID = assetID
@@ -134,33 +153,71 @@ public final class BTCLiveViewModel {
         self.observeBook = observeBook
         self.observeSpotPrice = observeSpotPrice
         self.fetchPriceWindow = fetchPriceWindow
+        self.fetchCandles = fetchCandles
         self.onQuickBet = onQuickBet
     }
 
     // MARK: Derived
 
-    /// Dollar OHLC candles built from the loaded spot-price series (the "Candles" chart
-    /// mode — matches web, which has no probability-candle view).
+    /// Dollar OHLC candles for the "Candles" chart mode, oldest first.
     ///
-    /// Unlike the probability series, `spotPriceHistory` only ever returns ~1 sample per
-    /// minute for this round (it's a checkpointed oracle price, not tick data), so
-    /// bucketing by a fixed time interval (`CandleAggregator`'s usual approach) puts at
-    /// most one sample per bucket — every candle degenerates to a flat dot with no
-    /// visible body or wick. Instead, each *consecutive pair* of real samples becomes its
-    /// own candle (open = the earlier sample, close = the later one, high/low = their
-    /// span), so every candle reflects an actual price move.
+    /// **One candle per betting window** (5 minutes here), matching the web: the primary
+    /// source is the chainlink-candles feed, which serves real multi-hour history and
+    /// pages arbitrarily far back (`loadMoreCandles`). The newest candle is the window
+    /// currently forming; live RTDS ticks fold into it in place (close tracks the tick,
+    /// high/low stretch, colour flips as close crosses open) — see `streamSpotPrice`.
+    ///
+    /// Until the feed's seed page arrives — or if it fails outright — this falls back to
+    /// bucketing the window-scoped spot series, which can only ever produce the current
+    /// window's single forming candle (that feed returns nothing outside the window, so
+    /// asking it for two hours still yields ~300s of samples).
     public var candles: [Candle] {
-        guard case let .loaded(points) = spotState, points.count >= 2 else { return [] }
-        let sorted = points.sorted { $0.date < $1.date }
-        return zip(sorted, sorted.dropFirst()).map { previous, current in
-            Candle(
-                open: previous.price,
-                high: max(previous.price, current.price),
-                low: min(previous.price, current.price),
-                close: current.price,
-                start: previous.date
-            )
+        if !candleSeries.isEmpty { return candleSeries }
+        guard case let .loaded(points) = spotState, !points.isEmpty else { return [] }
+        return Self.bucket(points.sorted { $0.date < $1.date }, interval: windowInterval)
+    }
+
+    /// The candle width to request, derived from this market's window length.
+    private var candleInterval: CandleInterval {
+        windowInterval >= 900 ? .fifteenMinute : .fiveMinute
+    }
+
+    /// Groups a price series into fixed-width buckets, one candle each.
+    ///
+    /// Buckets are anchored to absolute time (`floor(t / interval)`), not to the first
+    /// sample, so a candle keeps its boundaries as the series grows — otherwise every new
+    /// point would shift every bar.
+    /// - Parameters:
+    ///   - points: The price series, ascending by date.
+    ///   - interval: The bucket width in seconds.
+    /// - Returns: One candle per non-empty bucket, ascending.
+    nonisolated static func bucket(_ points: [CryptoSpotPricePoint], interval: TimeInterval) -> [Candle] {
+        guard interval > 0 else { return [] }
+        var candles: [Candle] = []
+        var bucketStart: Date?
+        var open: Decimal = 0, high: Decimal = 0, low: Decimal = 0, close: Decimal = 0
+
+        for point in points {
+            let slot = (point.date.timeIntervalSince1970 / interval).rounded(.down) * interval
+            let start = Date(timeIntervalSince1970: slot)
+            if start != bucketStart {
+                if let bucketStart {
+                    candles.append(Candle(open: open, high: high, low: low, close: close, start: bucketStart))
+                }
+                bucketStart = start
+                open = point.price
+                high = point.price
+                low = point.price
+            } else {
+                high = Swift.max(high, point.price)
+                low = Swift.min(low, point.price)
+            }
+            close = point.price
         }
+        if let bucketStart {
+            candles.append(Candle(open: open, high: high, low: low, close: close, start: bucketStart))
+        }
+        return candles
     }
 
     /// The dollar "price to beat" — the window's open price. Before the first
@@ -206,6 +263,37 @@ public final class BTCLiveViewModel {
     /// applied in the view via a DS token — this flag only carries the intent.
     public var isCountdownUrgent: Bool { remainingSeconds > 0 && remainingSeconds < 60 }
 
+    /// How a closed window turned out.
+    public enum Settlement: Equatable {
+        /// The price finished above where it started.
+        case up
+        /// The price finished at or below where it started.
+        case down
+        /// The window is closed but we never learned enough prices to say which.
+        case undetermined
+    }
+
+    /// Whether this window has closed.
+    ///
+    /// The countdown is anchored to server time, so this flips at the same instant the
+    /// market stops accepting orders rather than whenever the device thinks it should.
+    /// Guarded on the clock having been anchored at all — before the first load
+    /// `remainingSeconds` is still `0` and the window has not ended, it just isn't known yet.
+    public var hasSettled: Bool { currentServerTime != nil && remainingSeconds == 0 }
+
+    /// Which side won, once the window has closed.
+    ///
+    /// Derived from the same two dollar prices the header already shows rather than from the
+    /// order book: once a window closes its book empties out, which is exactly why the screen
+    /// went to "--". `priceToBeat` is the window's open and `currentPrice` its last tick, so
+    /// they still tell the story after trading stops. Polymarket resolves ties as Down —
+    /// the price has to strictly exceed the open for Up to win.
+    public var settlement: Settlement? {
+        guard hasSettled else { return nil }
+        guard let currentPrice, let priceToBeat else { return .undetermined }
+        return currentPrice > priceToBeat ? .up : .down
+    }
+
     /// The current server time, computed as `serverAnchor + elapsed monotonic time`.
     /// `nil` until the anchors are set by the initial load.
     private var currentServerTime: Date? {
@@ -226,6 +314,7 @@ public final class BTCLiveViewModel {
         tradesTask = Task { [weak self] in await self?.pollTrades() }
         spotTask = Task { [weak self] in await self?.streamSpotPrice() }
         windowTask = Task { [weak self] in await self?.pollPriceWindow() }
+        candlesTask = Task { [weak self] in await self?.loadCandles() }
     }
 
     /// Cancels every running task and marks the model stopped. Call from the view's teardown.
@@ -237,6 +326,7 @@ public final class BTCLiveViewModel {
         tradesTask?.cancel(); tradesTask = nil
         spotTask?.cancel(); spotTask = nil
         windowTask?.cancel(); windowTask = nil
+        candlesTask?.cancel(); candlesTask = nil
     }
 
     /// Inline retry for the price-series/server-time load.
@@ -342,6 +432,61 @@ public final class BTCLiveViewModel {
         ) {
             if Task.isCancelled { return }
             spotState = points.isEmpty ? .empty : .loaded(points)
+            // Keep the forming candle live. Only once the seed page exists: folding into
+            // an empty series would create a lone tick-candle that `loadCandles` then
+            // clobbers — before the seed, the bucketing fallback covers display anyway.
+            if !candleSeries.isEmpty, let tick = points.last {
+                candleSeries = CandleAggregator.folding(candleSeries, with: tick, interval: candleInterval.seconds)
+            }
+        }
+    }
+
+    /// How many candle pages the seed load fetches (30 candles each), giving the chart
+    /// several hours of scroll-back history up front. History depth is fixed at load
+    /// rather than paged in as the user scrolls: driving pagination off the chart's
+    /// scroll-position binding proved unreliable — Swift Charts desyncs that binding
+    /// from its real viewport under live-tick updates, teleporting the view when a page
+    /// was prepended (the "glitching" candle chart).
+    public static let seedCandlePages = 3
+
+    /// Loads the newest candle-history page, then pages backwards until the history
+    /// budget (`seedCandlePages`) is spent or the feed runs short. Any ticks that
+    /// arrived while the fetch was in flight re-fold on the next stream emission.
+    private func loadCandles() async {
+        do {
+            let page = try await fetchCandles.execute(symbol: symbol, interval: candleInterval)
+            guard !Task.isCancelled, !isStopped else { return }
+            candleSeries = page
+            hasMoreCandles = page.count >= FetchCryptoCandlesUseCase.pageSize
+        } catch {
+            // Non-fatal: `candles` falls back to bucketing the window-scoped spot series,
+            // which still shows the current forming candle.
+            return
+        }
+        for _ in 1..<Self.seedCandlePages {
+            guard hasMoreCandles, !Task.isCancelled, !isStopped else { return }
+            await loadMoreCandles()
+        }
+    }
+
+    /// Pages one screen of older candles onto the front of the series. A short page
+    /// marks the end of history; a failed page keeps `hasMoreCandles` so a later call
+    /// can retry.
+    public func loadMoreCandles() async {
+        guard hasMoreCandles, !isLoadingMoreCandles, let oldest = candleSeries.first else { return }
+        isLoadingMoreCandles = true
+        defer { isLoadingMoreCandles = false }
+        do {
+            let page = try await fetchCandles.execute(
+                symbol: symbol, interval: candleInterval, before: oldest.start
+            )
+            guard !Task.isCancelled, !isStopped else { return }
+            // The cursor is exclusive server-side, but never trust it blindly: a candle
+            // at/after the oldest we already have would corrupt the series' ordering.
+            candleSeries = page.filter { $0.start < oldest.start } + candleSeries
+            hasMoreCandles = page.count >= FetchCryptoCandlesUseCase.pageSize
+        } catch {
+            // Non-fatal: keep hasMoreCandles as-is so a later call can retry.
         }
     }
 

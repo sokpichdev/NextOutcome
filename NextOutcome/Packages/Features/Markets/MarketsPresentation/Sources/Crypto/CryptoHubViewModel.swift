@@ -56,12 +56,72 @@ public final class CryptoHubViewModel {
     /// Case-insensitive substring match against the event title.
     public var searchQuery: String = ""
 
+    /// The currently-open BTC Up/Down 5m window, pinned above the list.
+    ///
+    /// Kept separate from `classifiedEvents` because it can't come from the same place: a
+    /// live 5-minute market has zero volume and liquidity and is invisible to every list
+    /// query, so it's resolved by computing its slug from the clock. See
+    /// `ClockGriddedSeries` and `docs/polymarket-crypto-hub-gaps.md`.
+    public private(set) var liveWindow: Event?
+
+    /// The series the pinned card tracks.
+    public let liveSeries: ClockGriddedSeries = .bitcoinUpDown5m
+
     private let fetchAllEvents: FetchAllEventsUseCase
+    private let fetchLiveWindow: FetchLiveWindowUseCase
+    /// Injected clock, so window-boundary behaviour is testable without sleeping.
+    private let now: @Sendable () -> Date
 
     /// Creates the view model.
-    /// - Parameter fetchAllEvents: Loads a tag's events, unpaginated.
-    public init(fetchAllEvents: FetchAllEventsUseCase) {
+    /// - Parameters:
+    ///   - fetchAllEvents: Loads a tag's events, unpaginated.
+    ///   - fetchLiveWindow: Resolves the live recurring window pinned above the list.
+    ///   - now: Supplies the current time; override in tests.
+    public init(
+        fetchAllEvents: FetchAllEventsUseCase,
+        fetchLiveWindow: FetchLiveWindowUseCase,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
         self.fetchAllEvents = fetchAllEvents
+        self.fetchLiveWindow = fetchLiveWindow
+        self.now = now
+    }
+
+    /// Loads (or reloads) the pinned live window. Best-effort — never surfaces an error.
+    /// Whether an error is really "this work was cancelled" rather than a genuine failure.
+    ///
+    /// Two spellings reach us: Swift concurrency throws `CancellationError`, while a
+    /// `URLSession` task cancelled mid-flight throws `URLError(.cancelled)`. Both mean the
+    /// same thing to the user — nothing.
+    static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        return (error as? URLError)?.code == .cancelled
+    }
+
+    public func loadLiveWindow() async {
+        liveWindow = await fetchLiveWindow.execute(series: liveSeries, now: now())
+    }
+
+    /// When the current window closes and the pinned card should be re-fetched.
+    ///
+    /// Scheduling on the boundary keeps the card aligned with the grid; a fixed-interval
+    /// timer would drift and eventually show a settled window as live.
+    public var nextLiveWindowBoundary: Date { liveSeries.nextBoundary(after: now()) }
+
+    /// Whether the pinned live card should render.
+    ///
+    /// It's a pin, so it hides as soon as it would contradict what the user asked for —
+    /// same principle as the curated rows on the Home feed. `.upDown` and the 5-minute
+    /// timeframe are the filters it genuinely belongs to; anything narrower than that, or a
+    /// search that doesn't match it, hides it.
+    public var showsLiveWindow: Bool {
+        guard let liveWindow else { return false }
+        guard selectedSubTab == .all || selectedSubTab == .upDown else { return false }
+        guard selectedTimeframe == .all || selectedTimeframe == .fiveMin else { return false }
+        guard period == .all else { return false }
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.isEmpty || liveWindow.title.localizedCaseInsensitiveContains(query) else { return false }
+        return true
     }
 
     /// Fetches `tagID`'s events and classifies them, unless already loaded for this tag id.
@@ -78,23 +138,50 @@ public final class CryptoHubViewModel {
     }
 
     private func load(tagID: String) async {
-        state = .loading
+        // Only blank the screen when there's nothing to show. On pull-to-refresh the list
+        // stays put behind the refresh indicator, which is the feedback the user already has.
+        if classifiedEvents.isEmpty { state = .loading }
+        // Run alongside the list: the pinned window is a separate request that must not
+        // delay the hub, and must not fail it either (`loadLiveWindow` can't throw).
+        async let live: Void = loadLiveWindow()
         do {
             let events = try await fetchAllEvents.execute(tagID: tagID)
-            classifiedEvents = events
+            let classified = events
                 .map { (event: $0, kind: CryptoMarketKind.classify($0)) }
                 .filter { $0.kind != .other }
+            // Gamma pre-creates ~24h of windows per cadence series, so this is the difference
+            // between listing 7 recurring markets and listing 127 windows of the same 7.
+            classifiedEvents = RecurringWindowCollapse.collapse(classified, asOf: now())
             loadedTagID = tagID
             state = .loaded
+        } catch where Self.isCancellation(error) {
+            // Routine, not a failure. SwiftUI tears down `.task`/`.refreshable` work whenever
+            // the view's identity churns, and this load makes five sequential requests, so
+            // there's a wide window to be cancelled in. Showing an error for that told the
+            // user something was broken when nothing was.
         } catch {
-            state = .failed("Couldn't load Crypto. Pull to refresh.")
+            // Never trade a good list for an error message. A refresh that fails leaves the
+            // events already on screen exactly where they are; only a cold load with nothing
+            // to fall back on shows the failure state.
+            if classifiedEvents.isEmpty {
+                state = .failed("Couldn't load Crypto. Pull to refresh.")
+            } else {
+                state = .loaded
+            }
         }
+        await live
     }
 
     /// `classifiedEvents` filtered by `selectedSubTab`/`period`/`selectedTimeframe`/
     /// `searchQuery`, sorted by `sortOption`.
     public var visibleEvents: [(event: Event, kind: CryptoMarketKind)] {
         var events = classifiedEvents
+        // The pinned window renders above the list; drop it here so it can't appear twice.
+        // Today the tag list never contains it, but that's a property of Gamma's ordering,
+        // not a guarantee.
+        if showsLiveWindow, let pinned = liveWindow {
+            events = events.filter { $0.event.id != pinned.id }
+        }
         if let kind = selectedSubTab.kind {
             events = events.filter { $0.kind == kind }
         }

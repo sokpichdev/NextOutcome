@@ -30,7 +30,8 @@ final class SubTopicChipSelectionTests: XCTestCase {
         let vm = EventListViewModel(
             fetchEvents: FetchEventsUseCase(repository: repo),
             fetchRelatedTags: FetchRelatedTagsUseCase(repository: repo),
-            searchEvents: SearchEventsUseCase(repository: repo)
+            searchEvents: SearchEventsUseCase(repository: repo),
+            fetchFeaturedEvents: FetchFeaturedEventsUseCase(repository: repo)
         )
         return (vm, repo)
     }

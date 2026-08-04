@@ -72,7 +72,8 @@ final class AppContainer {
         EventListViewModel(
             fetchEvents: FetchEventsUseCase(repository: repository),
             fetchRelatedTags: FetchRelatedTagsUseCase(repository: repository),
-            searchEvents: SearchEventsUseCase(repository: repository)
+            searchEvents: SearchEventsUseCase(repository: repository),
+            fetchFeaturedEvents: FetchFeaturedEventsUseCase(repository: repository)
         )
     }
 
@@ -110,7 +111,10 @@ final class AppContainer {
     /// `CryptoHubViewModel.loadIfNeeded(tagID:)` instead.
     /// - Returns: A view model wired to fetch the Crypto tag's events once its id is known.
     func makeCryptoHubViewModel() -> CryptoHubViewModel {
-        CryptoHubViewModel(fetchAllEvents: FetchAllEventsUseCase(repository: repository))
+        CryptoHubViewModel(
+            fetchAllEvents: FetchAllEventsUseCase(repository: repository),
+            fetchLiveWindow: FetchLiveWindowUseCase(repository: repository)
+        )
     }
 
     /// Builds the view model for the Esports hub. Like the Crypto hub, the Esports tag's
@@ -263,6 +267,7 @@ final class AppContainer {
                     repository: cryptoSpotPriceRepository, stream: cryptoPriceStream
                 ),
                 fetchPriceWindow: FetchCryptoPriceWindowUseCase(repository: cryptoSpotPriceRepository),
+                fetchCandles: FetchCryptoCandlesUseCase(repository: cryptoSpotPriceRepository),
                 onQuickBet: onQuickBet
             )
         }

@@ -1,3 +1,10 @@
+//
+//  CryptoHubView.swift
+//  NextOutcome
+//
+//  Created by Sok Pich on 10/07/2026.
+//
+
 import SwiftUI
 import MarketsDomain
 import DesignSystem
@@ -32,6 +39,7 @@ public struct CryptoHubView: View {
                     searchField
                 }
                 subTabRow
+                liveWindowCard
                 content
             }
             .padding(.horizontal, DSLayout.margin)
@@ -44,9 +52,24 @@ public struct CryptoHubView: View {
         }
         .navigationDestination(for: CryptoUpDownNavigationTarget.self) { target in
             if let btcLiveFactory {
-                BTCLiveView(viewModel: btcLiveFactory(target.liveContext) { side in
-                    tradeContext = TradeSheetContext(market: target.market, side: side == .up ? .yes : .no)
-                })
+                // The pop must come from *inside* the pushed screen: this hub is the
+                // stack's root, so its own `dismiss` is a no-op — reading it out here is
+                // exactly what made "Next window →" do nothing.
+                LiveWindowDestination { pop in
+                    BTCLiveView(
+                        viewModel: btcLiveFactory(target.liveContext) { side in
+                            tradeContext = TradeSheetContext(market: target.market, side: side == .up ? .yes : .no)
+                        },
+                        // Pop back to the hub, whose pinned card follows the live window on
+                        // the grid boundary — so returning lands on the current one. The
+                        // refresh runs in the background rather than gating the pop: a slow
+                        // request otherwise leaves the tap looking dead.
+                        onNextWindow: {
+                            Task { await viewModel.loadLiveWindow() }
+                            pop()
+                        }
+                    )
+                }
             }
         }
         .sheet(isPresented: $showsMoreSheet) { CryptoMoreSheetPlaceholder() }
@@ -56,6 +79,7 @@ public struct CryptoHubView: View {
         .task {
             if let tagID { await viewModel.loadIfNeeded(tagID: tagID) }
         }
+        .task { await followLiveWindow() }
         .refreshable { await viewModel.refresh() }
     }
 
@@ -283,6 +307,38 @@ public struct CryptoHubView: View {
         }
     }
 
+    /// Keeps the pinned card on the current window for as long as the hub is on screen.
+    ///
+    /// Sleeps to the *window boundary* rather than on a fixed interval: a repeating 5-minute
+    /// timer started mid-window would settle permanently out of phase and keep showing a
+    /// resolved window as live. The small grace period covers clock skew and the moment
+    /// Gamma needs to publish the next slot. Cancelled automatically when the view goes away.
+    private func followLiveWindow() async {
+        /// Seconds past the boundary before asking for the next window.
+        let grace: TimeInterval = 2
+        while !Task.isCancelled {
+            let wait = viewModel.nextLiveWindowBoundary.timeIntervalSinceNow + grace
+            do {
+                try await Task.sleep(nanoseconds: UInt64(max(wait, 1) * 1_000_000_000))
+            } catch {
+                return  // cancelled
+            }
+            await viewModel.loadLiveWindow()
+        }
+    }
+
+    /// The pinned BTC Up/Down 5m card, matching the card `polymarket.com/crypto` leads with.
+    ///
+    /// Rendered outside `content` so it survives the list's loading/empty states — the
+    /// window is resolved by a separate request and shouldn't blink out while the tag list
+    /// reloads.
+    @ViewBuilder
+    private var liveWindowCard: some View {
+        if viewModel.showsLiveWindow, let event = viewModel.liveWindow {
+            CryptoUpDownCard(event: event)
+        }
+    }
+
     @ViewBuilder
     private func card(for event: Event, kind: CryptoMarketKind) -> some View {
         if kind == .upDown {
@@ -290,6 +346,22 @@ public struct CryptoHubView: View {
         } else {
             CryptoStrikeCard(event: event, kind: kind)
         }
+    }
+}
+
+/// Hosts a pushed live-window screen and hands it a working "pop back" closure.
+///
+/// `dismiss` has to be read from a view that is *itself* the pushed destination —
+/// `CryptoHubView` is the stack's root, so its `dismiss` silently does nothing. This
+/// wrapper exists purely to give the destination its own environment to read.
+private struct LiveWindowDestination<Content: View>: View {
+    /// Pops this pushed screen off the navigation stack.
+    @Environment(\.dismiss) private var dismiss
+    /// Builds the pushed screen, given a closure that pops back to the hub.
+    let content: (_ pop: @escaping () -> Void) -> Content
+
+    var body: some View {
+        content { dismiss() }
     }
 }
 

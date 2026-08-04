@@ -70,6 +70,23 @@ enum OrderbookMapper {
         }
     }
 
+    /// Maps a `/api/chainlink-candles` response into domain candles, oldest first.
+    /// - Parameter dto: The decoded candle page.
+    /// - Returns: The parsed candles, sorted ascending by bucket start.
+    static func candles(from dto: ChainlinkCandlesResponseDTO) -> [Candle] {
+        dto.candles
+            .sorted { $0.time < $1.time }
+            .map {
+                Candle(
+                    open: Decimal($0.open),
+                    high: Decimal($0.high),
+                    low: Decimal($0.low),
+                    close: Decimal($0.close),
+                    start: Date(timeIntervalSince1970: $0.time)
+                )
+            }
+    }
+
     /// Maps a `/api/crypto/crypto-price` response into a domain price window.
     /// - Parameter dto: The decoded window snapshot.
     /// - Returns: The parsed price window.

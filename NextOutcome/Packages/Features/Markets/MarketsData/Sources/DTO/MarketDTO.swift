@@ -120,11 +120,27 @@ struct EventDTO: Decodable {
     let creationDate: String?
     /// The event's resolution source URL — for esports matches, the official stream.
     let resolutionSource: String?
+    /// Whether a sports/esports fixture has finished. **Orthogonal to `closed`**: a match that
+    /// has ended but is still awaiting UMA resolution reports `ended: true, closed: false`, so
+    /// the `closed=false` list filter does not keep finished games out of the feed. Absent
+    /// (`nil`) on ordinary markets — treat that as "not a fixture", never as "still running".
+    let ended: Bool?
+    /// Whether a sports/esports fixture is currently in play. Absent on ordinary markets.
+    let live: Bool?
+    /// The event-level closed flag. Distinct from `MarketDTO.closed`, which is per-market —
+    /// `Event.isResolved` needs *every* market closed, which is false for a finished fixture.
+    let closed: Bool?
+    /// When the event's window closes, as a full ISO8601 timestamp. Load-bearing for spotting
+    /// abandoned events: Gamma leaves plenty of long-past events with `closed: false`, and
+    /// this is the only field that reveals them. Same key caveat as `MarketDTO.endDate` —
+    /// decode `endDate`, never `endDateIso`, which is a date with no time component.
+    let endDate: String?
 
     /// JSON keys for `EventDTO`.
     enum CodingKeys: String, CodingKey {
         case id, title, slug, markets, volume, image, tags, gameStartTime, description, series,
              volume24hr, liquidity, competitive, creationDate, resolutionSource
+        case ended, live, closed, endDate
     }
 
     /// Tolerant decoder falling back to the slug for a missing title and to empty
@@ -147,6 +163,10 @@ struct EventDTO: Decodable {
         competitive = try? c.decode(Double.self, forKey: .competitive)
         creationDate = try? c.decode(String.self, forKey: .creationDate)
         resolutionSource = try? c.decode(String.self, forKey: .resolutionSource)
+        ended = try? c.decode(Bool.self, forKey: .ended)
+        live = try? c.decode(Bool.self, forKey: .live)
+        closed = try? c.decode(Bool.self, forKey: .closed)
+        endDate = try? c.decode(String.self, forKey: .endDate)
     }
 }
 
@@ -175,6 +195,10 @@ struct TagDTO: Decodable {
 struct SeriesDTO: Decodable {
     /// The series slug, e.g. `"btc-up-or-down-5m"`.
     let slug: String
+    /// The series' display name, e.g. `"BTC Up or Down 5m"` — the name Polymarket's own
+    /// cards show for a recurring market, in place of the timestamped per-window event title
+    /// (`"Bitcoin Up or Down - August 3, 10:15AM-10:20AM ET"`).
+    let title: String?
 }
 
 /// Shared tolerant field helpers for the Gamma wire shape.

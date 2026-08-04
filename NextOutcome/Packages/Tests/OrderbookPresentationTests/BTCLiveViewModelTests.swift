@@ -1,3 +1,10 @@
+//
+//  BTCLiveViewModelTests.swift
+//  NextOutcome
+//
+//  Created by Sok Pich on 03/07/2026.
+//
+
 import XCTest
 @testable import OrderbookPresentation
 import OrderbookDomain
@@ -71,23 +78,67 @@ private struct FakeCryptoSpotPriceStreaming: CryptoSpotPriceStreaming {
 
 /// Minimal fake `CryptoSpotPriceRepository`. Returns whatever's currently set on
 /// `points`/`window`, so a test can mutate them between polls to simulate a live update.
+///
+/// The view model calls this from several concurrently running tasks (spot seed, window
+/// poll, candle pages), so every touch of the mutable state goes through `lock` — the
+/// `@unchecked Sendable` is otherwise a lie that segfaults the suite intermittently.
 private final class FakeCryptoSpotPriceRepository: CryptoSpotPriceRepository, @unchecked Sendable {
-    var points: [CryptoSpotPricePoint] = []
-    var window: CryptoPriceWindow = CryptoPriceWindow(
+    private let lock = NSLock()
+
+    private var _points: [CryptoSpotPricePoint] = []
+    var points: [CryptoSpotPricePoint] {
+        get { lock.withLock { _points } }
+        set { lock.withLock { _points = newValue } }
+    }
+
+    private var _window = CryptoPriceWindow(
         openPrice: 0, closePrice: nil, timestamp: Date(), completed: false
     )
+    var window: CryptoPriceWindow {
+        get { lock.withLock { _window } }
+        set { lock.withLock { _window = newValue } }
+    }
+
     /// The `symbol` argument each call was actually invoked with, so tests can assert
     /// the view model doesn't hardcode "BTC" for a non-Bitcoin market.
-    private(set) var requestedSymbols: [String] = []
+    private var _requestedSymbols: [String] = []
+    var requestedSymbols: [String] { lock.withLock { _requestedSymbols } }
+
+    /// Successive pages returned by `candles` (first call gets the first page, and so
+    /// on); once exhausted, further calls return `[]`. Defaults to no pages, so tests
+    /// that don't care about candle history exercise the bucketing fallback.
+    private var _candlePages: [[Candle]] = []
+    var candlePages: [[Candle]] {
+        get { lock.withLock { _candlePages } }
+        set { lock.withLock { _candlePages = newValue } }
+    }
+
+    /// The `before` cursor of each `candles` call, so pagination tests can assert the
+    /// view model walks backwards from its oldest loaded candle.
+    private var _candleBeforeCursors: [Date?] = []
+    var candleBeforeCursors: [Date?] { lock.withLock { _candleBeforeCursors } }
 
     func spotPriceHistory(symbol: String, eventStart: Date, eventEnd: Date) async throws -> [CryptoSpotPricePoint] {
-        requestedSymbols.append(symbol)
-        return points
+        lock.withLock {
+            _requestedSymbols.append(symbol)
+            return _points
+        }
     }
 
     func priceWindow(symbol: String, eventStart: Date, eventEnd: Date) async throws -> CryptoPriceWindow {
-        requestedSymbols.append(symbol)
-        return window
+        lock.withLock {
+            _requestedSymbols.append(symbol)
+            return _window
+        }
+    }
+
+    func candles(symbol: String, interval: CandleInterval, before: Date?) async throws -> [Candle] {
+        lock.withLock {
+            _requestedSymbols.append(symbol)
+            _candleBeforeCursors.append(before)
+            guard !_candlePages.isEmpty else { return [] }
+            return _candlePages.removeFirst()
+        }
     }
 }
 
@@ -111,8 +162,18 @@ final class BTCLiveViewModelTests: XCTestCase {
             observeBook: ObserveOrderBookUseCase(repository: repository, stream: FakeMarketStreaming()),
             observeSpotPrice: ObserveCryptoSpotPriceUseCase(repository: spotRepository, stream: spotStreamer),
             fetchPriceWindow: FetchCryptoPriceWindowUseCase(repository: spotRepository),
+            fetchCandles: FetchCryptoCandlesUseCase(repository: spotRepository),
             onQuickBet: { _ in }
         )
+    }
+
+    /// A page of `count` flat 5-minute candles ending with the bucket that starts at
+    /// `lastStart`, oldest first.
+    private func candlePage(endingAt lastStart: Date, count: Int, price: Decimal = 63_000) -> [Candle] {
+        (0..<count).map { offset in
+            let start = lastStart.addingTimeInterval(-300 * Double(count - 1 - offset))
+            return Candle(open: price, high: price, low: price, close: price, start: start)
+        }
     }
 
     /// Regression test for the sliding-window bug: `priceToBeat` must be pinned to the
@@ -311,15 +372,19 @@ final class BTCLiveViewModelTests: XCTestCase {
         for _ in 0..<20 { await Task.yield() }
         vm.stop()
 
+        // Superseded expectation. This used to assert 3 candles from 4 samples, because
+        // candles were one-per-consecutive-pair — chosen to avoid the flat dots that a 60s
+        // bucket produced on this ~1-sample-per-minute feed. That model was wrong: a candle
+        // is the betting window itself, so four samples inside one 5-minute window are one
+        // candle, forming in place. It still spans a real move (the wick carries the extremes
+        // across the whole window), which is what the old assertion was really protecting.
         let candles = vm.candles
-        XCTAssertEqual(candles.count, 3, "4 one-minute-spaced samples must produce 3 candles, not 4 flat ones bucketed by a 60s window")
-        for candle in candles {
-            XCTAssertNotEqual(candle.high, candle.low, "each candle must span an actual price move, not degenerate to a flat dot")
-        }
-        XCTAssertEqual(candles[0].open, 63_900)
-        XCTAssertEqual(candles[0].close, 63_950)
-        XCTAssertEqual(candles[2].open, 63_890)
-        XCTAssertEqual(candles[2].close, 64_010)
+        XCTAssertEqual(candles.count, 1, "four samples inside one 5-minute window are one candle")
+        XCTAssertNotEqual(candles[0].high, candles[0].low, "the candle must still span a real price move")
+        XCTAssertEqual(candles[0].open, 63_900, "opens at the window's first price")
+        XCTAssertEqual(candles[0].close, 64_010, "closes at the latest price")
+        XCTAssertEqual(candles[0].high, 64_010)
+        XCTAssertEqual(candles[0].low, 63_890)
     }
 
     /// Regression test: this screen opens for any Up/Down crypto market (BTC, ETH, SOL,
@@ -346,5 +411,120 @@ final class BTCLiveViewModelTests: XCTestCase {
             spotRepository.requestedSymbols.allSatisfy { $0 == "ETH" },
             "expected every spot-price request to use the event's own symbol (ETH), got \(spotRepository.requestedSymbols)"
         )
+    }
+
+    // MARK: - Real candle history (chainlink-candles feed)
+
+    /// When the candle feed has history, `candles` must be that history — not candles
+    /// bucketed out of the window-scoped spot series, which can only ever produce the
+    /// single current window (the "one lone candle" bug).
+    @MainActor
+    func test_candles_preferServerCandleHistory_overWindowScopedBucketing() async {
+        let windowEnd = Date(timeIntervalSince1970: 999_900)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: windowEnd.addingTimeInterval(-60), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        // The spot seed's last sample lands inside the forming candle's bucket, so it
+        // legitimately folds into that candle whenever the candle page loads first. Keep
+        // its price equal to the candle's so the fold is value-neutral and the assertion
+        // doesn't depend on task ordering.
+        spotRepository.points = [CryptoSpotPricePoint(date: windowEnd.addingTimeInterval(-120), price: 63_000)]
+        let history = candlePage(endingAt: Date(timeIntervalSince1970: 999_600), count: 3)
+        spotRepository.candlePages = [history]
+
+        let vm = makeVM(repository: repository, windowEnd: windowEnd, spotRepository: spotRepository)
+        vm.start()
+        for _ in 0..<50 { await Task.yield() }
+        vm.stop()
+
+        XCTAssertEqual(vm.candles, history, "candles must come from the candle feed, not window bucketing")
+    }
+
+    /// A live tick inside the newest candle's bucket must update that forming candle
+    /// (close/high/low), keeping the candle count stable.
+    @MainActor
+    func test_liveTick_foldsIntoFormingCandle() async {
+        let windowEnd = Date(timeIntervalSince1970: 999_900)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: windowEnd.addingTimeInterval(-60), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        let lastStart = Date(timeIntervalSince1970: 999_600)
+        spotRepository.candlePages = [candlePage(endingAt: lastStart, count: 3)]
+        let streamer = FakeCryptoSpotPriceStreaming(points: [
+            CryptoSpotPricePoint(date: lastStart.addingTimeInterval(30), price: 64_250)
+        ])
+
+        let vm = makeVM(
+            repository: repository, windowEnd: windowEnd,
+            spotRepository: spotRepository, spotStreamer: streamer
+        )
+        vm.start()
+        for _ in 0..<50 { await Task.yield() }
+        vm.stop()
+
+        XCTAssertEqual(vm.candles.count, 3, "a tick inside the forming bucket must not add a candle")
+        XCTAssertEqual(vm.candles.last?.close, 64_250)
+        XCTAssertEqual(vm.candles.last?.high, 64_250)
+        XCTAssertEqual(vm.candles.last?.open, 63_000, "the forming candle's open must not move")
+    }
+
+    /// A live tick past the newest candle's bucket boundary must roll the chart into a
+    /// new forming candle.
+    @MainActor
+    func test_liveTick_pastBucketBoundary_startsNewCandle() async {
+        let windowEnd = Date(timeIntervalSince1970: 999_900)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: windowEnd.addingTimeInterval(-60), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        let lastStart = Date(timeIntervalSince1970: 999_600)
+        spotRepository.candlePages = [candlePage(endingAt: lastStart, count: 3)]
+        let streamer = FakeCryptoSpotPriceStreaming(points: [
+            CryptoSpotPricePoint(date: lastStart.addingTimeInterval(310), price: 63_700)
+        ])
+
+        let vm = makeVM(
+            repository: repository, windowEnd: windowEnd,
+            spotRepository: spotRepository, spotStreamer: streamer
+        )
+        vm.start()
+        for _ in 0..<50 { await Task.yield() }
+        vm.stop()
+
+        XCTAssertEqual(vm.candles.count, 4, "a tick past the boundary must start the next candle")
+        XCTAssertEqual(vm.candles.last?.start, lastStart.addingTimeInterval(300))
+        XCTAssertEqual(vm.candles.last?.open, 63_700)
+    }
+
+    /// The seed load must page backwards automatically (up to `seedCandlePages` pages,
+    /// exclusive `before` cursor from the oldest loaded candle), prepending older pages
+    /// and flipping `hasMoreCandles` off once the server returns a short page. History
+    /// depth is fixed up front because scroll-driven pagination proved unreliable (the
+    /// chart-scroll binding desyncs under live ticks and teleported the viewport).
+    @MainActor
+    func test_seed_pagesBackwardsAutomatically_andStopsOnShortPage() async {
+        let windowEnd = Date(timeIntervalSince1970: 999_900)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: windowEnd.addingTimeInterval(-60), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        let firstPage = candlePage(endingAt: Date(timeIntervalSince1970: 999_600), count: 30)
+        let oldestLoaded = firstPage.first!.start
+        let olderPage = candlePage(endingAt: oldestLoaded.addingTimeInterval(-300), count: 2, price: 62_500)
+        spotRepository.candlePages = [firstPage, olderPage]
+
+        let vm = makeVM(repository: repository, windowEnd: windowEnd, spotRepository: spotRepository)
+        vm.start()
+        for _ in 0..<200 { await Task.yield() }
+        vm.stop()
+
+        XCTAssertEqual(vm.candles.count, 32)
+        XCTAssertEqual(vm.candles.prefix(2).map(\.close), [62_500, 62_500], "older page must be prepended")
+        XCTAssertEqual(spotRepository.candleBeforeCursors.count, 2)
+        XCTAssertNil(spotRepository.candleBeforeCursors[0], "the first page has no cursor")
+        XCTAssertEqual(spotRepository.candleBeforeCursors[1], oldestLoaded, "paging must cursor from the oldest loaded candle")
+        XCTAssertFalse(vm.hasMoreCandles, "a short page means history is exhausted")
     }
 }
