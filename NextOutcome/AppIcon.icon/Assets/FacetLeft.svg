@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Left half of the four-facet cut gem.
+
+       Silhouette geometry is taken verbatim from
+       NextOutcome/design/icon/render_layers.swift, converted from Cocoa's y-up
+       to SVG's y-down: top vertex 512,128 — left 192,512 — bottom 512,896.
+
+       The horizontal crease at y=512 is new. The original mark is two facets
+       split down the vertical centre; the extra break makes it read as a cut
+       gem and, more importantly, survives the Tinted and Clear renditions.
+       Those discard colour entirely, so a facet boundary only reads if it is a
+       *value* step baked into the art — the renderer will not invent one.
+
+       Flat fills, not gradients. Liquid Glass applies its own vertical shading;
+       a baked gradient on top of that reads as muddy rather than faceted. -->
+  <path fill="#8CFFB4" d="M192 512 L512 128 L512 512 Z"/>
+  <path fill="#17C25C" d="M192 512 L512 512 L512 896 Z"/>
+</svg>

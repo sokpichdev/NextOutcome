@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Right half of the four-facet cut gem: top 512,128 — right 832,512 —
+       bottom 512,896. Shares the vertical centre line with the left half, which
+       is the gem's ridge.
+
+       Deeper greens than the left half so the gem reads as lit from the upper
+       left, matching the original mark. This layer also carries opacity 0.7 in
+       icon.json — that is what holds the left/right split together once colour
+       is stripped, since opacity is compositing rather than hue and is the only
+       appearance lever that survives Tinted and Clear. -->
+  <path fill="#3EE087" d="M512 128 L832 512 L512 512 Z"/>
+  <path fill="#0C8F44" d="M512 512 L832 512 L512 896 Z"/>
+</svg>

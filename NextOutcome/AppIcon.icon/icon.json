@@ -1,0 +1,83 @@
+{
+  "groups": [
+    {
+      "name": "FacetLeft",
+      "layers": [
+        {
+          "name": "FacetLeft",
+          "image-name": "FacetLeft.svg",
+          "glass": true,
+          "position": {
+            "scale": 1.0,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "specular": true,
+      "shadow": {
+        "kind": "layer-color",
+        "opacity": 0.45
+      },
+      "blur-material": null
+    },
+    {
+      "name": "FacetRight",
+      "layers": [
+        {
+          "name": "FacetRight",
+          "image-name": "FacetRight.svg",
+          "glass": true,
+          "opacity": 0.7,
+          "position": {
+            "scale": 1.0,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "specular": false,
+      "shadow": {
+        "kind": "layer-color",
+        "opacity": 0.55
+      },
+      "blur-material": null
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared",
+    "circles": [
+      "watchOS"
+    ]
+  },
+  "fill-specializations": [
+    {
+      "value": {
+        "linear-gradient": [
+          "srgb:0.11765,0.15686,0.21176,1.00000",
+          "srgb:0.04314,0.05882,0.07843,1.00000"
+        ],
+        "orientation": {
+          "start": {
+            "x": 0.5,
+            "y": 0
+          },
+          "stop": {
+            "x": 0.5,
+            "y": 1
+          }
+        }
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "solid": "srgb:0.01176,0.01569,0.01961,1.00000"
+      }
+    }
+  ]
+}
