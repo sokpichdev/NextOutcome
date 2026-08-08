@@ -153,18 +153,19 @@ NextOutcome/
 │   ├── NextOutcome/                      # App target (thin shell)
 │   │   └── App/                          # AppContainer, RootView
 │   ├── NextOutcomeUITests/               # XCUITest suite (Home, MarketDetail, Esports, …)
-│   └── Packages/                         # Swift Package (one umbrella)
+│   └── Packages/                         # Swift Package (one umbrella, 17 targets)
 │       ├── Package.swift
-│       ├── Core/
+│       ├── Sources/
 │       │   ├── DesignSystem/             # tokens, components, shell chrome, DSNumberPad
-│       │   └── Networking/               # APIClient (actor), Endpoint, sockets, decoding
-│       ├── SharedDomain/                 # LoadState, Page — cross-feature primitives
-│       └── Features/                     # vertical slices: Domain / Data / Presentation
-│           ├── Markets/                  # feed, detail, search, World Cup + Esports hubs
-│           ├── Orderbook/                # live book, price/candle charts, BTC live
-│           ├── Portfolio/                # watch-only positions, activity, leaderboard
-│           ├── LiveStats/               # live sports stats
-│           └── Trading/                  # order signing + proxy (quarantined)
+│       │   ├── Networking/               # APIClient (actor), Endpoint, sockets, decoding
+│       │   ├── SharedDomain/             # LoadState, Page — cross-feature primitives
+│       │   └── Modules/                  # feature slices, each Domain / Data / Presentation
+│       │       ├── Market/               # feed, detail, search, World Cup + Esports hubs
+│       │       ├── Orderbook/            # live book, price/candle charts, BTC live
+│       │       ├── Portfolio/            # watch-only positions, activity, leaderboard
+│       │       ├── LiveStats/            # live sports stats
+│       │       └── Trading/              # order signing + proxy (quarantined)
+│       └── Tests/                        # one dir per test target, flat
 ├── .github/workflows/                   # CI — package tests + app-target build
 └── .mobile-agents/                       # engineering standards & agent toolkit
 ```
