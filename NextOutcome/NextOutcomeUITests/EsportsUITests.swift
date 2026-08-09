@@ -161,13 +161,30 @@ final class EsportsUITests: XCTestCase {
     }
 
     /// TC-092: `-forceTwitchChannel` pins the stream hero to a known channel
-    /// so the embed WebView renders. Uses a large always-on channel; the
-    /// visual "is video actually playing" check stays manual (TC-130).
+    /// so the embed WebView renders. The visual "is video actually playing"
+    /// check stays manual (TC-130).
+    ///
+    /// The hero embeds only confirmed-live broadcasts, so this asserts something about the
+    /// outside world as much as about the app: when the channel is off air there is
+    /// correctly no player, and failing then would just mean "nobody is streaming". The
+    /// precondition check separates the two, so a real regression still fails.
     @MainActor
-    func testForcedTwitchChannelHero() throws {
+    func testForcedTwitchChannelHero() async throws {
+        let channel = "esl_csgo"
+        switch await BroadcastPrecondition.twitchStatus(channel: channel) {
+        case .live:
+            break
+        case .offAir:
+            throw XCTSkip("twitch.tv/\(channel) is off air — the hero embeds only live "
+                          + "broadcasts, so there is nothing to assert")
+        case .unknown:
+            throw XCTSkip("Couldn't determine whether twitch.tv/\(channel) is live "
+                          + "(network or page-shape change) — not treating that as off air")
+        }
+
         let app = XCUIApplication.launched(
             preselecting: "esports", tagID: esportsTagID,
-            extraArguments: ["-forceTwitchChannel", "esl_csgo"])
+            extraArguments: ["-forceTwitchChannel", channel])
 
         assertAppears(app.esportsModeButton, timeout: UIWait.firstLoad,
                       "Hub should load with the forced channel")
