@@ -28,9 +28,60 @@ final class HubTabsViewModelTests: XCTestCase {
 
         await vm.loadDynamicTabsIfNeeded()
 
-        // Replaced wholesale, not appended to the fallback.
-        XCTAssertEqual(vm.tabs.map(\.id), ["all", "politics", "crypto"])
-        XCTAssertEqual(vm.tabs.map(\.title), ["All", "Politics", "Crypto"])
+        // Replaced wholesale, not appended to the fallback. `esports` is the app-owned entry
+        // injected after Crypto — see test_load_injectsEsportsAfterCryptoWhenServerOmitsIt.
+        XCTAssertEqual(vm.tabs.map(\.id), ["all", "politics", "crypto", "esports"])
+        XCTAssertEqual(vm.tabs.map(\.title), ["All", "Politics", "Crypto", "Esports"])
+    }
+
+    func test_load_injectsEsportsAfterCryptoWhenServerOmitsIt() async {
+        // Gamma's top-navbar row has no `esports` entry, yet polymarket.com shows one — their
+        // web client injects it after Crypto. Without the same step our EsportsHubView has no
+        // route: the rail is its only entry point.
+        let repo = SpyMarketRepository(rowsBySlug: ["top-navbar": navRow()])
+        let vm = HubTabsViewModel(fetchRelatedTags: FetchRelatedTagsUseCase(repository: repo))
+
+        await vm.loadDynamicTabsIfNeeded()
+
+        XCTAssertEqual(vm.tabs.map(\.id), ["all", "politics", "crypto", "esports"])
+        // `64` is the esports tag; `100639` is the broader `games` tag and would widen the hub.
+        XCTAssertEqual(vm.tabs.first(where: { $0.id == "esports" })?.tagID, "64")
+    }
+
+    func test_load_doesNotDuplicateEsportsWhenServerProvidesIt() async {
+        // The injection has to retire itself the day Polymarket adds the tag to the nav row,
+        // deferring to the server's label, id and rank.
+        let repo = SpyMarketRepository(rowsBySlug: ["top-navbar": [
+            Tag(id: "100215", label: "All", slug: "all", activeEventsCount: 2),
+            Tag(id: "64", label: "Esports & Gaming", slug: "esports", activeEventsCount: 751),
+            Tag(id: "21", label: "Crypto", slug: "crypto", activeEventsCount: 3515),
+        ]])
+        let vm = HubTabsViewModel(fetchRelatedTags: FetchRelatedTagsUseCase(repository: repo))
+
+        await vm.loadDynamicTabsIfNeeded()
+
+        XCTAssertEqual(vm.tabs.filter { $0.id == "esports" }.count, 1)
+        // Server rank kept — not moved to sit after Crypto.
+        XCTAssertEqual(vm.tabs.map(\.id), ["all", "esports", "crypto"])
+        XCTAssertEqual(vm.tabs.first(where: { $0.id == "esports" })?.title, "Esports & Gaming")
+    }
+
+    func test_load_appendsEsportsWhenCryptoAbsent() async {
+        let repo = SpyMarketRepository(rowsBySlug: ["top-navbar": [
+            Tag(id: "100215", label: "All", slug: "all", activeEventsCount: 2),
+            Tag(id: "2", label: "Politics", slug: "politics", activeEventsCount: 1556),
+        ]])
+        let vm = HubTabsViewModel(fetchRelatedTags: FetchRelatedTagsUseCase(repository: repo))
+
+        await vm.loadDynamicTabsIfNeeded()
+
+        XCTAssertEqual(vm.tabs.map(\.id), ["all", "politics", "esports"])
+    }
+
+    func test_fallbackNav_containsEsports() {
+        // The offline rail is the only rail until the fetch lands; dropping esports there
+        // would make the hub unreachable on a cold or offline launch.
+        XCTAssertTrue(HubTab.fallbackNav.contains(HubTab.esports))
     }
 
     func test_load_mapsAllToNoTagFilter() async {
@@ -65,7 +116,7 @@ final class HubTabsViewModelTests: XCTestCase {
 
         await vm.loadDynamicTabsIfNeeded()
 
-        XCTAssertEqual(vm.tabs.map(\.id), ["all"])
+        XCTAssertEqual(vm.tabs.map(\.id), ["all", "esports"])
     }
 
     func test_load_keepsFallbackWhenFetchFails() async {

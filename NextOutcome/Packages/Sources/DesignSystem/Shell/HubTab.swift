@@ -43,12 +43,24 @@ public struct HubTab: Identifiable, @unchecked Sendable {
     //
     // These exist so `RootView` can ask "is the selected category the one that has a bespoke
     // hub screen?" They are matched by slug against whatever the rail fetched, so their
-    // `title`/`glyph`/`tagID` are never rendered. Polymarket's nav does not currently include
-    // `world-cup` or `esports`, so those two screens are unreachable from the rail today —
-    // the branches are kept because they light up again the moment the tags return.
+    // `title`/`glyph`/`tagID` are never rendered — with one exception: `esports` is *injected*
+    // into the rail by `HubTabsViewModel`, so its title and tagID are rendered and queried.
+    //
+    // Polymarket's nav does not currently include `world-cup`, so that screen is unreachable
+    // from the rail today — the branch is kept because it lights up again the moment the tag
+    // returns.
 
     /// The World Cup hub — brackets, schedules, and props for the tournament.
     public static let worldCup = HubTab(id: "world-cup", title: "World Cup", glyph: "soccerball", activeColor: DSColor.categoryGold, tagID: "519")
+    /// The Esports hub — live matches, streams, and the esports leaderboard.
+    ///
+    /// Unlike the other identifiers here this one is also *rendered*. Gamma's `top-navbar` row
+    /// omits `esports`, yet polymarket.com shows an Esports entry: their web client injects it
+    /// (and `Art`) client-side on top of the same fetched row. `HubTabsViewModel` does the
+    /// same, which is why `title` and `tagID` below have to be right.
+    ///
+    /// `64` is the `esports` tag. Not `100639` — that is the broader `games` tag.
+    public static let esports = HubTab(id: "esports", title: "Esports", glyph: nil, activeColor: DSColor.textPrimary, tagID: "64")
     /// Breaking news markets. Also reachable from its own bottom tab.
     public static let breaking = HubTab(id: "breaking", title: "Breaking", glyph: nil, activeColor: DSColor.textPrimary, tagID: "198")
     /// Political markets (elections, policy outcomes, etc.).
@@ -62,11 +74,15 @@ public struct HubTab: Identifiable, @unchecked Sendable {
     /// truth. It exists only so the rail is never empty on a cold or offline launch; the fetched
     /// row replaces it wholesale within a second of launch. Expect it to drift, and don't fix it
     /// unless the offline experience is visibly wrong.
+    ///
+    /// `.esports` is the one entry that is *not* from that snapshot: it's app-owned and injected
+    /// into the live row too, so it has to be here or it would vanish offline. See `.esports`.
     public static let fallbackNav: [HubTab] = [
         .all,
         HubTab(id: "politics",    title: "Politics",    glyph: nil, activeColor: DSColor.textPrimary, tagID: "2"),
         HubTab(id: "sports",      title: "Sports",      glyph: nil, activeColor: DSColor.textPrimary, tagID: "1"),
         HubTab(id: "crypto",      title: "Crypto",      glyph: nil, activeColor: DSColor.textPrimary, tagID: "21"),
+        .esports,
         HubTab(id: "finance",     title: "Finance",     glyph: nil, activeColor: DSColor.textPrimary, tagID: "120"),
         HubTab(id: "geopolitics", title: "Geopolitics", glyph: nil, activeColor: DSColor.textPrimary, tagID: "100265"),
         HubTab(id: "tech",        title: "Tech",        glyph: nil, activeColor: DSColor.textPrimary, tagID: "1401"),
