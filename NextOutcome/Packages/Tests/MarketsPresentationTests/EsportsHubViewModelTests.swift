@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import Foundation
 import SharedDomain
 @testable import MarketsPresentation
 import MarketsDomain
@@ -42,12 +43,28 @@ final class EsportsHubViewModelTests: XCTestCase {
                    ended: false, teams: [])
     }
 
+    /// The catalogue these tests classify against. `tag(_:)` sets id == slug, so a league's
+    /// `primaryTagID` is the same string the `match(_:game:)` helper tags an event with.
+    nonisolated private static let catalogue: [EsportsLeague] = [
+        EsportsLeague(id: "cs2", name: "CS2", primaryTagID: "counter-strike-2"),
+        EsportsLeague(id: "lol", name: "LoL", primaryTagID: "league-of-legends"),
+        EsportsLeague(id: "dota2", name: "Dota 2", primaryTagID: "dota-2"),
+        EsportsLeague(id: "pubg", name: "PUBG", primaryTagID: "pubg"),
+    ]
+    private func league(_ id: String) -> EsportsLeague {
+        Self.catalogue.first { $0.id == id }!
+    }
+
     private func makeVM(
-        events: [Event], results: [String: GameResult] = [:], now: Date = .init()
+        events: [Event],
+        results: [String: GameResult] = [:],
+        leagues: [EsportsLeague] = EsportsHubViewModelTests.catalogue,
+        now: Date = .init()
     ) -> (EsportsHubViewModel, EsportsFakeRepository) {
-        let repo = EsportsFakeRepository(allEvents: events, gameResults: results)
+        let repo = EsportsFakeRepository(allEvents: events, gameResults: results, leagues: leagues)
         let vm = EsportsHubViewModel(
             fetchAllEvents: FetchAllEventsUseCase(repository: repo),
+            fetchLeagues: FetchEsportsLeaguesUseCase(repository: repo),
             fetchGameResults: FetchGameResultsUseCase(repository: repo),
             fetchTrades: FetchActivityTradesUseCase(repository: repo),
             now: { now },
@@ -99,10 +116,65 @@ final class EsportsHubViewModelTests: XCTestCase {
         let lol = match("lol", game: "league-of-legends", start: now)
         let (vm, _) = makeVM(events: [cs, lol], results: ["cs": result("cs", live: true)], now: now)
         await vm.loadIfNeeded(tagID: "64")
-        vm.selectedGame = .cs2
+        vm.selectedLeague = league("cs2")
         XCTAssertEqual(vm.visibleMatches.map(\.id), ["cs"])
-        XCTAssertEqual(vm.liveCount(for: .cs2), 1)
-        XCTAssertEqual(vm.liveCount(for: .lol), 0)
+        XCTAssertEqual(vm.liveCount(for: league("cs2")), 1)
+        XCTAssertEqual(vm.liveCount(for: league("lol")), 0)
+    }
+
+    // MARK: the tile row
+
+    func test_tileRow_dropsLeaguesWithNoMatches() async {
+        // The catalogue ships titles with no markets at all (PUBG, EA Sports FC, StarCraft).
+        // Web renders those as permanently dead tiles; we don't.
+        let (vm, _) = makeVM(events: [match("cs", game: "counter-strike-2")])
+        await vm.loadIfNeeded(tagID: "64")
+        XCTAssertEqual(vm.leagues.count, 4)
+        XCTAssertEqual(vm.visibleLeagues.map(\.id), ["cs2"])
+    }
+
+    func test_tileRow_ordersByLiveThenMatchCount() async {
+        let now = Date()
+        let events = [
+            match("lol1", game: "league-of-legends", start: now),
+            match("lol2", game: "league-of-legends", start: now),
+            match("dota", game: "dota-2", start: now),
+            match("cs", game: "counter-strike-2", start: now),
+        ]
+        let (vm, _) = makeVM(events: events, results: ["dota": result("dota", live: true)], now: now)
+        await vm.loadIfNeeded(tagID: "64")
+
+        // Dota leads on one live match; LoL beats CS2 on match count with none live.
+        XCTAssertEqual(vm.visibleLeagues.map(\.id), ["dota2", "lol", "cs2"])
+    }
+
+    func test_tileRow_clearsFilterWhenItsLeagueLeavesTheRow() async {
+        // A filter pinned to a league that lost its last match would silently show an empty
+        // Games list with no visible cause.
+        let (vm, _) = makeVM(events: [match("cs", game: "counter-strike-2")])
+        await vm.loadIfNeeded(tagID: "64")
+        vm.selectedLeague = league("pubg")   // never in the row: no matches
+        await vm.refreshResults()
+        XCTAssertNil(vm.selectedLeague)
+    }
+
+    func test_load_survivesCatalogueFailure() async {
+        // Losing the catalogue costs tiles and game captions; the hub itself still works.
+        let repo = EsportsFakeRepository(
+            allEvents: [match("cs", game: "counter-strike-2")], gameResults: [:],
+            leagues: [], failLeagues: true
+        )
+        let vm = EsportsHubViewModel(
+            fetchAllEvents: FetchAllEventsUseCase(repository: repo),
+            fetchLeagues: FetchEsportsLeaguesUseCase(repository: repo),
+            fetchGameResults: FetchGameResultsUseCase(repository: repo),
+            fetchTrades: FetchActivityTradesUseCase(repository: repo)
+        )
+        await vm.loadIfNeeded(tagID: "64")
+
+        XCTAssertEqual(vm.state, .loaded)
+        XCTAssertEqual(vm.matches.map(\.id), ["cs"])
+        XCTAssertTrue(vm.visibleLeagues.isEmpty)
     }
 
     func test_liveStreamProbe_populatesConfirmedStreamsOnly() async {
@@ -117,6 +189,7 @@ final class EsportsHubViewModelTests: XCTestCase {
         let prober = FakeProber(streams: ["https://www.twitch.tv/eslcs": .twitch(channel: "eslcs")])
         let vm = EsportsHubViewModel(
             fetchAllEvents: FetchAllEventsUseCase(repository: repo),
+            fetchLeagues: FetchEsportsLeaguesUseCase(repository: repo),
             fetchGameResults: FetchGameResultsUseCase(repository: repo),
             fetchTrades: FetchActivityTradesUseCase(repository: repo),
             liveStreamProber: prober,
@@ -137,6 +210,7 @@ final class EsportsHubViewModelTests: XCTestCase {
         let repo = EsportsFakeRepository(allEvents: [m])
         let vm = EsportsHubViewModel(
             fetchAllEvents: FetchAllEventsUseCase(repository: repo),
+            fetchLeagues: FetchEsportsLeaguesUseCase(repository: repo),
             fetchGameResults: FetchGameResultsUseCase(repository: repo),
             fetchTrades: FetchActivityTradesUseCase(repository: repo),
             liveStreamProber: FakeProber(streams: [:]),
@@ -158,6 +232,7 @@ final class EsportsHubViewModelTests: XCTestCase {
         let streamer = FakeStreamer()
         let vm = EsportsHubViewModel(
             fetchAllEvents: FetchAllEventsUseCase(repository: repo),
+            fetchLeagues: FetchEsportsLeaguesUseCase(repository: repo),
             fetchGameResults: FetchGameResultsUseCase(repository: repo),
             fetchTrades: FetchActivityTradesUseCase(repository: repo),
             streamer: streamer,
@@ -258,16 +333,29 @@ private struct FakeProber: LiveStreamProbing {
 private final class EsportsFakeRepository: MarketRepository, @unchecked Sendable {
     private let allEvents: [Event]
     private let gameResults: [String: GameResult]
+    private let leagues: [EsportsLeague]
+    private let failLeagues: Bool
     private(set) var fetchAllCallCount = 0
 
-    init(allEvents: [Event], gameResults: [String: GameResult] = [:]) {
+    init(
+        allEvents: [Event],
+        gameResults: [String: GameResult] = [:],
+        leagues: [EsportsLeague] = [],
+        failLeagues: Bool = false
+    ) {
         self.allEvents = allEvents
         self.gameResults = gameResults
+        self.leagues = leagues
+        self.failLeagues = failLeagues
     }
 
     func fetchAllEvents(tagID: String, status: EventStatus) async throws -> [Event] {
         fetchAllCallCount += 1
         return allEvents
+    }
+    func fetchLeagues(tagID: String) async throws -> [EsportsLeague] {
+        if failLeagues { throw URLError(.badServerResponse) }
+        return leagues
     }
     func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] {
         gameResults.filter { eventIDs.contains($0.key) }

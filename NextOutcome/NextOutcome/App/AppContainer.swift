@@ -124,6 +124,7 @@ final class AppContainer {
     func makeEsportsHubViewModel() -> EsportsHubViewModel {
         EsportsHubViewModel(
             fetchAllEvents: FetchAllEventsUseCase(repository: repository),
+            fetchLeagues: FetchEsportsLeaguesUseCase(repository: repository),
             fetchGameResults: FetchGameResultsUseCase(repository: repository),
             fetchTrades: FetchActivityTradesUseCase(repository: repository),
             liveStreamProber: WebLiveStreamProber(),

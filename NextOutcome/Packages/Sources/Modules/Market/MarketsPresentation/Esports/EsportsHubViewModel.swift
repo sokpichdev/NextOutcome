@@ -30,10 +30,20 @@ public final class EsportsHubViewModel {
     /// The selected top-level tab.
     public var mode: Mode = .esports
     /// The selected game filter for the Games list, or `nil` for every game.
-    public var selectedGame: EsportsGame?
+    public var selectedLeague: EsportsLeague?
 
     /// Team-vs-team match events, live first, then soonest kickoff.
     public private(set) var matches: [Event] = []
+    /// The game catalogue from Gamma `/sports`, in catalogue order.
+    public private(set) var leagues: [EsportsLeague] = []
+    /// The leagues that have at least one loaded match, ordered live-count then match-count
+    /// descending — the tile row.
+    public private(set) var visibleLeagues: [EsportsLeague] = []
+    /// Which league each match belongs to, keyed by event id. Built once per data change so
+    /// the tile row and every card avoid an O(matches × leagues) scan on each redraw.
+    private var leagueByEventID: [String: EsportsLeague] = [:]
+    /// Live match counts per league id, for the tile badges.
+    private var liveCountByLeagueID: [String: Int] = [:]
     /// Live/final results keyed by event id, from `/events/results`.
     public private(set) var results: [String: GameResult] = [:]
     /// Recent trades keyed by event id, for the hero cards' live-trades ticker. Only hero
@@ -52,6 +62,8 @@ public final class EsportsHubViewModel {
 
     /// Loads every event under the esports tag.
     private let fetchAllEvents: FetchAllEventsUseCase
+    /// Loads the game catalogue behind the tile row.
+    private let fetchLeagues: FetchEsportsLeaguesUseCase
     /// Loads live scores for a batch of match events.
     private let fetchGameResults: FetchGameResultsUseCase
     /// Loads recent trades for a market condition, for the hero ticker.
@@ -71,6 +83,7 @@ public final class EsportsHubViewModel {
     /// Creates the view model.
     /// - Parameters:
     ///   - fetchAllEvents: Loads the esports tag's events, unpaginated.
+    ///   - fetchLeagues: Loads the game catalogue behind the tile row.
     ///   - fetchGameResults: Loads live scores for match events.
     ///   - fetchTrades: Loads recent trades for the hero cards' ticker.
     ///   - liveStreamProber: Confirms hero broadcasts are on air before embedding them.
@@ -81,6 +94,7 @@ public final class EsportsHubViewModel {
     ///   - pollInterval: Seconds between live-result refreshes. Defaults to 20.
     public init(
         fetchAllEvents: FetchAllEventsUseCase,
+        fetchLeagues: FetchEsportsLeaguesUseCase,
         fetchGameResults: FetchGameResultsUseCase,
         fetchTrades: FetchActivityTradesUseCase,
         liveStreamProber: (any LiveStreamProbing)? = nil,
@@ -89,6 +103,7 @@ public final class EsportsHubViewModel {
         pollInterval: TimeInterval = 20
     ) {
         self.fetchAllEvents = fetchAllEvents
+        self.fetchLeagues = fetchLeagues
         self.fetchGameResults = fetchGameResults
         self.fetchTrades = fetchTrades
         self.liveStreamProber = liveStreamProber
@@ -108,19 +123,59 @@ public final class EsportsHubViewModel {
         return Array(matches.filter { results[$0.id]?.ended != true }.prefix(3))
     }
 
-    /// The Games list after the `selectedGame` filter.
+    /// The Games list after the `selectedLeague` filter.
     public var visibleMatches: [Event] {
-        guard let selectedGame else { return matches }
-        return matches.filter { EsportsCatalog.game(for: $0) == selectedGame }
+        guard let selectedLeague else { return matches }
+        return matches.filter { leagueByEventID[$0.id] == selectedLeague }
     }
 
-    /// How many of a game's matches are currently live, for the tile badges.
-    public func liveCount(for game: EsportsGame) -> Int {
-        matches.filter { EsportsCatalog.game(for: $0) == game && results[$0.id]?.live == true }.count
+    /// How many of a league's matches are currently live, for the tile badges.
+    public func liveCount(for league: EsportsLeague) -> Int {
+        liveCountByLeagueID[league.id] ?? 0
     }
+
+    /// The league a match belongs to, for its card's game caption.
+    public func league(for event: Event) -> EsportsLeague? { leagueByEventID[event.id] }
 
     /// The loaded result for an event, if any.
     public func result(for event: Event) -> GameResult? { results[event.id] }
+
+    /// Rebuilds the match→league index, the per-league live counts, and the tile row.
+    ///
+    /// Empty leagues are dropped rather than shown greyed out: the catalogue carries titles
+    /// with no markets at all (PUBG, EA Sports FC, StarCraft), and a permanently dead tile is
+    /// worse than a shorter row. Web ships a fixed twelve including two such tiles; this row
+    /// instead tracks what's actually tradeable right now.
+    private func rebuildLeagueIndex() {
+        leagueByEventID = [:]
+        for match in matches {
+            leagueByEventID[match.id] = EsportsCatalog.league(for: match, in: leagues)
+        }
+
+        var live: [String: Int] = [:]
+        var total: [String: Int] = [:]
+        for match in matches {
+            guard let league = leagueByEventID[match.id] else { continue }
+            total[league.id, default: 0] += 1
+            if results[match.id]?.live == true { live[league.id, default: 0] += 1 }
+        }
+        liveCountByLeagueID = live
+
+        visibleLeagues = leagues
+            .filter { (total[$0.id] ?? 0) > 0 }
+            .sorted { a, b in
+                let liveA = live[a.id] ?? 0, liveB = live[b.id] ?? 0
+                if liveA != liveB { return liveA > liveB }
+                let totalA = total[a.id] ?? 0, totalB = total[b.id] ?? 0
+                if totalA != totalB { return totalA > totalB }
+                return a.name < b.name
+            }
+
+        // A filter on a league that just lost its last match would silently empty the list.
+        if let selected = selectedLeague, !visibleLeagues.contains(selected) {
+            selectedLeague = nil
+        }
+    }
 
     // MARK: - Loading
 
@@ -138,11 +193,20 @@ public final class EsportsHubViewModel {
     }
 
     /// Fetches and classifies the tag's events, then loads results for near-term matches.
+    ///
+    /// The league catalogue is fetched in parallel and its failure is non-fatal: without it
+    /// the tile row and the cards' game captions are absent, but the hero, the Games list and
+    /// live scores all still work. Failing the whole hub over a cosmetic catalogue would be
+    /// the wrong trade, and it's why there's no hardcoded fallback list — that would be the
+    /// very thing this replaced, quietly drifting out of date.
     private func load(tagID: String, showLoading: Bool) async {
         if showLoading { state = .loading }
+        async let catalogue = try? fetchLeagues.execute()
         do {
             let events = try await fetchAllEvents.execute(tagID: tagID, status: .active)
+            leagues = await catalogue ?? leagues
             matches = Self.sortedMatches(events.filter(EsportsCatalog.isMatch), results: results, now: now())
+            rebuildLeagueIndex()
             loadedTagID = tagID
             state = .loaded
             lastUpdated = now()
@@ -169,6 +233,7 @@ public final class EsportsHubViewModel {
         guard let fetched = try? await fetchGameResults.execute(eventIDs: nearTerm.map(\.id)) else { return }
         results.merge(fetched) { _, new in new }
         matches = Self.sortedMatches(matches, results: results, now: reference)
+        rebuildLeagueIndex()
         syncSocketSubscriptions()
         await refreshHeroTrades()
         await refreshLiveStreams()
@@ -224,6 +289,7 @@ public final class EsportsHubViewModel {
         guard updated != existing else { return }
         results[eventID] = updated
         matches = Self.sortedMatches(matches, results: results, now: now())
+        rebuildLeagueIndex()
     }
 
     /// Probes each hero match's broadcast and records the ones that are actually on air.
