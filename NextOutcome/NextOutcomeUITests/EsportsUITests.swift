@@ -91,6 +91,59 @@ final class EsportsUITests: XCTestCase {
         attachScreenshot(of: app, named: "Esports — game tile row")
     }
 
+    /// TC-094: YouTube-hosted broadcasts get a player, not artwork.
+    ///
+    /// Mobile Legends points every match at YouTube, and the keyless liveness probe can't
+    /// read YouTube (bot check on `watch?v=`, 404 on `/@handle/streams`), so those heroes
+    /// showed artwork while polymarket.com played the stream. Swipes the hero carousel
+    /// looking for any YouTube player.
+    ///
+    /// Skips when no YouTube-hosted match happens to be live — the assertion needs live
+    /// data, and a red test that only means "nothing is on air" is worse than none.
+    @MainActor
+    func testYouTubeBroadcastsGetAPlayer() throws {
+        let app = XCUIApplication.launched(preselecting: "esports", tagID: esportsTagID)
+        assertAppears(app.esportsModeButton, timeout: UIWait.firstLoad, "Hub should load")
+        assertAppears(app.anyVolumeLabel, timeout: UIWait.firstLoad, "Hub should finish loading")
+
+        func matching(_ prefix: String) -> XCUIElementQuery {
+            app.descendants(matching: .any)
+                .matching(NSPredicate(format: "identifier BEGINSWITH %@", prefix))
+        }
+
+        // The hero media areas are identified `stream-<platform>-<broadcast>` (or
+        // `stream-artwork`), so their presence says exactly which branch rendered. Cards
+        // outside the viewport are still in the tree, which is what makes this assertable
+        // without hunting through the carousel.
+        XCTAssertGreaterThan(matching("stream-").count, 0,
+                             "No hero media area was addressable — EsportsStreamView's "
+                             + "accessibility identifier is not reaching the tree")
+
+        // `allElementsBoundByIndex`, not `.firstMatch`: a `.any` descendants query resolves
+        // `firstMatch` unreliably here — it reported no match while the full list held one.
+        func heroIdentifiers() -> [String] {
+            matching("stream-").allElementsBoundByIndex.map(\.identifier)
+        }
+        func youTubePlayerIsPresent() -> Bool {
+            heroIdentifiers().contains { $0.hasPrefix("stream-youtube-") }
+        }
+
+        // The carousel is lazy, so only nearby cards are in the tree — swipe to widen it.
+        var swipes = 0
+        while !youTubePlayerIsPresent() && swipes < 12 {
+            guard let visibleHero = matching("stream-").allElementsBoundByIndex
+                .first(where: \.isHittable) else { break }
+            visibleHero.swipeLeft()
+            swipes += 1
+        }
+
+        try XCTSkipUnless(
+            youTubePlayerIsPresent(),
+            "No YouTube-hosted match is live right now — nothing to assert against. "
+            + "Heroes seen: \(heroIdentifiers())")
+        attachScreenshot(of: app, named: "Esports — YouTube stream hero")
+    }
+
     /// TC-091: the inline Esports ⇄ Leaderboard toggle swaps content in place.
     @MainActor
     func testEsportsLeaderboardToggle() throws {

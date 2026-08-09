@@ -199,6 +199,116 @@ final class EsportsHubViewModelTests: XCTestCase {
         XCTAssertEqual(vm.liveStream(for: live), .twitch(channel: "eslcs"))
     }
 
+    func test_liveMatchEmbedsFromTheURLWhenTheProbeFails() async {
+        // MLBB points every match at YouTube, which answers our keyless page fetch with a
+        // bot check or a 404 — so the probe can never confirm liveness there. When the score
+        // feed already says the match is live and the URL names the video outright, that
+        // probe has nothing to add.
+        let now = Date()
+        var m = match("live", game: "mobile-legends-bang-bang", start: now)
+        m = Event(
+            id: m.id, title: m.title, slug: m.slug, markets: m.markets,
+            volume: 0, imageURL: nil, tags: m.tags, gameStartTime: now,
+            resolutionSource: "https://www.youtube.com/watch?v=zbEa-ffJs0w"
+        )
+        let repo = EsportsFakeRepository(allEvents: [m], gameResults: ["live": result("live", live: true)])
+        let vm = EsportsHubViewModel(
+            fetchAllEvents: FetchAllEventsUseCase(repository: repo),
+            fetchLeagues: FetchEsportsLeaguesUseCase(repository: repo),
+            fetchGameResults: FetchGameResultsUseCase(repository: repo),
+            fetchTrades: FetchActivityTradesUseCase(repository: repo),
+            liveStreamProber: FakeProber(streams: [:]),   // probe fails, as it does live
+            now: { now }
+        )
+        await vm.loadIfNeeded(tagID: "64")
+
+        XCTAssertEqual(vm.liveStream(for: m), .youtube(videoID: "zbEa-ffJs0w"))
+    }
+
+    func test_offlineMatchStillNeedsTheProbe() async {
+        // The gate stays for everything else: a match that isn't live must not open a player
+        // on a finished broadcast just because its URL names a video.
+        let now = Date()
+        var m = match("m1", game: "mobile-legends-bang-bang", start: now)
+        m = Event(
+            id: m.id, title: m.title, slug: m.slug, markets: m.markets,
+            volume: 0, imageURL: nil, tags: m.tags, gameStartTime: now,
+            resolutionSource: "https://www.youtube.com/watch?v=zbEa-ffJs0w"
+        )
+        let repo = EsportsFakeRepository(allEvents: [m], gameResults: ["m1": result("m1", live: false)])
+        let vm = EsportsHubViewModel(
+            fetchAllEvents: FetchAllEventsUseCase(repository: repo),
+            fetchLeagues: FetchEsportsLeaguesUseCase(repository: repo),
+            fetchGameResults: FetchGameResultsUseCase(repository: repo),
+            fetchTrades: FetchActivityTradesUseCase(repository: repo),
+            liveStreamProber: FakeProber(streams: [:]),
+            now: { now }
+        )
+        await vm.loadIfNeeded(tagID: "64")
+
+        XCTAssertNil(vm.liveStream(for: m))
+    }
+
+    func test_liveMatchDeepInTheCarouselStillEmbeds() async {
+        // Found on live data: 12 matches were live at once and Mobile Legends sat 11th, past
+        // the probe's `prefix(5)` cap — so it could never show a player, fix or no fix. The
+        // cap belongs to the fetch, not to the free URL-derived embed.
+        let now = Date()
+        func youTubeMatch(_ id: String, minutesAgo: Int, videoID: String) -> Event {
+            let base = match(id, game: "mobile-legends-bang-bang")
+            return Event(
+                id: base.id, title: base.title, slug: base.slug, markets: base.markets,
+                volume: 0, imageURL: nil, tags: base.tags,
+                gameStartTime: now.addingTimeInterval(Double(-minutesAgo) * 60),
+                resolutionSource: "https://www.youtube.com/watch?v=\(videoID)"
+            )
+        }
+        // Ten matches, all live; the one we care about starts last, so it sorts last.
+        let events = (0..<10).map { youTubeMatch("m\($0)", minutesAgo: 10 - $0, videoID: "vid\($0)") }
+        let results = Dictionary(uniqueKeysWithValues: events.map { ($0.id, result($0.id, live: true)) })
+        let repo = EsportsFakeRepository(allEvents: events, gameResults: results)
+        let vm = EsportsHubViewModel(
+            fetchAllEvents: FetchAllEventsUseCase(repository: repo),
+            fetchLeagues: FetchEsportsLeaguesUseCase(repository: repo),
+            fetchGameResults: FetchGameResultsUseCase(repository: repo),
+            fetchTrades: FetchActivityTradesUseCase(repository: repo),
+            liveStreamProber: FakeProber(streams: [:]),
+            now: { now }
+        )
+        await vm.loadIfNeeded(tagID: "64")
+
+        XCTAssertEqual(vm.heroMatches.count, 10)
+        let last = try? XCTUnwrap(vm.heroMatches.last)
+        XCTAssertEqual(vm.heroMatches.firstIndex(of: last ?? events[0]), 9)
+        XCTAssertEqual(vm.liveStream(for: last ?? events[0]), .youtube(videoID: "vid9"))
+    }
+
+    func test_streamIsDroppedWhenTheMatchStopsBeingLive() async {
+        let now = Date()
+        var m = match("m1", game: "mobile-legends-bang-bang", start: now)
+        m = Event(
+            id: m.id, title: m.title, slug: m.slug, markets: m.markets,
+            volume: 0, imageURL: nil, tags: m.tags, gameStartTime: now,
+            resolutionSource: "https://www.youtube.com/watch?v=zbEa-ffJs0w"
+        )
+        let repo = EsportsFakeRepository(allEvents: [m], gameResults: ["m1": result("m1", live: true)])
+        let vm = EsportsHubViewModel(
+            fetchAllEvents: FetchAllEventsUseCase(repository: repo),
+            fetchLeagues: FetchEsportsLeaguesUseCase(repository: repo),
+            fetchGameResults: FetchGameResultsUseCase(repository: repo),
+            fetchTrades: FetchActivityTradesUseCase(repository: repo),
+            now: { now }
+        )
+        await vm.loadIfNeeded(tagID: "64")
+        XCTAssertNotNil(vm.liveStream(for: m))
+
+        // The broadcast ends: the player must go, not linger on a finished stream.
+        repo.setResults(["m1": result("m1", live: false)])
+        await vm.refreshResults()
+
+        XCTAssertNil(vm.liveStream(for: m))
+    }
+
     func test_offlineBroadcastYieldsNoStream() async {
         let now = Date()
         var m = match("m1", game: "dota-2", start: now)
@@ -332,7 +442,7 @@ private struct FakeProber: LiveStreamProbing {
 /// Serves canned esports events and game results to the hub view model.
 private final class EsportsFakeRepository: MarketRepository, @unchecked Sendable {
     private let allEvents: [Event]
-    private let gameResults: [String: GameResult]
+    private var gameResults: [String: GameResult]
     private let leagues: [EsportsLeague]
     private let failLeagues: Bool
     private(set) var fetchAllCallCount = 0
@@ -353,6 +463,9 @@ private final class EsportsFakeRepository: MarketRepository, @unchecked Sendable
         fetchAllCallCount += 1
         return allEvents
     }
+    /// Swaps the canned results, so a test can end a broadcast mid-session.
+    func setResults(_ results: [String: GameResult]) { gameResults = results }
+
     func fetchLeagues(tagID: String) async throws -> [EsportsLeague] {
         if failLeagues { throw URLError(.badServerResponse) }
         return leagues

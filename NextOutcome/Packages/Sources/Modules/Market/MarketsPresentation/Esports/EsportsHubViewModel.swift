@@ -68,7 +68,8 @@ public final class EsportsHubViewModel {
     private let fetchGameResults: FetchGameResultsUseCase
     /// Loads recent trades for a market condition, for the hero ticker.
     private let fetchTrades: FetchActivityTradesUseCase
-    /// Probes whether hero matches' broadcasts are live. `nil` disables stream embeds.
+    /// Probes whether hero matches' broadcasts are live. `nil` disables *probing*; a live
+    /// match whose URL names its video is still embedded, since that needs no network.
     private let liveStreamProber: (any LiveStreamProbing)?
     /// Streams instant score updates for hero matches. `nil` leaves the poll as the only
     /// score source (tests, previews).
@@ -292,18 +293,39 @@ public final class EsportsHubViewModel {
         rebuildLeagueIndex()
     }
 
-    /// Probes each hero match's broadcast and records the ones that are actually on air.
+    /// Resolves each hero match's broadcast and records the ones that are actually on air.
     /// Re-runs every poll so a stream that starts (or ends) mid-session appears/disappears.
+    ///
+    /// Two ways a match earns a player, and the gate holds in both: the score feed already
+    /// says it's live, or the prober confirms the channel is on air. The first path exists
+    /// because probing YouTube doesn't work — it serves our keyless fetch a bot check or a
+    /// 404 — so Mobile Legends matches showed artwork while the broadcast was running. When
+    /// `/events/results` says the match is live and the URL names the video, the round trip
+    /// is both unreliable and redundant, so it's skipped entirely.
     private func refreshLiveStreams() async {
-        guard let liveStreamProber else { return }
-        for match in heroMatches.prefix(5) {
-            guard let source = match.resolutionSource, !source.isEmpty else { continue }
-            if let stream = await liveStreamProber.liveStream(for: source) {
-                liveStreams[match.id] = stream
-            } else {
-                liveStreams[match.id] = nil
+        let heroes = heroMatches   // snapshot: the probe loop awaits, and the set can re-sort
+        var resolved: [String: EsportsStream] = [:]
+
+        // Free path — no network, so every hero gets it however deep in the carousel.
+        for match in heroes where results[match.id]?.live == true {
+            guard let source = match.resolutionSource, !source.isEmpty,
+                  let stream = EsportsStream.embeddable(from: source) else { continue }
+            resolved[match.id] = stream
+        }
+
+        // Costly path — one page fetch each, so it stays capped to the heroes a user meets
+        // first. Before the free path existed this cap applied to *every* embed, which meant
+        // a live match sitting 10th in a 12-match carousel could never show a player at all.
+        if let liveStreamProber {
+            for match in heroes.prefix(5) where resolved[match.id] == nil {
+                guard let source = match.resolutionSource, !source.isEmpty else { continue }
+                resolved[match.id] = await liveStreamProber.liveStream(for: source)
             }
         }
+
+        // Assigned wholesale so a broadcast that ends — or a match that leaves the hero set —
+        // drops its player instead of leaving a stale one behind.
+        liveStreams = resolved
     }
 
     /// The confirmed-live broadcast for an event, if any.
