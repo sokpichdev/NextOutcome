@@ -132,6 +132,22 @@ final class AppContainer {
         )
     }
 
+    /// A factory for the Esports match detail screen, built when a match is tapped. Wires in
+    /// the same live-score socket and broadcast prober the hub uses, plus a single-event
+    /// re-fetch so map markets settling mid-series show up without leaving the screen.
+    func makeEsportsMatchDetailFactory() -> EsportsMatchDetailViewModelFactory {
+        EsportsMatchDetailViewModelFactory { [repository] event, league in
+            EsportsMatchDetailViewModel(
+                event: event,
+                fetchEvent: FetchEventUseCase(repository: repository),
+                fetchGameResults: FetchGameResultsUseCase(repository: repository),
+                league: league,
+                liveStreamProber: WebLiveStreamProber(),
+                streamer: SportsSocket()
+            )
+        }
+    }
+
     /// Builds the view model for the Esports hub's Leaderboard tab (esports-scoped
     /// `/v1/leaderboard` rankings).
     func makeEsportsLeaderboardViewModel() -> EsportsLeaderboardViewModel {

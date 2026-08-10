@@ -70,6 +70,8 @@ struct RootView: View {
     private let socialStripFactory: SocialStripViewModelFactory
     /// Lazily builds the bespoke movers detail view model when a Breaking row is tapped.
     private let moversDetailFactory: MoversDetailViewModelFactory
+    /// Lazily builds the esports match detail view model when a match is tapped.
+    private let esportsMatchDetailFactory: EsportsMatchDetailViewModelFactory
     /// Builds the team-profile view model when a game card's team logo is tapped.
     private let teamProfileFactory: TeamProfileViewModelFactory
     /// Supplies price-history data to charts without exposing the Data layer.
@@ -135,6 +137,7 @@ struct RootView: View {
         marketHoldersFactory = container.makeMarketHoldersFactory()
         socialStripFactory = container.makeSocialStripFactory()
         moversDetailFactory = container.makeMoversDetailFactory()
+        esportsMatchDetailFactory = container.makeEsportsMatchDetailFactory()
         teamProfileFactory = container.makeTeamProfileFactory()
         priceHistoryProvider = container.makePriceHistoryProvider()
         btcLiveFactory = container.makeBTCLiveFactory()
@@ -159,6 +162,7 @@ struct RootView: View {
         .environment(\.marketHoldersFactory, marketHoldersFactory)
         .environment(\.socialStripFactory, socialStripFactory)
         .environment(\.moversDetailFactory, moversDetailFactory)
+        .environment(\.esportsMatchDetailFactory, esportsMatchDetailFactory)
         .environment(\.teamProfileFactory, teamProfileFactory)
         .environment(\.priceHistoryProvider, priceHistoryProvider)
         .environment(\.btcLiveFactory, btcLiveFactory)

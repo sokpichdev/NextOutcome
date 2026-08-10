@@ -443,36 +443,8 @@ final class EsportsHubViewModelTests: XCTestCase {
     }
 }
 
-/// Hand-driven sports socket: tests push `MatchState` snapshots into per-game streams.
-private final class FakeStreamer: SportsStateStreaming, @unchecked Sendable {
-    private var continuations: [String: AsyncThrowingStream<MatchState, Error>.Continuation] = [:]
-    private(set) var cancelledGameIDs: Set<String> = []
-
-    func states(gameID: String) -> AsyncThrowingStream<MatchState, Error> {
-        AsyncThrowingStream { continuation in
-            continuations[gameID] = continuation
-            continuation.onTermination = { [weak self] _ in
-                self?.cancelledGameIDs.insert(gameID)
-            }
-        }
-    }
-
-    func push(gameID: String, state: MatchState) {
-        continuations[gameID]?.yield(state)
-    }
-
-    func hasSubscriber(gameID: String) -> Bool {
-        continuations[gameID] != nil
-    }
-}
-
-/// Resolves canned stream URLs to live streams.
-private struct FakeProber: LiveStreamProbing {
-    let streams: [String: EsportsStream]
-    func liveStream(for resolutionSource: String) async -> EsportsStream? {
-        streams[resolutionSource]
-    }
-}
+// `FakeStreamer` and `FakeProber` are shared with the match-detail suite — see
+// `EsportsTestDoubles.swift`.
 
 /// Serves canned esports events and game results to the hub view model.
 private final class EsportsFakeRepository: MarketRepository, @unchecked Sendable {
