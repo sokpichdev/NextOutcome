@@ -414,22 +414,12 @@ public extension EsportsHubViewModel {
 
     /// A "Game 2 of 3" label from a result's `period` ("2/3"), or `nil` when unknown.
     nonisolated static func gameProgressLabel(period: String?) -> String? {
-        guard let period else { return nil }
-        let parts = period.split(separator: "/")
-        guard parts.count == 2, let current = Int(parts[0]), let total = Int(parts[1]) else { return nil }
-        return "Game \(current) of \(total)"
+        EsportsMatchProgress.parse(period).map { "Game \($0.currentMap) of \($0.totalMaps)" }
     }
 
-    /// Splits a Gamma esports `score` string (`"000-000|1-0|Bo3"`) into the series score
-    /// pair — the segment with a `home-away` int pair after the map-score segment.
-    /// Falls back to the plain `"1-0"` shape. Returns `nil` when unparseable.
+    /// The series score (maps won) from a Gamma esports `score` string, or `nil` when
+    /// unparseable. See `EsportsSeriesScore` for the wire format.
     nonisolated static func seriesScore(from score: String?) -> (home: Int, away: Int)? {
-        guard let score else { return nil }
-        let segments = score.split(separator: "|")
-        // "000-000|1-0|Bo3" → the middle segment is the series score; plain "1-0" also works.
-        let candidate = segments.count >= 2 ? segments[1] : (segments.first ?? "")
-        let parts = candidate.split(separator: "-")
-        guard parts.count == 2, let home = Int(parts[0]), let away = Int(parts[1]) else { return nil }
-        return (home, away)
+        EsportsSeriesScore.parse(score)?.seriesScore.map { ($0.home, $0.away) }
     }
 }
