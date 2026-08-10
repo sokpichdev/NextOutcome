@@ -247,20 +247,26 @@ public final class EsportsHubViewModel {
     /// call owns a connection, so the set is capped to the heroes the user actually sees.
     private func syncSocketSubscriptions() {
         guard let streamer else { return }
-        let wanted = Set(heroMatches.prefix(5).map(\.id))
-        for (id, task) in socketTasks where !wanted.contains(id) {
+        // Subscriptions stay keyed by event id — that's what `results` and `apply` use — but
+        // they're *opened* with the feed's own `gameID`, which is what the socket keys its
+        // frames on. A match with no `gameID` gets no subscription and rides the poll.
+        let wanted = Dictionary(
+            heroMatches.prefix(5).compactMap { match in match.gameID.map { (match.id, $0) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+        for (id, task) in socketTasks where wanted[id] == nil {
             task.cancel()
             socketTasks[id] = nil
         }
-        for id in wanted where socketTasks[id] == nil {
-            socketTasks[id] = Task { [weak self] in
+        for (eventID, gameID) in wanted where socketTasks[eventID] == nil {
+            socketTasks[eventID] = Task { [weak self] in
                 // The socket reconnects internally; the stream only finishes on
                 // cancellation or an unrecoverable error (then the poll still covers us).
-                guard let stream = self?.nonisolatedStates(streamer: streamer, gameID: id) else { return }
+                guard let stream = self?.nonisolatedStates(streamer: streamer, gameID: gameID) else { return }
                 do {
                     for try await snapshot in stream {
                         guard !Task.isCancelled, let self else { return }
-                        self.apply(snapshot: snapshot, eventID: id)
+                        self.apply(snapshot: snapshot, eventID: eventID)
                     }
                 } catch {}
             }

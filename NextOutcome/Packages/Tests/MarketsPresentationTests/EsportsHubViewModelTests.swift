@@ -23,13 +23,16 @@ final class EsportsHubViewModelTests: XCTestCase {
         )
     }
 
+    /// A match event. `gameID` deliberately differs from `id` — the sports feed keys its
+    /// frames on the former, and conflating the two is exactly the bug these tests guard.
     private func match(
-        _ id: String, game: String, start: Date? = nil, volume24hr: Decimal = 0
+        _ id: String, game: String, start: Date? = nil, volume24hr: Decimal = 0,
+        gameID: String? = nil
     ) -> Event {
         Event(
             id: id, title: "\(id) A vs B", slug: id, markets: [moneyline("\(id)-m")],
             volume: 0, imageURL: nil, tags: [tag("esports"), tag("games"), tag(game)],
-            gameStartTime: start, volume24hr: volume24hr
+            gameStartTime: start, volume24hr: volume24hr, gameID: gameID ?? "feed-\(id)"
         )
     }
 
@@ -350,16 +353,19 @@ final class EsportsHubViewModelTests: XCTestCase {
         )
         await vm.loadIfNeeded(tagID: "64")
 
-        // Wait for the subscription task to register with the fake socket.
-        for _ in 0..<200 where !streamer.hasSubscriber(gameID: "live") {
+        // Wait for the subscription task to register with the fake socket. It must subscribe
+        // with the feed's `gameID`, not the Gamma event id — the socket keys frames on the
+        // former, so subscribing with "live" would match nothing on the real feed.
+        for _ in 0..<200 where !streamer.hasSubscriber(gameID: "feed-live") {
             await Task.yield()
         }
-        XCTAssertTrue(streamer.hasSubscriber(gameID: "live"))
+        XCTAssertTrue(streamer.hasSubscriber(gameID: "feed-live"))
+        XCTAssertFalse(streamer.hasSubscriber(gameID: "live"), "must not subscribe with the event id")
 
         // Push a socket snapshot with a new series score and period.
         streamer.push(
-            gameID: "live",
-            state: MatchState(gameID: "live", rawScore: "000-000|1-0|Bo3", period: "2/3", isLive: true, ended: false)
+            gameID: "feed-live",
+            state: MatchState(gameID: "feed-live", rawScore: "000-000|1-0|Bo3", period: "2/3", isLive: true, ended: false)
         )
         // Give the subscription task a beat to deliver on the main actor.
         for _ in 0..<200 where vm.result(for: live)?.score != "000-000|1-0|Bo3" {
@@ -372,7 +378,36 @@ final class EsportsHubViewModelTests: XCTestCase {
         XCTAssertEqual(updated?.teams.first?.name, "QUAZAR") // poll metadata preserved
 
         vm.stopLivePolling()
-        XCTAssertTrue(streamer.cancelledGameIDs.contains("live"))
+        XCTAssertTrue(streamer.cancelledGameIDs.contains("feed-live"))
+    }
+
+    func test_matchWithoutAGameID_opensNoSubscription_andStillPolls() async {
+        // Not every event carries the feed's id. That must cost the match its socket, not
+        // its scores — the poll stays the source of truth, which is the old behaviour.
+        let now = Date()
+        let noFeedID = Event(
+            id: "live", title: "live A vs B", slug: "live", markets: [moneyline("live-m")],
+            volume: 0, imageURL: nil,
+            tags: [tag("esports"), tag("games"), tag("counter-strike-2")],
+            gameStartTime: now, gameID: nil
+        )
+        let polled = GameResult(eventID: "live", score: "000-000|1-0|Bo3", elapsed: nil,
+                                period: "2/3", live: true, ended: false, teams: [])
+        let repo = EsportsFakeRepository(allEvents: [noFeedID], gameResults: ["live": polled])
+        let streamer = FakeStreamer()
+        let vm = EsportsHubViewModel(
+            fetchAllEvents: FetchAllEventsUseCase(repository: repo),
+            fetchLeagues: FetchEsportsLeaguesUseCase(repository: repo),
+            fetchGameResults: FetchGameResultsUseCase(repository: repo),
+            fetchTrades: FetchActivityTradesUseCase(repository: repo),
+            streamer: streamer,
+            now: { now }
+        )
+        await vm.loadIfNeeded(tagID: "64")
+
+        XCTAssertFalse(streamer.hasSubscriber(gameID: "live"))
+        XCTAssertEqual(vm.result(for: noFeedID)?.score, "000-000|1-0|Bo3")
+        vm.stopLivePolling()
     }
 
     func test_pollingLifecycle() async {

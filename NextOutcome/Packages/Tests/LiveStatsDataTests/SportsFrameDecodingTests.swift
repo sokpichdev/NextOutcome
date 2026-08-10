@@ -54,4 +54,41 @@ final class SportsFrameDecodingTests: XCTestCase {
         XCTAssertEqual(dto.metadataGameId, "idX")
         XCTAssertEqual(dto.toMatchState(previous: nil)?.home.goals, 1)
     }
+
+    // MARK: - Esports frames
+
+    // Real captured esports frame. Note it names its id `gameId` and sends it as a number,
+    // where every other sport sends a `metadataGameId` string.
+    private let esportsFrame = #"{"gameId":1616952,"leagueAbbreviation":"cs2","homeTeam":"Eternal Fire Academy","awayTeam":"Vitality Academy","status":"running","score":"000-000|1-1|Bo3","period":"3/3","live":true,"ended":false}"#
+
+    func testEsportsFrameIsIdentifiedByItsNumericGameId() throws {
+        // Before this, every esports frame decoded with a nil identifier and was dropped,
+        // so the esports live socket delivered nothing at all.
+        let dto = try decode(esportsFrame)
+        XCTAssertNil(dto.metadataGameId)
+        XCTAssertEqual(dto.gameId, 1_616_952)
+        XCTAssertEqual(dto.identifier, "1616952")
+        XCTAssertEqual(dto.toMatchState(previous: nil)?.gameID, "1616952")
+    }
+
+    func testEsportsCompositeScoreSurvivesAsRawScore() throws {
+        // "000-000|1-1|Bo3" isn't a home-away pair, so goal parsing declines it — but the
+        // raw string has to reach the consumer that knows how to read maps out of it.
+        let state = try decode(esportsFrame).toMatchState(previous: nil)
+        XCTAssertEqual(state?.rawScore, "000-000|1-1|Bo3")
+        XCTAssertEqual(state?.home.goals, 0)
+        XCTAssertEqual(state?.period, "3/3")
+        XCTAssertEqual(state?.isLive, true)
+    }
+
+    func testMetadataGameIdWinsWhenBothArePresent() throws {
+        let dto = try decode(#"{"metadataGameId":"idX","gameId":99,"score":"1-0"}"#)
+        XCTAssertEqual(dto.identifier, "idX")
+    }
+
+    func testFrameWithNeitherIdentifierIsStillSkipped() throws {
+        let dto = try decode(#"{"leagueAbbreviation":"cs2","score":"1-0"}"#)
+        XCTAssertNil(dto.identifier)
+        XCTAssertNil(dto.toMatchState(previous: nil))
+    }
 }

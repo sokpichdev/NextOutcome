@@ -47,6 +47,16 @@ public struct Event: Identifiable, Hashable {
     /// esports matches this is the official stream (e.g. `https://www.twitch.tv/<channel>`),
     /// which the Esports hub embeds. `nil`/empty for most events.
     public let resolutionSource: String?
+    /// The sports feed's own identifier for this fixture, from Gamma's `gameId`.
+    ///
+    /// Distinct from `id`: `id` is the Gamma event id, while the live sports websocket keys
+    /// its esports frames on this number. Subscribing with the event id matches nothing.
+    /// `nil` on non-sports events.
+    public let gameID: String?
+    /// The live score/period/teams Gamma ships **on the event payload itself**, so a detail
+    /// screen can paint a scoreboard on its first frame instead of waiting on
+    /// `/events/results`. The results poll then supersedes it. `nil` on non-sports events.
+    public let initialResult: GameResult?
     /// Gamma's raw `ended` flag for sports/esports fixtures. `nil` on ordinary markets.
     /// Prefer `isEnded`, which applies the closed-implies-ended fallback.
     public let ended: Bool?
@@ -86,6 +96,8 @@ public struct Event: Identifiable, Hashable {
         competitive: Double? = nil,
         creationDate: Date? = nil,
         resolutionSource: String? = nil,
+        gameID: String? = nil,
+        initialResult: GameResult? = nil,
         ended: Bool? = nil,
         live: Bool? = nil,
         closed: Bool? = nil,
@@ -107,6 +119,8 @@ public struct Event: Identifiable, Hashable {
         self.competitive = competitive
         self.creationDate = creationDate
         self.resolutionSource = resolutionSource
+        self.gameID = gameID
+        self.initialResult = initialResult
         self.ended = ended
         self.live = live
         self.closed = closed
