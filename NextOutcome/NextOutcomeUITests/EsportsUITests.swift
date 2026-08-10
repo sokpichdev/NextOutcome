@@ -258,7 +258,13 @@ final class EsportsUITests: XCTestCase {
         let showedSomething = artwork.waitForExistence(timeout: UIWait.load) || player.exists
         XCTAssertTrue(showedSomething, "The Livestream tab should show a player or artwork")
 
-        if artwork.exists && !player.exists {
+        if player.exists {
+            // A player only renders when the event listed a broadcast URL, so the way out to
+            // the full-size stream must be offered — the inline player is view-only, and this
+            // is the only route to watching properly.
+            XCTAssertTrue(app.openBroadcastLink.exists,
+                          "A playing stream should still offer a link to the full broadcast")
+        } else if artwork.exists {
             // No embeddable broadcast: the screen must still offer the real one when the
             // event lists a URL (Kick, which we can't embed, is common on esports events).
             XCTAssertTrue(

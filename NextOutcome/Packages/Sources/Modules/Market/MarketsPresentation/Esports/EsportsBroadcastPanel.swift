@@ -32,23 +32,27 @@ struct EsportsBroadcastPanel: View {
             EsportsStreamView(stream: stream, imageURL: imageURL)
                 .clipShape(RoundedRectangle(cornerRadius: DSLayout.cardRadius))
 
+            // Only shown when there's no player — with one running, the video is its own
+            // explanation.
             if stream == nil {
-                VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
-                    Text(emptyMessage)
-                        .font(DSFont.subheadline)
-                        .foregroundStyle(DSColor.textSecondary)
-                    if let broadcastURL {
-                        Link(destination: broadcastURL) {
-                            HStack(spacing: DSLayout.spacingXSmall) {
-                                Image(systemName: "play.rectangle.fill")
-                                Text("Open broadcast")
-                            }
-                            .font(DSFont.subheadline.bold())
-                            .foregroundStyle(DSColor.accent)
-                        }
-                        .accessibilityIdentifier("esports.detail.openBroadcast")
+                Text(emptyMessage)
+                    .font(DSFont.subheadline)
+                    .foregroundStyle(DSColor.textSecondary)
+            }
+
+            // Offered either way. The inline player is deliberately view-only, so this is
+            // the only route to a full-size stream — which makes it *more* useful while
+            // something is playing, not less.
+            if let broadcastURL {
+                Link(destination: broadcastURL) {
+                    HStack(spacing: DSLayout.spacingXSmall) {
+                        Image(systemName: "arrow.up.forward.app.fill")
+                        Text(Self.watchLabel(for: broadcastURL))
                     }
+                    .font(DSFont.subheadline.bold())
+                    .foregroundStyle(DSColor.accent)
                 }
+                .accessibilityIdentifier("esports.detail.openBroadcast")
             }
         }
     }
@@ -62,9 +66,34 @@ struct EsportsBroadcastPanel: View {
             ? "No broadcast is listed for this match."
             : "This broadcast can't play in the app."
     }
+
+    /// Names the destination rather than saying "Open broadcast" — a link that says where
+    /// it goes is worth more than one that doesn't, and we always know the host.
+    /// - Parameter url: The broadcast page.
+    /// - Returns: e.g. "Watch on Twitch", falling back to a generic label for hosts we
+    ///   don't recognise.
+    static func watchLabel(for url: URL) -> String {
+        guard let host = url.host()?.lowercased() else { return "Open broadcast" }
+        if host.contains("twitch") { return "Watch on Twitch" }
+        if host.contains("youtube") || host.contains("youtu.be") { return "Watch on YouTube" }
+        if host.contains("kick") { return "Watch on Kick" }
+        return "Open broadcast"
+    }
 }
 
 #if DEBUG
+#Preview("Broadcast — playing, with a way out to full size") {
+    EsportsBroadcastPanel(
+        stream: .twitch(channel: "eslcs"),
+        imageURL: nil,
+        broadcastURL: URL(string: "https://www.twitch.tv/eslcs"),
+        isLive: true,
+        hasEnded: false
+    )
+    .padding()
+    .background(DSColor.background)
+}
+
 #Preview("Broadcast — no embeddable player") {
     EsportsBroadcastPanel(
         stream: nil,
