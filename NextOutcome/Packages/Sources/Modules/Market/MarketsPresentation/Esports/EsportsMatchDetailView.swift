@@ -97,7 +97,8 @@ public struct EsportsMatchDetailView: View {
         .onDisappear { viewModel.stop() }
         .task(id: viewModel.event.id) {
             guard let provider = priceHistoryProvider else { return }
-            let vm = EventChartViewModel(event: viewModel.event, provider: provider)
+            let vm = EventChartViewModel(event: viewModel.event, provider: provider,
+                                         source: chartSource)
             chart = vm
             await vm.load()
             // Keep the chart current while the screen is open. Cancelled automatically on
@@ -178,6 +179,20 @@ public struct EsportsMatchDetailView: View {
     }
 
     // MARK: - Market content
+
+    /// What the chart draws: the two teams' win probability off the series moneyline, in
+    /// their brand colours — the comparison web leads with, and the only one that means
+    /// anything here. Falls back to the generic top-markets chart when there's no moneyline
+    /// (an odd event shape), which still draws something now that it reads `primaryOutcome`.
+    private var chartSource: EventChartViewModel.Source {
+        guard let moneyline = viewModel.moneylineMarket else { return .topMarkets(limit: 4) }
+        let info = viewModel.info
+        let colors = [
+            Color(hexString: info.home.colorHex) ?? OutcomePalette.color(0),
+            Color(hexString: info.away.colorHex) ?? OutcomePalette.color(1)
+        ]
+        return .outcomes(of: moneyline, colors: colors)
+    }
 
     /// The price chart area, switching on the chart view model's state.
     @ViewBuilder
