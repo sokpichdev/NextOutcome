@@ -43,7 +43,15 @@ public enum MarketGroupClassifier {
         }
         return MarketGroup.allCases.compactMap { group in
             guard let bucket = buckets[group], !bucket.isEmpty else { return nil }
-            let sorted = bucket.sorted { ($0.yesOutcome?.price ?? 0) > ($1.yesOutcome?.price ?? 0) }
+            // `primaryOutcome`, not `yesOutcome`: team-named markets have no Yes side, so
+            // every key would be 0 — and `sorted` is not stable, so equal keys let rows
+            // shuffle between redraws. The `id` tiebreak is what pins the order.
+            let sorted = bucket.sorted { a, b in
+                let priceA = a.primaryOutcome?.price ?? 0
+                let priceB = b.primaryOutcome?.price ?? 0
+                if priceA != priceB { return priceA > priceB }
+                return a.id < b.id
+            }
             return (group: group, markets: sorted)
         }
     }

@@ -68,22 +68,29 @@ public final class TradeSheetViewModel {
         self.submitter = submitter
     }
 
+    /// The selected side's outcome. Read through `binaryOutcomes` so a market whose sides
+    /// are team names ("Eternal Fire Academy") or a line ("Over"/"Under") quotes its real
+    /// outcome rather than falling through to a nonexistent Yes/No at 0¢.
+    private var selectedOutcome: Outcome? {
+        guard let sides = market.binaryOutcomes else { return nil }
+        switch side {
+        case .yes: return sides.first
+        case .no: return sides.second
+        }
+    }
+
     /// The label for the selected outcome (e.g. "Yes").
     public var outcomeTitle: String {
+        if let selectedOutcome { return selectedOutcome.title }
         switch side {
-        case .yes: return market.yesOutcome?.title ?? "Yes"
-        case .no: return market.noOutcome?.title ?? "No"
+        case .yes: return "Yes"
+        case .no: return "No"
         }
     }
 
     /// Price in cents (1…99) for the selected side's outcome.
     public var priceCents: Decimal {
-        let fraction: Decimal
-        switch side {
-        case .yes: fraction = market.yesOutcome?.price ?? 0
-        case .no: fraction = market.noOutcome?.price ?? 0
-        }
-        return fraction * 100
+        (selectedOutcome?.price ?? 0) * 100
     }
 
     /// The entered amount as dollars.
