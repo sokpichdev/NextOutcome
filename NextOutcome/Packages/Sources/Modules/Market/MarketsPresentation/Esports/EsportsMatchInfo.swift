@@ -32,16 +32,20 @@ struct EsportsMatchInfo {
     let away: Team
     /// The parsed title parts (series format, tournament).
     let title: EsportsCatalog.MatchTitle?
-    /// The featured game this match belongs to, if recognised.
-    let game: EsportsGame?
+    /// The game this match belongs to, if the catalogue recognised it.
+    let league: EsportsLeague?
     /// The series moneyline market backing the prices, if found.
     let moneyline: Market?
 
     /// Builds the display info from the raw event + optional live result.
-    init(event: Event, result: GameResult?) {
+    ///
+    /// - Parameter league: The match's game, resolved by the view model against the fetched
+    ///   catalogue. Passed in rather than derived here because classification needs the
+    ///   catalogue, which is a network fetch, not a property of the event.
+    init(event: Event, result: GameResult?, league: EsportsLeague? = nil) {
         let title = EsportsCatalog.matchTitle(from: event.title)
         self.title = title
-        self.game = EsportsCatalog.game(for: event)
+        self.league = league
 
         // The series-level moneyline: a two-outcome market whose outcomes are the teams.
         // Prefer the plain "moneyline" over per-map "child_moneyline" markets.

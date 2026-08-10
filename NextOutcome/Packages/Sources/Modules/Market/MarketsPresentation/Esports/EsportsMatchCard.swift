@@ -17,10 +17,12 @@ struct EsportsMatchCard: View {
     let event: Event
     /// The live result, when loaded.
     let result: GameResult?
+    /// The match's game, from the fetched catalogue.
+    let league: EsportsLeague?
     /// Locally-bookmarked event ids (visual only, matching web's bookmark icon).
     @AppStorage("esports.bookmarks") private var bookmarksData = Data()
 
-    private var info: EsportsMatchInfo { EsportsMatchInfo(event: event, result: result) }
+    private var info: EsportsMatchInfo { EsportsMatchInfo(event: event, result: result, league: league) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: DSLayout.spacing) {
@@ -44,13 +46,18 @@ struct EsportsMatchCard: View {
         )
     }
 
-    /// "⚙ Dota 2" game caption + match title.
+    /// The league's key art + name caption, then the match title.
     private var header: some View {
         VStack(alignment: .leading, spacing: DSLayout.spacingXSmall) {
-            if let game = info.game {
+            if let league = info.league {
                 HStack(spacing: DSLayout.spacingXSmall) {
-                    Image(systemName: game.glyph).font(.system(size: 11))
-                    Text(game.fullName).font(DSFont.caption)
+                    if let iconURL = league.iconURL {
+                        AsyncImage(url: iconURL) { $0.resizable().aspectRatio(contentMode: .fill) }
+                            placeholder: { Color.clear }
+                            .frame(width: 14, height: 14)
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                    }
+                    Text(league.name).font(DSFont.caption)
                 }
                 .foregroundStyle(DSColor.textSecondary)
             }

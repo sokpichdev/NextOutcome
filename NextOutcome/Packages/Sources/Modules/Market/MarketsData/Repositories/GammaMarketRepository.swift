@@ -256,6 +256,18 @@ public struct GammaMarketRepository: MarketRepository {
         return dtos.compactMap { $0.toDomain() }
     }
 
+    /// Fetches Gamma's `/sports` league catalogue, keeping the leagues tagged `tagID`.
+    ///
+    /// The endpoint is unfiltered — it returns every league Polymarket runs markets for, so
+    /// the scoping happens here on each row's comma-separated `tags` field. It's a single
+    /// small payload fetched once per hub load, which is why it isn't cached; rows change on
+    /// the order of weeks, and pull-to-refresh re-reading it is the correct behaviour anyway.
+    public func fetchLeagues(tagID: String) async throws -> [EsportsLeague] {
+        let endpoint = Endpoint(host: .gamma, path: "/sports")
+        let dtos: [SportLeagueDTO] = try await client.fetch(endpoint)
+        return dtos.filter { $0.tagIDs.contains(tagID) }.compactMap { $0.toDomain() }
+    }
+
     /// Fetches the carousel filter tags from Gamma `/tags`.
     public func fetchTags() async throws -> [Tag] {
         let endpoint = Endpoint(

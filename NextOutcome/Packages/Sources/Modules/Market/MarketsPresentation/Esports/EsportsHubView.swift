@@ -75,6 +75,8 @@ public struct EsportsHubView: View {
                 .foregroundStyle(viewModel.mode == mode ? DSColor.textPrimary : DSColor.textSecondary)
         }
         .buttonStyle(.plain)
+        // The rail above carries an "Esports" chip too, so a label-only query matches both.
+        .accessibilityIdentifier("esports.mode.\(title.lowercased())")
     }
 
     // MARK: - Esports tab
@@ -117,7 +119,8 @@ public struct EsportsHubView: View {
                             event: event,
                             result: viewModel.result(for: event),
                             stream: viewModel.liveStream(for: event),
-                            trades: viewModel.trades(for: event)
+                            trades: viewModel.trades(for: event),
+                            league: viewModel.league(for: event)
                         )
                     }
                     .buttonStyle(.plain)
@@ -129,18 +132,19 @@ public struct EsportsHubView: View {
         .scrollTargetBehavior(.viewAligned)
     }
 
-    /// The horizontal CS2/LoL/Dota 2 artwork tiles with live counts.
+    /// The horizontal key-art tiles with live counts, one per game that currently has
+    /// matches. Server-driven, so a game Polymarket adds appears without a release.
     private var gameTileRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: DSLayout.spacingSmall) {
-                ForEach(EsportsGame.allCases) { game in
+                ForEach(viewModel.visibleLeagues) { league in
                     EsportsGameTile(
-                        game: game,
-                        liveCount: viewModel.liveCount(for: game),
-                        isSelected: viewModel.selectedGame == game
+                        league: league,
+                        liveCount: viewModel.liveCount(for: league),
+                        isSelected: viewModel.selectedLeague == league
                     ) {
                         withAnimation(.easeInOut(duration: 0.2)) {
-                            viewModel.selectedGame = viewModel.selectedGame == game ? nil : game
+                            viewModel.selectedLeague = viewModel.selectedLeague == league ? nil : league
                         }
                     }
                 }
@@ -166,7 +170,11 @@ public struct EsportsHubView: View {
             LazyVStack(spacing: DSLayout.spacing) {
                 ForEach(viewModel.visibleMatches) { event in
                     NavigationLink(value: event) {
-                        EsportsMatchCard(event: event, result: viewModel.result(for: event))
+                        EsportsMatchCard(
+                            event: event,
+                            result: viewModel.result(for: event),
+                            league: viewModel.league(for: event)
+                        )
                     }
                     .buttonStyle(.plain)
                 }

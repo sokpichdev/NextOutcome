@@ -11,6 +11,37 @@
 
 import XCTest
 
+/// Live-status precondition for stream tests.
+///
+/// The hero only embeds a broadcast that is actually on air, so a test asserting a player
+/// appears is really asserting something about the outside world. Checking that separately
+/// lets the test skip on "the channel is dark" instead of failing, while a genuine
+/// regression still fails.
+///
+/// Deliberately re-implements the marker check rather than importing `WebLiveStreamProber`:
+/// a UI test target can't link the app's packages, and a precondition that shared the
+/// production parser would go green whenever that parser broke.
+enum BroadcastPrecondition {
+    /// Whether a Twitch channel is broadcasting: `live`, `offAir`, or `unknown` when the
+    /// check itself failed — an unreachable network must not read as "off air".
+    enum Status { case live, offAir, unknown }
+
+    static func twitchStatus(channel: String, timeout: TimeInterval = 15) async -> Status {
+        guard let url = URL(string: "https://www.twitch.tv/\(channel)") else { return .unknown }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = timeout
+        // Twitch serves the marker-bearing server-rendered page to browser agents only.
+        request.setValue(
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15",
+            forHTTPHeaderField: "User-Agent"
+        )
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let html = String(data: data, encoding: .utf8) else { return .unknown }
+        return html.contains("isLiveBroadcast") ? .live : .offAir
+    }
+}
+
 /// Timeouts tuned for the live-network reality of this app (no mocks).
 enum UIWait {
     /// First content load on a freshly launched app (Gamma/data API round trips).

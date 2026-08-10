@@ -179,11 +179,12 @@ struct RootView: View {
                     //
                     // Every branch matches on a Gamma tag slug (HubTab equality is id-only),
                     // and the rail itself is fetched from the `top-navbar` tag. Polymarket
-                    // does not currently list `world-cup` or `esports` there, so those two
-                    // branches are unreachable from the rail right now — they are NOT dead
-                    // code, and light up again the moment those tags reappear in the nav.
-                    // (World Cup is also reachable inside the Sports hub; Breaking has its
-                    // own bottom tab.)
+                    // does not list `world-cup` there, so that branch is unreachable from the
+                    // rail right now — it is NOT dead code, and lights up again the moment the
+                    // tag reappears in the nav. (World Cup is also reachable inside the Sports
+                    // hub; Breaking has its own bottom tab.) `esports` is missing from the nav
+                    // too, but `HubTabsViewModel` injects it the way polymarket.com does, so
+                    // this branch does fire.
                     if selectedCategory == .worldCup {
                         WorldCupHubView(viewModel: worldCupViewModel)
                     } else if selectedCategory == .breaking {

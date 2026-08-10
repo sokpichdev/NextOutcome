@@ -5,59 +5,17 @@
 //  Created by Sok Pich on 14/07/2026.
 //
 
-import SwiftUI
+import Foundation
 import MarketsDomain
-
-/// The game titles the Esports hub features, in display order. Each maps to the Gamma tag
-/// slug its match events carry (e.g. "counter-strike-2").
-public enum EsportsGame: String, CaseIterable, Identifiable, Sendable {
-    case cs2 = "counter-strike-2"
-    case lol = "league-of-legends"
-    case dota2 = "dota-2"
-
-    public var id: String { rawValue }
-
-    /// The short display name, matching web's game tiles ("CS2", "LoL", "Dota 2").
-    public var title: String {
-        switch self {
-        case .cs2: return "CS2"
-        case .lol: return "LoL"
-        case .dota2: return "Dota 2"
-        }
-    }
-
-    /// The longer name shown on match cards ("Counter-Strike 2", …).
-    public var fullName: String {
-        switch self {
-        case .cs2: return "Counter-Strike 2"
-        case .lol: return "League of Legends"
-        case .dota2: return "Dota 2"
-        }
-    }
-
-    /// The SF Symbol used where the game needs an icon.
-    public var glyph: String {
-        switch self {
-        case .cs2: return "scope"
-        case .lol: return "shield.lefthalf.filled"
-        case .dota2: return "flame.fill"
-        }
-    }
-
-    /// The artwork tile's gradient colours, standing in for web's key art.
-    public var gradientColors: [Color] {
-        switch self {
-        case .cs2: return [Color(red: 0.95, green: 0.55, blue: 0.10), Color(red: 0.55, green: 0.25, blue: 0.02)]
-        case .lol: return [Color(red: 0.85, green: 0.65, blue: 0.15), Color(red: 0.20, green: 0.35, blue: 0.55)]
-        case .dota2: return [Color(red: 0.80, green: 0.20, blue: 0.15), Color(red: 0.30, green: 0.05, blue: 0.10)]
-        }
-    }
-}
 
 /// Pure classification helpers over the esports tag's events: which are live team-vs-team
 /// matches (web's "Games" list) versus futures (season winners, MVP props), and which game
-/// each belongs to. Mirrors the pattern of `SportsHubViewModel.knownLeagues` — presentation
-/// owns the curated catalogue, Domain carries the raw signals (`tags`, `sportsMarketType`).
+/// each belongs to.
+///
+/// The game catalogue itself is *not* here — it's fetched from Gamma's `/sports` endpoint as
+/// `[EsportsLeague]` (see `FetchEsportsLeaguesUseCase`). These functions take that list as an
+/// argument rather than owning it, which is what lets the hub render a game it has never
+/// heard of.
 public enum EsportsCatalog {
     /// Whether an event is a team-vs-team match (rather than a futures/prop market):
     /// it carries a moneyline market, or Gamma's `games` tag, or a " vs " title.
@@ -70,11 +28,16 @@ public enum EsportsCatalog {
             || event.title.range(of: " vs. ", options: .caseInsensitive) != nil
     }
 
-    /// Resolves which featured game an event belongs to from its tag slugs, or `nil` for
-    /// other titles (e.g. EA FC, Rocket League) the hub doesn't feature yet.
-    public static func game(for event: Event) -> EsportsGame? {
-        let slugs = Set(event.tags.map(\.slug))
-        return EsportsGame.allCases.first { slugs.contains($0.rawValue) }
+    /// Resolves which league an event belongs to, or `nil` when it carries none of their tags.
+    ///
+    /// Matches on **tag id**, not slug. Slugs are not a reliable key here: CS2 events carry
+    /// `cs2` (`100677`), `counter-strike-2` (`100780`) and the typo `counter-stike-2`, and
+    /// Valorant events carry both `valorant` and `val`. `EsportsLeague.primaryTagID` is
+    /// Gamma's own answer to which of those is canonical, so comparing ids is both simpler
+    /// and strictly more accurate than any slug list we could maintain.
+    public static func league(for event: Event, in leagues: [EsportsLeague]) -> EsportsLeague? {
+        let tagIDs = Set(event.tags.map(\.id))
+        return leagues.first { tagIDs.contains($0.primaryTagID) }
     }
 
     /// A parsed match title: the two team names and the series format, from Gamma's

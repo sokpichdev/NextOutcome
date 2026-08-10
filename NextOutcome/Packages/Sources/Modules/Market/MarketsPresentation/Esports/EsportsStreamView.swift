@@ -44,6 +44,20 @@ struct EsportsStreamView: View {
         .frame(height: 190)
         .frame(maxWidth: .infinity)
         .clipped()
+        // Names the platform and broadcast, so a UI test can assert *which* player rendered
+        // rather than just that some web view exists. `.contain` is required: without it the
+        // web view's own subtree swallows the container and no element carries the id.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(Self.identifier(for: stream))
+    }
+
+    /// A stable test handle for the current player, e.g. `stream-youtube-zbEa-ffJs0w`.
+    static func identifier(for stream: EsportsStream?) -> String {
+        switch stream {
+        case .twitch(let channel): return "stream-twitch-\(channel)"
+        case .youtube(let videoID): return "stream-youtube-\(videoID)"
+        case nil: return "stream-artwork"
+        }
     }
 
     /// The mute/unmute toggle overlaid on the player.

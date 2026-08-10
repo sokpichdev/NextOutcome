@@ -42,13 +42,45 @@ final class EsportsCatalogTests: XCTestCase {
         XCTAssertFalse(EsportsCatalog.isMatch(e))
     }
 
-    // MARK: game(for:)
+    // MARK: league(for:in:)
 
-    func test_game_resolvesFromTagSlug() {
-        XCTAssertEqual(EsportsCatalog.game(for: event(title: "t", tags: ["esports", "counter-strike-2"])), .cs2)
-        XCTAssertEqual(EsportsCatalog.game(for: event(title: "t", tags: ["league-of-legends"])), .lol)
-        XCTAssertEqual(EsportsCatalog.game(for: event(title: "t", tags: ["dota-2"])), .dota2)
-        XCTAssertNil(EsportsCatalog.game(for: event(title: "t", tags: ["esports", "rocket-league"])))
+    /// The live catalogue's primary tag ids, trimmed to what these tests need.
+    private var catalogue: [EsportsLeague] {
+        [
+            EsportsLeague(id: "cs2", name: "CS2", primaryTagID: "100780"),
+            EsportsLeague(id: "lol", name: "LoL", primaryTagID: "65"),
+            EsportsLeague(id: "val", name: "Valorant", primaryTagID: "101672"),
+        ]
+    }
+
+    private func tagged(_ pairs: [(id: String, slug: String)]) -> Event {
+        Event(
+            id: "e1", title: "t", slug: "e1", markets: [], volume: 0, imageURL: nil,
+            tags: pairs.map { Tag(id: $0.id, label: $0.slug, slug: $0.slug) }
+        )
+    }
+
+    func test_league_resolvesFromPrimaryTagID() {
+        let e = tagged([("64", "esports"), ("100780", "counter-strike-2")])
+        XCTAssertEqual(EsportsCatalog.league(for: e, in: catalogue)?.id, "cs2")
+    }
+
+    func test_league_matchesOnIDNotSlug() {
+        // The reason this matches ids: CS2 events carry three different slugs for the same
+        // game — `cs2` (100677), `counter-strike-2` (100780) and the typo `counter-stike-2`.
+        // Only the id the catalogue names as primary is dependable.
+        let typo = tagged([("100780", "counter-stike-2")])
+        XCTAssertEqual(EsportsCatalog.league(for: typo, in: catalogue)?.id, "cs2")
+
+        // A slug that reads right but carries a non-primary id is not this league.
+        let secondary = tagged([("100677", "cs2")])
+        XCTAssertNil(EsportsCatalog.league(for: secondary, in: catalogue))
+    }
+
+    func test_league_nilForGamesOutsideTheCatalogue() {
+        XCTAssertNil(EsportsCatalog.league(for: tagged([("102756", "rocket-league")]), in: catalogue))
+        XCTAssertNil(EsportsCatalog.league(for: tagged([]), in: catalogue))
+        XCTAssertNil(EsportsCatalog.league(for: tagged([("65", "lol")]), in: []))
     }
 
     // MARK: matchTitle

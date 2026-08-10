@@ -17,9 +17,17 @@ final class HubTabTests: XCTestCase {
         // Every entry is keyed by its Gamma slug so a fetched tab replaces it cleanly.
         XCTAssertEqual(
             HubTab.fallbackNav.map(\.id),
-            ["all", "politics", "sports", "crypto", "finance", "geopolitics",
+            ["all", "politics", "sports", "crypto", "esports", "finance", "geopolitics",
              "tech", "pop-culture", "economy", "weather", "elections"]
         )
+    }
+
+    func test_esports_isTheEsportsTagNotGames() {
+        // The rail injects this entry (Gamma's nav row omits it), so unlike the other route
+        // identifiers its tagID is actually queried. `100639` is the broader `games` tag and
+        // would silently widen the hub to every game market.
+        XCTAssertEqual(HubTab.esports.id, "esports")
+        XCTAssertEqual(HubTab.esports.tagID, "64")
     }
 
     func test_fallbackNav_isTextOnly() {

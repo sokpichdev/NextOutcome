@@ -21,8 +21,10 @@ struct EsportsHeroCard: View {
     let stream: EsportsStream?
     /// Recent trades for the ticker, newest first.
     let trades: [ActivityTrade]
+    /// The match's game, from the fetched catalogue.
+    let league: EsportsLeague?
 
-    private var info: EsportsMatchInfo { EsportsMatchInfo(event: event, result: result) }
+    private var info: EsportsMatchInfo { EsportsMatchInfo(event: event, result: result, league: league) }
 
     /// DEBUG-only `-forceTwitchChannel <name>` launch argument, for verifying the embed
     /// plays against a channel that's currently broadcasting.
@@ -94,8 +96,8 @@ struct EsportsHeroCard: View {
             Text("\(MarketFormatting.compactUSD(event.volume)) Vol")
                 .font(DSFont.caption)
                 .foregroundStyle(DSColor.textSecondary)
-            if let game = info.game {
-                Text(game.fullName)
+            if let league = info.league {
+                Text(league.name)
                     .font(DSFont.caption)
                     .foregroundStyle(DSColor.textSecondary)
                     .lineLimit(1)
