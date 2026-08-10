@@ -4,10 +4,11 @@
 //
 //  Created by Sok Pich on 19/07/2026.
 //
-//  TC-090…TC-093: the Esports hub — deep-linked via
-//  `-preselectCategory esports 64`. Covers the server-driven game-tile
-//  row, the inline "Esports | Leaderboard" mode toggle, and the
-//  `-forceTwitchChannel` stream-hero override.
+//  TC-090…TC-096: the Esports hub and match detail screen — deep-linked
+//  via `-preselectCategory esports 64`. Covers the server-driven game-tile
+//  row, the inline "Esports | Leaderboard" mode toggle, the
+//  `-forceTwitchChannel` stream-hero override, and the match detail
+//  screen's scoreboard, market sections and Livestream tab.
 //
 
 import XCTest
@@ -193,6 +194,82 @@ final class EsportsUITests: XCTestCase {
                       "Expected the stream hero's Twitch embed web view")
         attachScreenshot(of: app, named: "Esports — forced Twitch hero")
     }
+    /// TC-095: tapping a match opens the purpose-built detail screen.
+    ///
+    /// The section assertion is the point of this test. Esports markets name their outcomes
+    /// after the teams, and the screen this replaced classified none of them — so every
+    /// market landed in one "Other" pile with no prices. Finding a real section header is
+    /// what catches that regression coming back.
+    @MainActor
+    func testEsportsMatchDetailOpensFromTheGamesList() throws {
+        let app = XCUIApplication.launched(preselecting: "esports", tagID: esportsTagID)
+
+        assertAppears(app.esportsModeButton, timeout: UIWait.firstLoad, "Hub should load")
+        guard app.anyVolumeLabel.waitForExistence(timeout: UIWait.firstLoad) else {
+            throw XCTSkip("No esports matches are listed right now — nothing to open")
+        }
+
+        app.anyVolumeLabel.tap()
+        assertAppears(app.backButton, timeout: UIWait.load, "Tapping a match should push a screen")
+
+        assertAppears(app.scoreboard, timeout: UIWait.load,
+                      "The match screen should show its map-by-map scoreboard")
+        XCTAssertTrue(app.marketSegment.exists, "Expected the Market/Livestream toggle")
+
+        // Any real section beats the "everything is Other" failure mode. Which sections a
+        // given match carries depends on its game, so accept any of the esports set.
+        let sectionTitles = ["Moneyline", "Map Winners", "Totals", "Map Rounds"]
+        let hasRealSection = sectionTitles.contains { title in
+            app.staticTexts[title].waitForExistence(timeout: UIWait.load)
+                || app.scrollTo(app.staticTexts[title], maxSwipes: 3)
+        }
+        XCTAssertTrue(hasRealSection,
+                      "Expected a classified market section, one of \(sectionTitles) — "
+                      + "their absence means the markets fell back into \"Other\"")
+        attachScreenshot(of: app, named: "Esports — match detail")
+    }
+
+    /// TC-096: the Livestream tab either plays the broadcast or offers to open it.
+    ///
+    /// Like TC-092 this asserts partly about the outside world: only a live match has a
+    /// broadcast at all. What must always hold is that the tab shows *something* honest —
+    /// a player, or artwork plus a way out to the real stream — never a dead frame.
+    @MainActor
+    func testLivestreamSegmentShowsAPlayerOrAnOpenBroadcastLink() throws {
+        let app = XCUIApplication.launched(preselecting: "esports", tagID: esportsTagID)
+
+        assertAppears(app.esportsModeButton, timeout: UIWait.firstLoad, "Hub should load")
+        guard app.anyVolumeLabel.waitForExistence(timeout: UIWait.firstLoad) else {
+            throw XCTSkip("No esports matches are listed right now — nothing to open")
+        }
+        app.anyVolumeLabel.tap()
+        assertAppears(app.backButton, timeout: UIWait.load, "Tapping a match should push a screen")
+
+        let livestream = app.buttons["Livestream"]
+        guard livestream.waitForExistence(timeout: UIWait.load) else {
+            throw XCTSkip("The Livestream segment didn't appear — no broadcast tab to check")
+        }
+        livestream.tap()
+
+        // One of the three `stream-*` identifiers always renders: a Twitch or YouTube
+        // player, or the artwork placeholder.
+        let artwork = app.otherElements["stream-artwork"]
+        let player = app.webViews.firstMatch
+        let showedSomething = artwork.waitForExistence(timeout: UIWait.load) || player.exists
+        XCTAssertTrue(showedSomething, "The Livestream tab should show a player or artwork")
+
+        if artwork.exists && !player.exists {
+            // No embeddable broadcast: the screen must still offer the real one when the
+            // event lists a URL (Kick, which we can't embed, is common on esports events).
+            XCTAssertTrue(
+                app.openBroadcastLink.exists
+                    || app.staticTexts["No broadcast is listed for this match."].exists
+                    || app.staticTexts["The broadcast starts when the match goes live."].exists
+                    || app.staticTexts["This match has finished."].exists,
+                "With no player, expect an Open broadcast link or an explicit reason there isn't one")
+        }
+        attachScreenshot(of: app, named: "Esports — match detail livestream")
+    }
 }
 
 private extension XCUIApplication {
@@ -201,4 +278,10 @@ private extension XCUIApplication {
     /// any tap on it fails as ambiguous.
     var esportsModeButton: XCUIElement { buttons["esports.mode.esports"] }
     var leaderboardModeButton: XCUIElement { buttons["esports.mode.leaderboard"] }
+    /// The match detail screen's map-by-map scoreboard.
+    var scoreboard: XCUIElement { otherElements["esports.scoreboard"] }
+    /// The match detail screen's Market/Livestream toggle.
+    var marketSegment: XCUIElement { otherElements["esports.detail.segment"] }
+    /// The Livestream tab's link out to a broadcast we can't embed.
+    var openBroadcastLink: XCUIElement { buttons["esports.detail.openBroadcast"] }
 }

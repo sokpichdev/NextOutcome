@@ -63,6 +63,10 @@ public struct EsportsMatchDetailView: View {
                     ],
                     selection: $segmentSelection
                 )
+                // `.contain` is required: the toggle is a plain HStack of buttons, so
+                // without it the container is no accessibility element and the identifier
+                // never reaches the tree (same trap as `EsportsStreamView`).
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("esports.detail.segment")
 
                 if segmentSelection == 1 {
@@ -70,7 +74,8 @@ public struct EsportsMatchDetailView: View {
                         stream: viewModel.stream,
                         imageURL: viewModel.event.imageURL,
                         broadcastURL: viewModel.broadcastURL,
-                        isLive: viewModel.isLive
+                        isLive: viewModel.isLive,
+                        hasEnded: viewModel.hasEnded
                     )
                 } else {
                     chartBlock

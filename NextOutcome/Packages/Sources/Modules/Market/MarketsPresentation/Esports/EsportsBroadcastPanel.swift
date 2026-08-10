@@ -24,6 +24,8 @@ struct EsportsBroadcastPanel: View {
     let broadcastURL: URL?
     /// Whether the match is currently being played, which decides the empty-state wording.
     let isLive: Bool
+    /// Whether the match has finished — a finished match is not "about to start".
+    let hasEnded: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: DSLayout.spacing) {
@@ -51,8 +53,10 @@ struct EsportsBroadcastPanel: View {
         }
     }
 
-    /// Why there's no player: either nobody is broadcasting yet, or the host won't embed.
+    /// Why there's no player: the match is over, nobody is broadcasting yet, or the host
+    /// won't embed.
     private var emptyMessage: String {
+        if hasEnded { return "This match has finished." }
         if !isLive { return "The broadcast starts when the match goes live." }
         return broadcastURL == nil
             ? "No broadcast is listed for this match."
@@ -66,7 +70,8 @@ struct EsportsBroadcastPanel: View {
         stream: nil,
         imageURL: nil,
         broadcastURL: URL(string: "https://kick.com/eplcs_en"),
-        isLive: true
+        isLive: true,
+        hasEnded: false
     )
     .padding()
     .background(DSColor.background)

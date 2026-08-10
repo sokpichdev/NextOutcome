@@ -77,6 +77,31 @@ final class EsportsScoreboardTests: XCTestCase {
         XCTAssertEqual(model.columns.map(\.state), [.won(.home), .won(.home), .void])
     }
 
+    func test_playedMapIsMarkedFromTheSeriesScoreWhenNoMapMarketExists() {
+        // The live Dota case: no "Map N Winner" markets at all, but a series score of 0–1
+        // on map 2 says plainly that away took map 1.
+        let model = build([], result(score: "000-000|0-1|Bo3", period: "2/3"))
+        XCTAssertEqual(model.columns[0].state, .won(.away))
+        XCTAssertEqual(model.columns[1].state, .inProgress(home: 0, away: 0))
+        XCTAssertEqual(model.columns[2].state, .unplayed)
+    }
+
+    func test_ambiguousSeriesLeavesPlayedMapsBlankRatherThanGuessing() {
+        // At 1–1 both maps are done, but nothing says which side won which. Picking an
+        // order would be inventing a result.
+        let model = build([], result(score: "3-2|1-1|Bo3", period: "3/3"))
+        XCTAssertEqual(model.columns[0].state, .unplayed)
+        XCTAssertEqual(model.columns[1].state, .unplayed)
+        XCTAssertEqual(model.columns[2].state, .inProgress(home: 3, away: 2))
+    }
+
+    func test_mapMarketWinsOverTheInferredResult() {
+        // Where a map market exists it's authoritative — inference is only the fallback.
+        let model = build([mapWinner(1, homePrice: 0.9995)],
+                          result(score: "000-000|1-0|Bo3", period: "2/3"))
+        XCTAssertEqual(model.columns[0].state, .won(.home))
+    }
+
     func test_bo1_rendersASingleColumn() {
         let model = build([mapWinner(1, homePrice: 0.5)], result(score: "9-4|0-0|Bo1", period: "1/1"))
         XCTAssertEqual(model.columns.count, 1)

@@ -94,7 +94,7 @@ enum EsportsScoreboardBuilder {
                 number: number,
                 state: state(
                     forMap: number, market: mapMarkets[number], result: result,
-                    currentMap: progress?.currentMap, mapScore: score?.mapScore,
+                    currentMap: progress?.currentMap, score: score,
                     seriesDecided: decided
                 )
             )
@@ -134,18 +134,42 @@ enum EsportsScoreboardBuilder {
     /// The state of a single map column.
     private static func state(
         forMap number: Int, market: Market?, result: GameResult?,
-        currentMap: Int?, mapScore: EsportsScorePair?, seriesDecided: Bool
+        currentMap: Int?, score: EsportsSeriesScore?, seriesDecided: Bool
     ) -> MapState {
         if let market, let winner = settledWinner(of: market, result: result) {
             return .won(winner)
         }
         if number == currentMap, result?.ended != true {
-            guard let mapScore else { return .unplayed }
+            guard let mapScore = score?.mapScore else { return .unplayed }
             return .inProgress(home: mapScore.home, away: mapScore.away)
+        }
+        if let winner = inferredWinner(forMap: number, currentMap: currentMap,
+                                       series: score?.seriesScore, ended: result?.ended == true) {
+            return .won(winner)
         }
         // Gamma leaves "Map 3 Winner" open at 0.5/0.5 after a 2-0 Bo3. Showing that as
         // upcoming would promise a map that will never happen.
         return seriesDecided ? .void : .unplayed
+    }
+
+    /// The winner of an already-played map, read off the series score when no map market
+    /// says so — plenty of events (Dota in particular) carry no "Map N Winner" market at all,
+    /// and a series sitting at 0–1 plainly means someone won map 1.
+    ///
+    /// Only attributable when one side has taken *every* completed map. At 1–1 we know both
+    /// maps are done but not which side won which, and guessing an order would be inventing
+    /// a result — those stay blank.
+    private static func inferredWinner(
+        forMap number: Int, currentMap: Int?, series: EsportsScorePair?, ended: Bool
+    ) -> Side? {
+        guard let series else { return nil }
+        let completed = series.home + series.away
+        guard completed > 0, number <= completed else { return nil }
+        // Only maps already behind us; the one in play is handled above.
+        if let currentMap, number >= currentMap, !ended { return nil }
+        if series.away == 0 { return .home }
+        if series.home == 0 { return .away }
+        return nil
     }
 
     /// The side that won a settled map, or `nil` while it's still in play.
