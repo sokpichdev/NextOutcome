@@ -135,12 +135,19 @@ struct EventDTO: Decodable {
     /// this is the only field that reveals them. Same key caveat as `MarketDTO.endDate` —
     /// decode `endDate`, never `endDateIso`, which is a date with no time component.
     let endDate: String?
+    /// The sports feed's identifier for this fixture, sent as a JSON **number**. Not the same
+    /// thing as `id`: the live sports websocket keys its esports frames on this, so a
+    /// subscription opened with the Gamma event id matches nothing. Absent on non-sports events.
+    let gameId: String?
+    /// The live score/period/teams Gamma ships on the event payload itself — the same shape
+    /// `/events/results` returns, so a screen can show a scoreboard without that extra call.
+    let result: GameResultDTO?
 
     /// JSON keys for `EventDTO`.
     enum CodingKeys: String, CodingKey {
         case id, title, slug, markets, volume, image, tags, gameStartTime, description, series,
              volume24hr, liquidity, competitive, creationDate, resolutionSource
-        case ended, live, closed, endDate
+        case ended, live, closed, endDate, gameId, score, teams
     }
 
     /// Tolerant decoder falling back to the slug for a missing title and to empty
@@ -167,6 +174,17 @@ struct EventDTO: Decodable {
         live = try? c.decode(Bool.self, forKey: .live)
         closed = try? c.decode(Bool.self, forKey: .closed)
         endDate = try? c.decode(String.self, forKey: .endDate)
+        // Sent as a number; accept the string form too rather than depending on which.
+        gameId = (try? c.decode(String.self, forKey: .gameId))
+            ?? (try? c.decode(Int.self, forKey: .gameId)).map(String.init)
+        // The event carries `score`/`period`/`live`/`ended`/`teams` at its top level in
+        // exactly the shape `/events/results` returns, so decode it through the same DTO
+        // rather than restating the tolerant parsing and team mapping here. Only kept when
+        // it actually says something — an ordinary market has none of these keys.
+        let result = try? GameResultDTO(from: decoder)
+        let carriesScore = !(result?.score?.isEmpty ?? true)
+        let carriesTeams = !(result?.teams?.isEmpty ?? true)
+        self.result = (carriesScore || carriesTeams) ? result : nil
     }
 }
 

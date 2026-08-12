@@ -194,6 +194,8 @@ enum MarketMapper {
             competitive: dto.competitive,
             creationDate: DateParsing.parse(dto.creationDate),
             resolutionSource: dto.resolutionSource,
+            gameID: dto.gameId,
+            initialResult: dto.result?.toDomain(fallbackEventID: dto.id),
             ended: dto.ended,
             live: dto.live,
             closed: dto.closed,

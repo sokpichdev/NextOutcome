@@ -177,6 +177,56 @@ final class MarketDecodingTests: XCTestCase {
         XCTAssertEqual(event.gameStartTime, DateParsing.parse("2026-01-01 00:00:00+00"))
     }
 
+    /// The esports shape, trimmed from the live `/events/809989` payload. `gameId` is what
+    /// the sports websocket keys its frames on, and the score/period/teams block is the same
+    /// thing `/events/results` returns — carried here so a scoreboard can paint without it.
+    func test_eventDTO_decodesTheSportsFeedIdentifierAndInlineResult() throws {
+        let json = """
+        {
+          "id": "809989",
+          "title": "Counter-Strike: Eternal Fire Academy vs Vitality Academy (BO3)",
+          "slug": "cs-efa-vita",
+          "gameId": 1616952,
+          "score": "000-000|1-1|Bo3",
+          "period": "3/3",
+          "live": true,
+          "ended": false,
+          "teams": [
+            { "name": "Eternal Fire Academy", "abbreviation": "efa", "color": "#29447c", "ordering": "home" },
+            { "name": "Vitality Academy", "abbreviation": "vita", "color": "#ffff00", "ordering": "away" }
+          ],
+          "markets": []
+        }
+        """.data(using: .utf8)!
+
+        let dto = try JSONDecoder.polymarket.decode(EventDTO.self, from: json)
+        XCTAssertEqual(dto.gameId, "1616952") // sent as a number, normalised to a string
+
+        let event = MarketMapper.event(from: dto)
+        XCTAssertEqual(event.gameID, "1616952")
+        XCTAssertNotEqual(event.gameID, event.id, "the feed id is not the Gamma event id")
+        XCTAssertEqual(event.initialResult?.score, "000-000|1-1|Bo3")
+        XCTAssertEqual(event.initialResult?.period, "3/3")
+        XCTAssertEqual(event.initialResult?.live, true)
+        XCTAssertEqual(event.initialResult?.homeTeam?.name, "Eternal Fire Academy")
+        XCTAssertEqual(event.initialResult?.awayTeam?.colorHex, "#ffff00")
+    }
+
+    func test_eventDTO_acceptsAStringGameId() throws {
+        let json = #"{"id": "e1", "title": "T", "slug": "t", "gameId": "1616952", "markets": []}"#.data(using: .utf8)!
+        let dto = try JSONDecoder.polymarket.decode(EventDTO.self, from: json)
+        XCTAssertEqual(dto.gameId, "1616952")
+    }
+
+    func test_eventDTO_ordinaryEventsCarryNoFeedIdentifierOrResult() throws {
+        // A politics/crypto event has none of these keys, and must not end up with an
+        // empty result standing in for "no score".
+        let json = #"{"id": "e1", "title": "T", "slug": "t", "markets": []}"#.data(using: .utf8)!
+        let event = MarketMapper.event(from: try JSONDecoder.polymarket.decode(EventDTO.self, from: json))
+        XCTAssertNil(event.gameID)
+        XCTAssertNil(event.initialResult)
+    }
+
     func test_marketDTO_sportsFields_toleratesMissingOrMistyped() throws {
         let missing = #"{"id": "x", "question": "Q", "slug": "q"}"#.data(using: .utf8)!
         let missingDTO = try JSONDecoder.polymarket.decode(MarketDTO.self, from: missing)

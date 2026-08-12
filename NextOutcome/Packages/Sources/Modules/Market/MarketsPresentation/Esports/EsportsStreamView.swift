@@ -14,6 +14,14 @@ import MarketsDomain
 /// confirmed live (Twitch or YouTube, per the hub's `LiveStreamProbing` check), otherwise
 /// the event image with a dimming gradient. The player is best-effort — if the site
 /// declines to embed, its own iframe shows the error and the surrounding card still works.
+///
+/// **View-only by design.** The player takes no touches (`allowsHitTesting(false)`), leaving
+/// the mute toggle below as the only control. Twitch's chrome — the Follow / Gift a Sub /
+/// Subscribe row, the settings and fullscreen buttons — is theirs, inside a cross-origin
+/// iframe: neither the iframe embed nor the JS embed exposes a `controls` option, and there
+/// is no CSS or JS reach into it. What we *can* do is never wake it, since it only surfaces
+/// on a tap. This also lets a tap fall through to whatever wraps the player, which is why
+/// the hub's hero card is now tappable across its whole media area.
 struct EsportsStreamView: View {
     /// The confirmed-live broadcast to embed, or `nil` to show artwork.
     let stream: EsportsStream?
@@ -29,10 +37,12 @@ struct EsportsStreamView: View {
             case .twitch(let channel):
                 StreamWebView(embedHTML: Self.twitchHTML(channel: channel, muted: isMuted),
                               signature: "twitch-\(channel)-\(isMuted)")
+                    .allowsHitTesting(false)
                 muteButton
             case .youtube(let videoID):
                 StreamWebView(embedHTML: Self.youTubeHTML(videoID: videoID, muted: isMuted),
                               signature: "youtube-\(videoID)-\(isMuted)")
+                    .allowsHitTesting(false)
                 muteButton
             case nil:
                 fallbackImage
@@ -109,15 +119,25 @@ struct EsportsStreamView: View {
     }
 
     /// The Twitch iframe player. `parent` must match the page's `baseURL` host.
+    ///
+    /// Twitch has no parameter for hiding its controls — the view-only behaviour comes from
+    /// the player taking no touches at all (see the type's note).
     static func twitchHTML(channel: String, muted: Bool) -> String {
         embedPage(iframeSrc:
             "https://player.twitch.tv/?channel=\(channel)&parent=polymarket.com&autoplay=true&muted=\(muted)")
     }
 
     /// The YouTube iframe player for a live video id.
+    ///
+    /// Unlike Twitch, YouTube *does* let an embedder drop its chrome, so it's asked to:
+    /// `controls=0` (no control bar), `fs=0` (no fullscreen button), `disablekb=1`,
+    /// `iv_load_policy=3` (no annotations) and `rel=0` (no end-of-video suggestions from
+    /// other channels). Without these the bar still flashes on load even though nothing can
+    /// be tapped.
     static func youTubeHTML(videoID: String, muted: Bool) -> String {
         embedPage(iframeSrc:
-            "https://www.youtube.com/embed/\(videoID)?autoplay=1&mute=\(muted ? 1 : 0)&playsinline=1&controls=1")
+            "https://www.youtube.com/embed/\(videoID)?autoplay=1&mute=\(muted ? 1 : 0)"
+            + "&playsinline=1&controls=0&fs=0&disablekb=1&iv_load_policy=3&rel=0&modestbranding=1")
     }
 }
 

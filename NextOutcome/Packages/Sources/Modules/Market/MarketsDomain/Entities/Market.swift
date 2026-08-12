@@ -76,4 +76,25 @@ public struct Market: Identifiable, Hashable {
     public var yesOutcome: Outcome? { outcomes.first { $0.title == "Yes" } }
     /// The "No" outcome for a binary market, if present.
     public var noOutcome: Outcome? { outcomes.first { $0.title == "No" } }
+
+    /// The two sides of a binary market, in display order.
+    ///
+    /// Yes/No markets answer with their named outcomes whatever order Gamma listed them in.
+    /// Sports and esports markets have no Yes/No at all — their outcomes are the two teams
+    /// ("Eternal Fire Academy"/"Vitality Academy") or the two sides of a line
+    /// ("Over"/"Under") — so those fall back to array order, which is the order Gamma prices
+    /// them in. `nil` for anything that isn't two-sided.
+    ///
+    /// Prefer this over `yesOutcome`/`noOutcome` anywhere a market is rendered or traded:
+    /// reading a team-named market through the Yes/No pair silently yields no price, which
+    /// is how esports rows came to show neither a percentage nor a buy button.
+    public var binaryOutcomes: (first: Outcome, second: Outcome)? {
+        if let yes = yesOutcome, let no = noOutcome { return (yes, no) }
+        guard outcomes.count == 2 else { return nil }
+        return (outcomes[0], outcomes[1])
+    }
+
+    /// The outcome a single "chance" figure should quote — the Yes side, or the first side
+    /// of a two-sided market that has no Yes.
+    public var primaryOutcome: Outcome? { binaryOutcomes?.first ?? yesOutcome }
 }

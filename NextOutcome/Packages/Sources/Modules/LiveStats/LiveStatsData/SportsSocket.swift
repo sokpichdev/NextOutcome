@@ -102,7 +102,7 @@ public struct SportsSocket: SportsStateStreaming {
             @unknown default: continue
             }
             guard let frame = try? decoder.decode(SportsFrameDTO.self, from: data),
-                  frame.metadataGameId == gameID,
+                  frame.identifier == gameID,
                   let state = frame.toMatchState(previous: latest)
             else { continue }
             latest = state

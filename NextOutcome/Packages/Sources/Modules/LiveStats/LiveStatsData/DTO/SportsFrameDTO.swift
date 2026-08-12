@@ -18,8 +18,13 @@ import LiveStatsDomain
 /// optional because the feed mixes per-game state frames with control traffic
 /// (PING/PONG) that carries none of these keys.
 struct SportsFrameDTO: Decodable {
-    /// The game's unique ID. `nil` means this frame isn't per-game state and is skipped.
+    /// The game's unique ID on the frames that carry one under this key (soccer, cricket, …).
     let metadataGameId: String?
+    /// The game's unique ID on **esports** frames, which name it `gameId` and send it as a
+    /// number. Captured verbatim off the feed:
+    ///   {"gameId":1616952,"leagueAbbreviation":"cs2","score":"000-000|1-1|Bo3",
+    ///    "period":"3/3","live":true,"ended":false}
+    let gameId: Int?
     /// The league/competition abbreviation (e.g. "cricket").
     let leagueAbbreviation: String?
     /// The score as a `"home-away"` string (e.g. "156-156"), if present.
@@ -35,11 +40,20 @@ struct SportsFrameDTO: Decodable {
 }
 
 extension SportsFrameDTO {
+    /// The frame's game identifier, whichever key it arrived under. `nil` means this frame
+    /// isn't per-game state (PING/PONG and other control traffic) and should be skipped.
+    ///
+    /// Esports frames carry only `gameId`; before it was read here, every esports frame was
+    /// silently dropped and the esports live socket delivered nothing at all.
+    var identifier: String? {
+        metadataGameId ?? gameId.map(String.init)
+    }
+
     /// Maps a decoded frame to a `MatchState` snapshot, carrying forward fields the feed
     /// does not resend from `previous`. Returns `nil` for frames that are not per-game
-    /// state (no `metadataGameId`) so the socket can skip them.
+    /// state (no identifier) so the socket can skip them.
     func toMatchState(previous: MatchState?) -> MatchState? {
-        guard let gameID = metadataGameId else { return nil }
+        guard let gameID = identifier else { return nil }
         let parsed = MatchState.parseScore(score)
         return MatchState(
             gameID: gameID,

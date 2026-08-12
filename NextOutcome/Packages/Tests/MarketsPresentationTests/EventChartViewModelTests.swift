@@ -50,6 +50,72 @@ final class EventChartViewModelTests: XCTestCase {
         XCTAssertEqual(series[0].points.last?.price ?? 0, 0.33, accuracy: 0.001)
     }
 
+    @MainActor
+    func test_outcomesSource_drawsOneLinePerOutcome_inTheSuppliedColors() async {
+        // How an esports match charts: the two sides of the moneyline against each other in
+        // their team colours, rather than one line each from unrelated map markets.
+        let moneyline = Market(
+            id: "ml", question: "Match Winner", slug: "ml",
+            outcomes: [Outcome(id: "efa", title: "Eternal Fire Academy", price: 0.405),
+                       Outcome(id: "vita", title: "Vitality Academy", price: 0.595)],
+            volume: 0, liquidity: 0, endDate: nil, isResolved: false, imageURL: nil,
+            sportsMarketType: "moneyline", groupItemTitle: "Match Winner"
+        )
+        let event = Event(id: "e", title: "CS", slug: "cs", markets: [moneyline],
+                          volume: 0, imageURL: nil, tags: [])
+        let provider = PriceHistoryProvider { assetID, _ in
+            [PriceHistoryPoint(date: Date(), price: assetID == "efa" ? 0.405 : 0.595)]
+        }
+        let vm = EventChartViewModel(event: event, provider: provider,
+                                     source: .outcomes(of: moneyline, colors: [.blue, .yellow]))
+        await vm.load()
+
+        guard case .loaded(let series) = vm.state else { return XCTFail("expected .loaded, got \(vm.state)") }
+        XCTAssertEqual(series.map(\.label), ["Eternal Fire Academy", "Vitality Academy"])
+        XCTAssertEqual(series[0].color, .blue)
+        XCTAssertEqual(series[1].color, .yellow)
+        XCTAssertEqual(series[1].points.last?.price ?? 0, 0.595, accuracy: 0.001)
+    }
+
+    @MainActor
+    func test_outcomesSource_fallsBackToThePaletteWhenColorsRunOut() async {
+        let market = Market(
+            id: "m", question: "Q", slug: "m",
+            outcomes: [Outcome(id: "a", title: "A", price: 0.5), Outcome(id: "b", title: "B", price: 0.5)],
+            volume: 0, liquidity: 0, endDate: nil, isResolved: false, imageURL: nil
+        )
+        let event = Event(id: "e", title: "T", slug: "t", markets: [market], volume: 0, imageURL: nil, tags: [])
+        let provider = PriceHistoryProvider { _, _ in [PriceHistoryPoint(date: Date(), price: 0.5)] }
+        let vm = EventChartViewModel(event: event, provider: provider,
+                                     source: .outcomes(of: market, colors: [.blue]))
+        await vm.load()
+
+        guard case .loaded(let series) = vm.state else { return XCTFail("expected .loaded, got \(vm.state)") }
+        XCTAssertEqual(series[0].color, .blue)
+        XCTAssertEqual(series[1].color, OutcomePalette.color(1))
+    }
+
+    @MainActor
+    func test_topMarkets_chartsTeamNamedMarketsThatHaveNoYesOutcome() async {
+        // These used to be skipped entirely — `yesOutcome` is nil on a team-named market —
+        // so a sports event's default chart came back empty.
+        let market = Market(
+            id: "m", question: "Match Winner", slug: "m",
+            outcomes: [Outcome(id: "efa", title: "Eternal Fire Academy", price: 0.405),
+                       Outcome(id: "vita", title: "Vitality Academy", price: 0.595)],
+            volume: 0, liquidity: 0, endDate: nil, isResolved: false, imageURL: nil,
+            sportsMarketType: "moneyline", groupItemTitle: "Match Winner"
+        )
+        let event = Event(id: "e", title: "CS", slug: "cs", markets: [market],
+                          volume: 0, imageURL: nil, tags: [])
+        let provider = PriceHistoryProvider { _, _ in [PriceHistoryPoint(date: Date(), price: 0.405)] }
+        let vm = EventChartViewModel(event: event, provider: provider)
+        await vm.load()
+
+        guard case .loaded(let series) = vm.state else { return XCTFail("expected .loaded, got \(vm.state)") }
+        XCTAssertEqual(series.map(\.label), ["Match Winner"])
+    }
+
     /// Regression test: rapidly changing `timeframe` spawns overlapping unstructured
     /// `load()` Tasks via `didSet`. An older, slower fetch (e.g. `.max`) must not be
     /// allowed to overwrite `state` after a newer, faster fetch (e.g. `.h1`) already

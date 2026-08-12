@@ -247,20 +247,26 @@ public final class EsportsHubViewModel {
     /// call owns a connection, so the set is capped to the heroes the user actually sees.
     private func syncSocketSubscriptions() {
         guard let streamer else { return }
-        let wanted = Set(heroMatches.prefix(5).map(\.id))
-        for (id, task) in socketTasks where !wanted.contains(id) {
+        // Subscriptions stay keyed by event id — that's what `results` and `apply` use — but
+        // they're *opened* with the feed's own `gameID`, which is what the socket keys its
+        // frames on. A match with no `gameID` gets no subscription and rides the poll.
+        let wanted = Dictionary(
+            heroMatches.prefix(5).compactMap { match in match.gameID.map { (match.id, $0) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+        for (id, task) in socketTasks where wanted[id] == nil {
             task.cancel()
             socketTasks[id] = nil
         }
-        for id in wanted where socketTasks[id] == nil {
-            socketTasks[id] = Task { [weak self] in
+        for (eventID, gameID) in wanted where socketTasks[eventID] == nil {
+            socketTasks[eventID] = Task { [weak self] in
                 // The socket reconnects internally; the stream only finishes on
                 // cancellation or an unrecoverable error (then the poll still covers us).
-                guard let stream = self?.nonisolatedStates(streamer: streamer, gameID: id) else { return }
+                guard let stream = self?.nonisolatedStates(streamer: streamer, gameID: gameID) else { return }
                 do {
                     for try await snapshot in stream {
                         guard !Task.isCancelled, let self else { return }
-                        self.apply(snapshot: snapshot, eventID: id)
+                        self.apply(snapshot: snapshot, eventID: eventID)
                     }
                 } catch {}
             }
@@ -414,22 +420,12 @@ public extension EsportsHubViewModel {
 
     /// A "Game 2 of 3" label from a result's `period` ("2/3"), or `nil` when unknown.
     nonisolated static func gameProgressLabel(period: String?) -> String? {
-        guard let period else { return nil }
-        let parts = period.split(separator: "/")
-        guard parts.count == 2, let current = Int(parts[0]), let total = Int(parts[1]) else { return nil }
-        return "Game \(current) of \(total)"
+        EsportsMatchProgress.parse(period).map { "Game \($0.currentMap) of \($0.totalMaps)" }
     }
 
-    /// Splits a Gamma esports `score` string (`"000-000|1-0|Bo3"`) into the series score
-    /// pair — the segment with a `home-away` int pair after the map-score segment.
-    /// Falls back to the plain `"1-0"` shape. Returns `nil` when unparseable.
+    /// The series score (maps won) from a Gamma esports `score` string, or `nil` when
+    /// unparseable. See `EsportsSeriesScore` for the wire format.
     nonisolated static func seriesScore(from score: String?) -> (home: Int, away: Int)? {
-        guard let score else { return nil }
-        let segments = score.split(separator: "|")
-        // "000-000|1-0|Bo3" → the middle segment is the series score; plain "1-0" also works.
-        let candidate = segments.count >= 2 ? segments[1] : (segments.first ?? "")
-        let parts = candidate.split(separator: "-")
-        guard parts.count == 2, let home = Int(parts[0]), let away = Int(parts[1]) else { return nil }
-        return (home, away)
+        EsportsSeriesScore.parse(score)?.seriesScore.map { ($0.home, $0.away) }
     }
 }

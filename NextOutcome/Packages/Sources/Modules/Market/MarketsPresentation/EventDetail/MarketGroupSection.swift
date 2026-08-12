@@ -124,8 +124,8 @@ public struct MarketGroupSection: View {
                         Text(winner.title)
                             .font(DSFont.subheadline.bold())
                             .foregroundStyle(DSColor.textSecondary)
-                        Image(systemName: winner.title == "Yes" ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundStyle(winner.title == "Yes" ? DSColor.positive : DSColor.negative)
+                        Image(systemName: settledNegatively(winner) ? "xmark.circle.fill" : "checkmark.circle.fill")
+                            .foregroundStyle(settledNegatively(winner) ? DSColor.negative : DSColor.positive)
                     }
                 }
             }
@@ -137,6 +137,14 @@ public struct MarketGroupSection: View {
     /// carries no `isWinner` from Gamma, so we infer it from the highest price.
     private func resolvedOutcome(_ market: Market) -> Outcome? {
         market.outcomes.max { $0.price < $1.price }
+    }
+
+    /// Whether a settled market resolved *against* the thing the row names — the only case
+    /// that earns the red ✕. On a Yes/No market that's a literal "No"; on a team-named
+    /// market ("Map 1 Winner") the winning side is a team, and a team that won its map
+    /// should be badged ✓, not ✕.
+    private func settledNegatively(_ winner: Outcome) -> Bool {
+        winner.title == "No"
     }
 
     /// A tradeable market row: icon + name + chance, with Buy Yes/No price buttons below.
@@ -153,8 +161,8 @@ public struct MarketGroupSection: View {
                         .foregroundStyle(DSColor.textPrimary)
                         .lineLimit(2)
                     Spacer()
-                    if let yes = market.yesOutcome {
-                        Text(MarketFormatting.percent(yes.price))
+                    if let primary = market.primaryOutcome {
+                        Text(MarketFormatting.percent(primary.price))
                             .font(DSFont.caption)
                             .foregroundStyle(DSColor.textSecondary)
                     }
@@ -162,14 +170,15 @@ public struct MarketGroupSection: View {
             }
             .buttonStyle(.plain)
 
-            HStack(spacing: DSLayout.spacingSmall) {
-                if let yes = market.yesOutcome {
-                    PriceButton(title: "Buy \(yes.title)", price: MarketFormatting.cents(yes.price), style: .yes) {
+            // Read through `binaryOutcomes`, not the Yes/No pair: esports and sports markets
+            // name their outcomes after the teams ("Eternal Fire Academy") or the line
+            // ("Over"/"Under"), and quoting them through Yes/No renders no buttons at all.
+            if let sides = market.binaryOutcomes {
+                HStack(spacing: DSLayout.spacingSmall) {
+                    PriceButton(title: "Buy \(sides.first.title)", price: MarketFormatting.cents(sides.first.price), style: .yes) {
                         onSelect(market, .yes)
                     }
-                }
-                if let no = market.noOutcome {
-                    PriceButton(title: "Buy \(no.title)", price: MarketFormatting.cents(no.price), style: .no) {
+                    PriceButton(title: "Buy \(sides.second.title)", price: MarketFormatting.cents(sides.second.price), style: .no) {
                         onSelect(market, .no)
                     }
                 }
