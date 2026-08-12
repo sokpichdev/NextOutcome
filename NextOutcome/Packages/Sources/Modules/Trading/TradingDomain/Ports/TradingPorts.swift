@@ -43,6 +43,47 @@ public struct GeoblockStatus: Hashable, Sendable {
     }
 }
 
+/// Whether the user may *open* a position right now, resolved from `GeoblockStatus`.
+///
+/// `closeOnly` is kept distinct from `blocked` even though both deny opening: the two
+/// need different wording, and Phase 5 (which can still close positions under
+/// `closeOnly`) needs the distinction preserved rather than re-derived.
+public enum TradingAccess: Hashable, Sendable {
+    /// The user may open positions normally.
+    case allowed
+    /// The user may only close existing positions, not open new ones.
+    /// - Parameter region: The detected region code, if known.
+    case closeOnly(region: String?)
+    /// Trading is fully blocked for the user's region.
+    /// - Parameter region: The detected region code, if known.
+    case blocked(region: String?)
+
+    /// `true` when the user may open a position. The single check every trading
+    /// surface should make.
+    public var canOpenPosition: Bool { self == .allowed }
+}
+
+/// Maps a `GeoblockStatus` onto a `TradingAccess`. Pure and total — no I/O, no
+/// `ProcessInfo`, no defaults hidden inside; the DEBUG override arrives as a plain
+/// parameter so this stays a lookup table the tests can drive exhaustively.
+public enum TradingAccessPolicy {
+    /// Resolves what the user is allowed to do.
+    ///
+    /// `blocked` outranks `closeOnly` when the endpoint reports both, since it's the
+    /// stricter of the two.
+    /// - Parameters:
+    ///   - status: The geoblock status reported by `GeoblockService`.
+    ///   - override: A DEBUG-only escape hatch that forces `.allowed`. Always `false`
+    ///     in release builds — the caller is responsible for that.
+    /// - Returns: What the user may do.
+    public static func resolve(status: GeoblockStatus, override: Bool = false) -> TradingAccess {
+        if override { return .allowed }
+        if status.blocked { return .blocked(region: status.region) }
+        if status.closeOnly { return .closeOnly(region: status.region) }
+        return .allowed
+    }
+}
+
 /// EIP-712 L1 signing on-device. The concrete implementation is supplied by a
 /// **vetted crypto library under security review** — never hand-rolled here.
 public protocol WalletSigner: Sendable {

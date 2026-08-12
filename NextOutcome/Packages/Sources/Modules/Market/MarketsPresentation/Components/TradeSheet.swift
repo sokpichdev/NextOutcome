@@ -2,11 +2,14 @@
 //  TradeSheet.swift
 //  NextOutcome
 //
+//  Created by Sok Pich on 12/8/2026.
+//
 
 import SwiftUI
 import DesignSystem
 import MarketsDomain
 import TradingDomain
+import TradingPresentation
 
 /// Mock trade entry sheet: a raised Yes/No side picker, a big dollar amount driven by
 /// the custom `DSNumberPad`, a "To win $X" row from `PayoutCalculator`, and a Trade
@@ -16,9 +19,16 @@ import TradingDomain
 ///
 /// The sheet never uses the system keyboard: `DSNumberPad` owns all amount entry, so the
 /// layout below it is fixed and the amount stays on screen while typing.
+///
+/// **Geoblocking is enforced here, not at the call sites.** The sheet is presented from
+/// six screens, so gating each one would be six chances to miss one; reading
+/// `\.tradingAccess` inside the sheet gates every entry point, including future ones.
 public struct TradeSheet: View {
     /// Dismisses the sheet (used after the success animation).
     @Environment(\.dismiss) private var dismiss
+    /// Whether the user's region may open a position. Injected by `RootView`; defaults
+    /// to `.allowed` so previews and tests aren't gated by accident.
+    @Environment(\.tradingAccess) private var tradingAccess
     /// The view model driving amount entry, side, payout, and submission.
     @State private var viewModel: TradeSheetViewModel
 
@@ -31,7 +41,15 @@ public struct TradeSheet: View {
     public var body: some View {
         VStack(spacing: DSLayout.spacingLarge) {
             header
-            if viewModel.phase == .success {
+            // Checked before every other state: a gated user must never reach the pad,
+            // the confirm button, or a success screen.
+            if !tradingAccess.canOpenPosition {
+                // Centred in the sheet's full height — the gate is the whole content
+                // here, not a banner above a form.
+                Spacer(minLength: 0)
+                TradingGateView(access: tradingAccess) { dismiss() }
+                Spacer(minLength: 0)
+            } else if viewModel.phase == .success {
                 successView
             } else {
                 sideToggle

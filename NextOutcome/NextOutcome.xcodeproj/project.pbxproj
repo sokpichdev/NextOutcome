@@ -22,6 +22,7 @@
 		6913AD012FF3B253007A6162 /* LiveStatsDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AD002FF3B253007A6162 /* LiveStatsDomain */; };
 		6913AD032FF3B253007A6162 /* LiveStatsData in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AD022FF3B253007A6162 /* LiveStatsData */; };
 		6913AD052FF3B253007A6162 /* LiveStatsPresentation in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AD042FF3B253007A6162 /* LiveStatsPresentation */; };
+		6913AE012FF3B253007A6162 /* TradingData in Frameworks */ = {isa = PBXBuildFile; productRef = 6913AE002FF3B253007A6162 /* TradingData */; };
 		6963D765302741760084952C /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 6963D764302741760084952C /* AppIcon.icon */; };
 /* End PBXBuildFile section */
 
@@ -100,6 +101,7 @@
 				6913AD012FF3B253007A6162 /* LiveStatsDomain in Frameworks */,
 				6913AD032FF3B253007A6162 /* LiveStatsData in Frameworks */,
 				6913AD052FF3B253007A6162 /* LiveStatsPresentation in Frameworks */,
+				6913AE012FF3B253007A6162 /* TradingData in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -176,6 +178,7 @@
 				6913AD002FF3B253007A6162 /* LiveStatsDomain */,
 				6913AD022FF3B253007A6162 /* LiveStatsData */,
 				6913AD042FF3B253007A6162 /* LiveStatsPresentation */,
+				6913AE002FF3B253007A6162 /* TradingData */,
 			);
 			productName = NextOutcome;
 			productReference = 6999852F2FF188A80055E4BF /* NextOutcome.app */;
@@ -753,6 +756,10 @@
 		6913AD042FF3B253007A6162 /* LiveStatsPresentation */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = LiveStatsPresentation;
+		};
+		6913AE002FF3B253007A6162 /* TradingData */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TradingData;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

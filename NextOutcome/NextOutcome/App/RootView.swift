@@ -14,6 +14,7 @@ import LiveStatsDomain
 import LiveStatsPresentation
 import PortfolioPresentation
 import TradingDomain
+import TradingPresentation
 
 /// The top-level screen of the app: a four-tab layout (Home, Search, Breaking,
 /// Portfolio) with a side drawer that can slide in from the left.
@@ -80,6 +81,9 @@ struct RootView: View {
     private let btcLiveFactory: BTCLiveViewModelFactory
     /// Handles (simulated) order submission for the mock trade sheet.
     private let tradeSubmitter: TradeSubmitting
+    /// Resolves whether the user's region may open a position. Held in `@State` so the
+    /// answer survives tab switches and only has to be fetched once per launch.
+    @State private var tradingAccessViewModel: TradingAccessViewModel
     /// Streams live sports-stats updates to the Live sub-tab.
     private let sportsStreamer: any SportsStateStreaming
 
@@ -143,6 +147,7 @@ struct RootView: View {
         btcLiveFactory = container.makeBTCLiveFactory()
         tradeSubmitter = container.makeTradeSubmitter()
         sportsStreamer = container.makeSportsStreamer()
+        _tradingAccessViewModel = State(initialValue: container.makeTradingAccessViewModel())
     }
 
     /// The view hierarchy: the tab bar with the drawer layered on top, plus the shared
@@ -167,7 +172,11 @@ struct RootView: View {
         .environment(\.priceHistoryProvider, priceHistoryProvider)
         .environment(\.btcLiveFactory, btcLiveFactory)
         .environment(\.tradeSubmitter, tradeSubmitter)
+        .environment(\.tradingAccess, tradingAccessViewModel.access)
         .environment(\.sportsStreamer, sportsStreamer)
+        // Resolved once per launch. `refresh()` never throws — a failure leaves the last
+        // known answer in place rather than blocking or unblocking on a network blip.
+        .task { await tradingAccessViewModel.refresh() }
     }
 
     /// The four-tab layout. Each tab gets its own `NavigationStack` so navigation depth is

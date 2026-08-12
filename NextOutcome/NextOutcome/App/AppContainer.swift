@@ -19,6 +19,8 @@ import PortfolioData
 import PortfolioDomain
 import PortfolioPresentation
 import TradingDomain
+import TradingData
+import TradingPresentation
 
 /// The app's composition root — a single object that builds and holds the shared
 /// dependencies (repositories, streams) once, then hands out ready-made view models
@@ -45,6 +47,8 @@ final class AppContainer {
     private let cryptoPriceStream: CryptoSpotPriceStreaming
     /// Fetches the user's positions, activity, and leaderboard data.
     private let portfolioRepository: PortfolioRepository
+    /// Polymarket's public geoblock endpoint, used to gate the trade sheet.
+    private let geoblockService: GeoblockService
 
     /// Creates the container and eagerly builds the shared low-level dependencies.
     ///
@@ -61,6 +65,7 @@ final class AppContainer {
         self.marketStream = MarketSocket()
         self.cryptoPriceStream = RTDSSocket()
         self.portfolioRepository = DataPortfolioRepository(client: client)
+        self.geoblockService = GeoblockClient(client: client)
     }
 
     /// Builds the view model for the main markets/events list screen.
@@ -295,6 +300,19 @@ final class AppContainer {
     /// with zero UI changes.
     func makeTradeSubmitter() -> TradeSubmitting {
         SimulatedTradeSubmitter()
+    }
+
+    /// Resolves whether the user's region may open a position, gating the trade sheet.
+    ///
+    /// DEBUG builds route through `launchArgumentDriven` so `-simulateGeoblock` and
+    /// `-allowTradingInBlockedRegion` can drive the gate in the simulator; release builds
+    /// get the plain service with no escape hatches compiled in.
+    func makeTradingAccessViewModel() -> TradingAccessViewModel {
+        #if DEBUG
+        return .launchArgumentDriven(service: geoblockService)
+        #else
+        return TradingAccessViewModel(service: geoblockService)
+        #endif
     }
 
     /// Live sports-stats streamer injected into the environment so the Live sub-tab can

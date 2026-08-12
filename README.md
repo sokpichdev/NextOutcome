@@ -99,6 +99,7 @@ watch-only today, with on-chain trading actively on the roadmap.
 - **Social strip** — comments, top holders, and recent activity per event.
 - **Light/Dark theme** — app-wide toggle from the drawer, persisted locally, independent of system appearance.
 - **Mock trade sheet** — amount entry on a custom `DSNumberPad` numeric keyboard with tactile 3D "key" buttons and a live "to win" payout. **Simulated only** — sends nothing, stores nothing — until real trading lands.
+- **Geoblock gate** — the trade sheet resolves Polymarket's public geoblock status on launch and refuses to open in blocked regions, with separate wording for close-only regions. Enforced inside the sheet, so every entry point is covered.
 
 ---
 
@@ -237,7 +238,7 @@ Each feature slice (Markets, Orderbook, Portfolio, LiveStats, Trading) has its o
 
 ## Project Status
 
-🚧 **In active development.** Browsing (with a dynamic, tag-resolved category rail), live order books, the Crypto hub with a live BTC detail screen, live sports/World Cup, the Esports hub, the watch-only portfolio, and app-wide light/dark theming are implemented. Trading is **mock/simulated** pending wallet + proxy integration and funding.
+🚧 **In active development.** Browsing (with a dynamic, tag-resolved category rail), live order books, the Crypto hub with a live BTC detail screen, live sports/World Cup, the Esports hub, the watch-only portfolio, and app-wide light/dark theming are implemented. Trading is **mock/simulated** pending wallet + proxy integration and funding — though the geoblock gate that fronts it is real and enforced.
 
 ---
 
@@ -254,6 +255,7 @@ Each feature slice (Markets, Orderbook, Portfolio, LiveStats, Trading) has its o
 - [x] 1024pt app icon (light/dark/tinted variants)
 - [x] Continuous integration — package tests + app-target build on every push/PR (GitHub Actions)
 - [x] XCUITest UI suite covering core app flows
+- [x] Geoblock gate on the trade sheet — blocked and close-only regions can't open a position
 - [ ] Real on-chain trading — vetted EIP-712 signer + backend proxy (currently simulated)
 - [ ] Wallet connect & session auth
 - [ ] Portfolio funding and real positions on market detail
