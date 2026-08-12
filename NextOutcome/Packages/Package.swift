@@ -17,9 +17,13 @@ let package = Package(
         .library(name: "PortfolioDomain",        targets: ["PortfolioDomain"]),
         .library(name: "PortfolioData",          targets: ["PortfolioData"]),
         .library(name: "PortfolioPresentation",  targets: ["PortfolioPresentation"]),
-        // Trading — isolated, quarantined. The read-only app never links these.
+        // Trading — isolated. The app links Domain/Data/Presentation for the mock trade
+        // sheet and the geoblock gate; what stays quarantined is wallet *signing*, which
+        // is an `UnavailableWalletSigner` stub until a vetted secp256k1/EIP-712
+        // implementation passes security review.
         .library(name: "TradingDomain",          targets: ["TradingDomain"]),
         .library(name: "TradingData",            targets: ["TradingData"]),
+        .library(name: "TradingPresentation",    targets: ["TradingPresentation"]),
         .library(name: "LiveStatsDomain",        targets: ["LiveStatsDomain"]),
         .library(name: "LiveStatsData",          targets: ["LiveStatsData"]),
         .library(name: "LiveStatsPresentation",  targets: ["LiveStatsPresentation"]),
@@ -45,10 +49,11 @@ let package = Package(
         ),
         .target(
             name: "MarketsPresentation",
-            // TradingDomain (mock trade sheet + simulated submitter only) is the one
-            // Trading target the read-only app links; TradingData's real wallet-signing
-            // and proxy gateway stay quarantined until Task D.
-            dependencies: ["MarketsDomain", "DesignSystem", "OrderbookPresentation", "OrderbookDomain", "SharedDomain", "TradingDomain", "LiveStatsPresentation", "LiveStatsDomain"],
+            // TradingDomain supplies the mock trade sheet's simulated submitter;
+            // TradingPresentation supplies the geoblock gate the sheet renders when the
+            // user's region can't open a position. Neither pulls in TradingData — the
+            // App composition root injects that.
+            dependencies: ["MarketsDomain", "DesignSystem", "OrderbookPresentation", "OrderbookDomain", "SharedDomain", "TradingDomain", "TradingPresentation", "LiveStatsPresentation", "LiveStatsDomain"],
             path: "Sources/Modules/Market/MarketsPresentation"
         ),
 
@@ -86,7 +91,7 @@ let package = Package(
             path: "Sources/Modules/Portfolio/PortfolioPresentation"
         ),
 
-        // Trading feature (isolated; quarantined from the read-only app)
+        // Trading feature (isolated; wallet signing stays stubbed pending security review)
         .target(
             name: "TradingDomain",
             dependencies: [],
@@ -96,6 +101,11 @@ let package = Package(
             name: "TradingData",
             dependencies: ["TradingDomain", "Networking"],
             path: "Sources/Modules/Trading/TradingData"
+        ),
+        .target(
+            name: "TradingPresentation",
+            dependencies: ["TradingDomain", "DesignSystem"],
+            path: "Sources/Modules/Trading/TradingPresentation"
         ),
 
         // LiveStats feature (sports live stats; undocumented feed, isolated slice)
@@ -149,6 +159,10 @@ let package = Package(
         .testTarget(
             name: "TradingDataTests",
             dependencies: ["TradingData", "TradingDomain", "Networking"]
+        ),
+        .testTarget(
+            name: "TradingPresentationTests",
+            dependencies: ["TradingPresentation", "TradingDomain"]
         ),
         .testTarget(name: "LiveStatsDomainTests", dependencies: ["LiveStatsDomain"]),
         .testTarget(
