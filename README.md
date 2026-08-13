@@ -87,14 +87,15 @@ watch-only today, with on-chain trading actively on the roadmap.
 
 ## Features
 
-- **Markets feed** — trending, a dynamic category rail (pinned tabs plus curated categories like Crypto/Esports resolved live from Gamma tags), sort/status filters, and hide-sports toggle, with infinite scroll.
+- **Navigation** — three primary tabs (Home, Breaking, Portfolio) with Search set apart as a standalone button on the trailing edge, plus a slide-in drawer.
+- **Markets feed** — an "All" default feed, a dynamic category rail (curated categories like Crypto/Esports resolved live from Gamma tags), sort/status filters, and hide-sports toggle, with infinite scroll. Multi-outcome cards preview an event's two likeliest options, ranked by probability.
 - **Search** — debounced full-text market search.
 - **Event & market detail** — multi-series price chart with selectable timeframes, a "% chance" header, grouped market sections (moneyline / spreads / totals), rules expander, and a sticky header on scroll.
 - **Live order book** — expandable depth ladder streamed over WebSocket with transparent reconnect/back-off, plus spread and cumulative-size depth bars.
 - **Crypto hub** — classifies markets into Up/Down, Above/Below, Price Range, and Hit Price, with sort/period/timeframe filters and search. Up/Down cards open a **live BTC detail screen**: server-clock countdown, price-to-beat delta, a Price/Chance/Candles chart, live quick-bet buttons, and a recent-trades ticker.
 - **Live sports stats** — score hero, minute timeline, stats, pitch, lineups, and commentary, streamed from the public sports feed.
 - **World Cup hub** — Games schedule, Props (awards / player H2H / group futures), a Bracket carousel (Groups → knockout rounds), and a Map tab with a rotating, draggable **SceneKit globe** of nation odds.
-- **Esports hub** — live matches with a stream hero (Twitch / YouTube embeds behind a live-status probe with YouTube fallback), match cards, a live trade ticker, and a leaderboard, with scores pushed over the sports WebSocket.
+- **Esports hub** — live matches with a stream hero (Twitch / YouTube embeds behind a live-status probe with YouTube fallback), match cards, a live trade ticker, and a leaderboard, with scores pushed over the sports WebSocket. A match opens the same purpose-built detail screen — scoreboard, map sections, Livestream tab — from whichever feed it was tapped in.
 - **Portfolio (watch-only)** — track any wallet's open/closed positions, activity feed, and the trader leaderboard. No keys, no custody.
 - **Social strip** — comments, top holders, and recent activity per event.
 - **Light/Dark theme** — app-wide toggle from the drawer, persisted locally, independent of system appearance.
@@ -220,7 +221,7 @@ cd NextOutcome/Packages
 swift test
 ```
 
-Each feature slice (Markets, Orderbook, Portfolio, LiveStats, Trading) has its own `*DomainTests` and `*DataTests` targets — Domain tests exercise Use Cases against stub repositories, Data tests exercise DTO decoding against fixture JSON. `Networking` and `DesignSystem` have their own test targets too. These ~420 tests are hermetic (no simulator, no network).
+Each feature slice (Markets, Orderbook, Portfolio, LiveStats, Trading) has its own `*DomainTests` and `*DataTests` targets — Domain tests exercise Use Cases against stub repositories, Data tests exercise DTO decoding against fixture JSON. `Networking` and `DesignSystem` have their own test targets too. These ~680 tests are hermetic (no simulator, no network).
 
 **Continuous integration.** [`.github/workflows/tests.yml`](.github/workflows/tests.yml) runs on every push and PR to `main`: one job runs the package suite (`swift test`), a second compiles the Xcode app target (`xcodebuild`, code-signing off) to catch breaks in `App/`/`AppContainer` that the package suite can't see.
 

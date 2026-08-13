@@ -9,9 +9,13 @@ import DesignSystem
 @MainActor
 final class HubTabsViewModelTests: XCTestCase {
     /// The shape of the live `top-navbar` row, trimmed to what these tests need.
+    ///
+    /// `all` really does come back with `activeEventsCount: 0` — it is a pseudo-tag that
+    /// nothing is tagged with. Fixtures here once gave it a non-zero count, which hid the fact
+    /// that the dead-tag filter was eating the chip in production; keep it at 0.
     private func navRow() -> [Tag] {
         [
-            Tag(id: "100215", label: "All", slug: "all", activeEventsCount: 2),
+            Tag(id: "100215", label: "All", slug: "all", activeEventsCount: 0),
             Tag(id: "2", label: "Politics", slug: "politics", activeEventsCount: 1556),
             Tag(id: "21", label: "Crypto", slug: "crypto", activeEventsCount: 3515),
         ]
@@ -52,7 +56,7 @@ final class HubTabsViewModelTests: XCTestCase {
         // The injection has to retire itself the day Polymarket adds the tag to the nav row,
         // deferring to the server's label, id and rank.
         let repo = SpyMarketRepository(rowsBySlug: ["top-navbar": [
-            Tag(id: "100215", label: "All", slug: "all", activeEventsCount: 2),
+            Tag(id: "100215", label: "All", slug: "all", activeEventsCount: 0),
             Tag(id: "64", label: "Esports & Gaming", slug: "esports", activeEventsCount: 751),
             Tag(id: "21", label: "Crypto", slug: "crypto", activeEventsCount: 3515),
         ]])
@@ -68,7 +72,7 @@ final class HubTabsViewModelTests: XCTestCase {
 
     func test_load_appendsEsportsWhenCryptoAbsent() async {
         let repo = SpyMarketRepository(rowsBySlug: ["top-navbar": [
-            Tag(id: "100215", label: "All", slug: "all", activeEventsCount: 2),
+            Tag(id: "100215", label: "All", slug: "all", activeEventsCount: 0),
             Tag(id: "2", label: "Politics", slug: "politics", activeEventsCount: 1556),
         ]])
         let vm = HubTabsViewModel(fetchRelatedTags: FetchRelatedTagsUseCase(repository: repo))
@@ -109,14 +113,46 @@ final class HubTabsViewModelTests: XCTestCase {
     func test_load_dropsDeadTags() async {
         // Gamma's status=active is a no-op, so expired topics arrive with a zero count.
         let repo = SpyMarketRepository(rowsBySlug: ["top-navbar": [
-            Tag(id: "100215", label: "All", slug: "all", activeEventsCount: 2),
+            Tag(id: "2", label: "Politics", slug: "politics", activeEventsCount: 1556),
             Tag(id: "999", label: "June 27", slug: "may30", activeEventsCount: 0),
         ]])
         let vm = HubTabsViewModel(fetchRelatedTags: FetchRelatedTagsUseCase(repository: repo))
 
         await vm.loadDynamicTabsIfNeeded()
 
-        XCTAssertEqual(vm.tabs.map(\.id), ["all", "esports"])
+        XCTAssertFalse(vm.tabs.contains { $0.id == "may30" })
+        XCTAssertEqual(vm.tabs.map(\.id), ["all", "politics", "esports"])
+    }
+
+    func test_load_restoresAllChipDroppedByTheDeadTagFilter() async {
+        // The regression this guards: `all` is ranked first by Gamma but reports
+        // `activeEventsCount: 0`, so FetchRelatedTagsUseCase's dead-tag filter removes it. The
+        // rail then lost its default category the moment the live row landed, with no way back
+        // to the unfiltered feed.
+        let repo = SpyMarketRepository(rowsBySlug: ["top-navbar": navRow()])
+        let vm = HubTabsViewModel(fetchRelatedTags: FetchRelatedTagsUseCase(repository: repo))
+
+        await vm.loadDynamicTabsIfNeeded()
+
+        XCTAssertEqual(vm.tabs.first?.id, "all")
+        XCTAssertEqual(vm.tabs.first?.title, "All")
+        // Restored as the pseudo-tab, so it still queries no tag at all.
+        XCTAssertNil(vm.tabs.first?.tagID)
+    }
+
+    func test_load_doesNotDuplicateAllWhenTheServerRowKeepsIt() async {
+        // Should Gamma ever give `all` a live count, the fetched entry must win outright.
+        let repo = SpyMarketRepository(rowsBySlug: ["top-navbar": [
+            Tag(id: "2", label: "Politics", slug: "politics", activeEventsCount: 1556),
+            Tag(id: "100215", label: "All", slug: "all", activeEventsCount: 7),
+        ]])
+        let vm = HubTabsViewModel(fetchRelatedTags: FetchRelatedTagsUseCase(repository: repo))
+
+        await vm.loadDynamicTabsIfNeeded()
+
+        XCTAssertEqual(vm.tabs.filter { $0.id == "all" }.count, 1)
+        // Server rank kept — not hoisted to the front.
+        XCTAssertEqual(vm.tabs.map(\.id), ["politics", "all", "esports"])
     }
 
     func test_load_keepsFallbackWhenFetchFails() async {

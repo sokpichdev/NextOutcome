@@ -276,6 +276,40 @@ final class EsportsUITests: XCTestCase {
         }
         attachScreenshot(of: app, named: "Esports — match detail livestream")
     }
+
+    /// The same esports match opens the same screen no matter which feed it was tapped in.
+    ///
+    /// Before `eventDetailDestination`, only the Esports hub registered the match screen, so
+    /// an identical live match opened a scoreboard from the hub and a plain market list from
+    /// Search or the All feed. Search is the feed driven here because it's the one that can be
+    /// steered to esports content deterministically.
+    @MainActor
+    func testEsportsMatchOpensTheMatchScreenFromSearch() throws {
+        let app = XCUIApplication.launched()
+
+        app.searchTab.tap()
+        let field = app.searchField
+        assertAppears(field, timeout: UIWait.load, "The search field should exist")
+        field.tap()
+        // A game title rather than a team: rosters churn constantly, games don't.
+        field.typeText("Counter-Strike")
+
+        guard app.anyVolumeLabel.waitForExistence(timeout: UIWait.firstLoad) else {
+            throw XCTSkip("No Counter-Strike markets are listed right now — nothing to open")
+        }
+        app.anyVolumeLabel.tap()
+        assertAppears(app.backButton, timeout: UIWait.load, "Tapping a result should push a screen")
+
+        // Futures ("EWC 2026 CS2: Winner") are esports but not matches, and correctly keep the
+        // generic screen — so a run that lands on one proves nothing either way.
+        guard app.marketSegment.waitForExistence(timeout: UIWait.load) else {
+            throw XCTSkip("The tapped result was a futures market, not a match")
+        }
+        XCTAssertTrue(app.scoreboard.exists,
+                      "A match opened from Search should get the esports scoreboard, "
+                      + "not the generic event screen")
+        attachScreenshot(of: app, named: "Esports — match detail opened from Search")
+    }
 }
 
 private extension XCUIApplication {

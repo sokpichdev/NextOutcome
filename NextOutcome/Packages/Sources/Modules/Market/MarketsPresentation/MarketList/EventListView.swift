@@ -52,7 +52,7 @@ public struct EventListView: View {
             content
         }
         .background(DSColor.background)
-        .navigationDestination(for: Event.self) { EventDetailView(event: $0) }
+        .eventDetailDestination()
         .navigationDestination(for: MarketNavigationTarget.self) {
             MarketDetailView(market: $0.market, eventID: $0.eventID)
         }

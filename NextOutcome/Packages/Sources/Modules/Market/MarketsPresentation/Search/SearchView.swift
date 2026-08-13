@@ -35,7 +35,7 @@ public struct SearchView: View {
             content
         }
         .background(DSColor.background)
-        .navigationDestination(for: Event.self) { EventDetailView(event: $0) }
+        .eventDetailDestination()
     }
 
     /// The inline search input. Mirrors `CryptoHubView.searchField` so the two screens

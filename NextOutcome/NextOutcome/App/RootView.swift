@@ -16,8 +16,9 @@ import PortfolioPresentation
 import TradingDomain
 import TradingPresentation
 
-/// The top-level screen of the app: a four-tab layout (Home, Search, Breaking,
-/// Portfolio) with a side drawer that can slide in from the left.
+/// The top-level screen of the app: three primary tabs (Home, Breaking, Portfolio) with a
+/// standalone Search button set apart from them, plus a side drawer that can slide in from
+/// the left.
 ///
 /// `RootView` owns the long-lived view models and the shared factories/services. It
 /// holds the tab-driving view models in `@State` so their loaded data survives when the
@@ -179,68 +180,80 @@ struct RootView: View {
         .task { await tradingAccessViewModel.refresh() }
     }
 
-    /// The four-tab layout. Each tab gets its own `NavigationStack` so navigation depth is
-    /// tracked independently per tab.
+    /// The tab layout: three primary destinations (Home, Breaking, Portfolio) plus a Search
+    /// tab that sits apart from them. Each tab gets its own `NavigationStack` so navigation
+    /// depth is tracked independently per tab.
+    ///
+    /// Search uses `Tab(role: .search)`, which is why it is declared last and still appears
+    /// on the trailing edge: the system pulls a search-role tab out of the main group and
+    /// renders it as a standalone button separated from the other three. Declaring it as an
+    /// ordinary `Tab` would fold it back in as a fourth peer.
     private var tabs: some View {
         // A tab view with its own navigation stack for each section.
         TabView {
-            NavigationStack {
-                chrome(tabs: hubTabsViewModel.tabs) {
-                    // Home tab content changes depending on the selected shell category.
-                    // The view models here are kept at root so the feed state does not
-                    // reset when users switch tabs.
-                    //
-                    // Every branch matches on a Gamma tag slug (HubTab equality is id-only),
-                    // and the rail itself is fetched from the `top-navbar` tag. Polymarket
-                    // does not list `world-cup` there, so that branch is unreachable from the
-                    // rail right now — it is NOT dead code, and lights up again the moment the
-                    // tag reappears in the nav. (World Cup is also reachable inside the Sports
-                    // hub; Breaking has its own bottom tab.) `esports` is missing from the nav
-                    // too, but `HubTabsViewModel` injects it the way polymarket.com does, so
-                    // this branch does fire.
-                    if selectedCategory == .worldCup {
-                        WorldCupHubView(viewModel: worldCupViewModel)
-                    } else if selectedCategory == .breaking {
-                        BreakingView(viewModel: breakingViewModel)
-                    } else if selectedCategory == .sports {
-                        SportsHubView(
-                            viewModel: sportsHubViewModel,
-                            worldCupViewModel: worldCupViewModel,
-                            fetchAllEvents: fetchAllEventsUseCase
-                        )
-                    } else if selectedCategory.id == "crypto" {
-                        CryptoHubView(viewModel: cryptoHubViewModel, tagID: selectedCategory.tagID)
-                    } else if selectedCategory.id == "esports" {
-                        EsportsHubView(
-                            viewModel: esportsHubViewModel,
-                            tagID: selectedCategory.tagID,
-                            leaderboard: AnyView(EsportsLeaderboardView(viewModel: esportsLeaderboardViewModel))
-                        )
-                    } else {
-                        EventListView(
-                            viewModel: eventListViewModel,
-                            selectedCategory: selectedCategory,
-                            politicsHubViewModel: selectedCategory == .politics ? politicsHubViewModel : nil
-                        )
+            Tab("Home", systemImage: "house") {
+                NavigationStack {
+                    chrome(tabs: hubTabsViewModel.tabs) {
+                        // Home tab content changes depending on the selected shell category.
+                        // The view models here are kept at root so the feed state does not
+                        // reset when users switch tabs.
+                        //
+                        // Every branch matches on a Gamma tag slug (HubTab equality is id-only),
+                        // and the rail itself is fetched from the `top-navbar` tag. Polymarket
+                        // does not list `world-cup` there, so that branch is unreachable from the
+                        // rail right now — it is NOT dead code, and lights up again the moment the
+                        // tag reappears in the nav. (World Cup is also reachable inside the Sports
+                        // hub; Breaking has its own bottom tab.) `esports` is missing from the nav
+                        // too, but `HubTabsViewModel` injects it the way polymarket.com does, so
+                        // this branch does fire.
+                        if selectedCategory == .worldCup {
+                            WorldCupHubView(viewModel: worldCupViewModel)
+                        } else if selectedCategory == .breaking {
+                            BreakingView(viewModel: breakingViewModel)
+                        } else if selectedCategory == .sports {
+                            SportsHubView(
+                                viewModel: sportsHubViewModel,
+                                worldCupViewModel: worldCupViewModel,
+                                fetchAllEvents: fetchAllEventsUseCase
+                            )
+                        } else if selectedCategory.id == "crypto" {
+                            CryptoHubView(viewModel: cryptoHubViewModel, tagID: selectedCategory.tagID)
+                        } else if selectedCategory.id == "esports" {
+                            EsportsHubView(
+                                viewModel: esportsHubViewModel,
+                                tagID: selectedCategory.tagID,
+                                leaderboard: AnyView(EsportsLeaderboardView(viewModel: esportsLeaderboardViewModel))
+                            )
+                        } else {
+                            EventListView(
+                                viewModel: eventListViewModel,
+                                selectedCategory: selectedCategory,
+                                politicsHubViewModel: selectedCategory == .politics ? politicsHubViewModel : nil
+                            )
+                        }
                     }
                 }
             }
-            .tabItem { Label("Home", systemImage: "house") }
 
-            NavigationStack {
-                chrome(showsCategoryRail: false) { SearchView(viewModel: searchViewModel) }
+            Tab("Breaking", systemImage: "bolt.fill") {
+                NavigationStack {
+                    chrome(showsCategoryRail: false) { BreakingView(viewModel: breakingViewModel) }
+                }
             }
-            .tabItem { Label("Search", systemImage: "magnifyingglass") }
 
-            NavigationStack {
-                chrome(showsCategoryRail: false) { BreakingView(viewModel: breakingViewModel) }
+            // The label is the live balance string (e.g. "$7.02"), not "Portfolio", so UI
+            // tests match this tab positionally rather than by label.
+            Tab(shellViewModel.balanceLabel, systemImage: "chart.line.uptrend.xyaxis") {
+                NavigationStack {
+                    chrome(showsCategoryRail: false) { PortfolioView(viewModel: portfolioViewModel) }
+                }
             }
-            .tabItem { Label("Breaking", systemImage: "bolt.fill") }
 
-            NavigationStack {
-                chrome(showsCategoryRail: false) { PortfolioView(viewModel: portfolioViewModel) }
+            Tab("Search", systemImage: "magnifyingglass", role: .search) {
+                NavigationStack {
+                    chrome(showsCategoryRail: false) { SearchView(viewModel: searchViewModel) }
+                }
             }
-            .tabItem { Label(shellViewModel.balanceLabel, systemImage: "chart.line.uptrend.xyaxis") }
         }
     }
 
