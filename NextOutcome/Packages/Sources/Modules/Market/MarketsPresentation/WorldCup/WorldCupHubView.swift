@@ -34,7 +34,7 @@ public struct WorldCupHubView: View {
         }
         .background(DSColor.background)
         .refreshable { await viewModel.refresh() }
-        .navigationDestination(for: Event.self) { EventDetailView(event: $0) }
+        .eventDetailDestination()
         .navigationDestination(for: MarketNavigationTarget.self) {
             MarketDetailView(market: $0.market, eventID: $0.eventID)
         }

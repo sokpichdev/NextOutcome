@@ -17,8 +17,29 @@ import MarketsDomain
 /// argument rather than owning it, which is what lets the hub render a game it has never
 /// heard of.
 public enum EsportsCatalog {
+    /// Whether an event is an esports match — the test for "should this push the esports
+    /// match screen?" from a feed that isn't already scoped to esports.
+    ///
+    /// `isMatch` alone is **not** that test, and using it as one is a trap: it separates
+    /// matches from futures *within* the esports tag, so it answers true for anything with a
+    /// moneyline market or a `" vs "` title — which is every NFL, MLB and WNBA game in the
+    /// general feed. ("Kansas City Royals vs. Los Angeles Dodgers" even carries the `games`
+    /// tag that `isMatch` reads.) Routing on it from the All feed would send regular sports
+    /// games to the esports scoreboard.
+    ///
+    /// The esports tag is the discriminator that holds in both directions: every event under
+    /// Gamma's esports tag carries it, and no traditional-sports event does — they carry
+    /// `sports`/`games` instead. Checked by **id**, not slug, for the reason given on
+    /// `league(for:in:)`: game tag slugs are inconsistent, ids are not.
+    public static func isEsportsMatch(_ event: Event) -> Bool {
+        event.tags.contains { $0.id == FetchEsportsLeaguesUseCase.esportsTagID } && isMatch(event)
+    }
+
     /// Whether an event is a team-vs-team match (rather than a futures/prop market):
     /// it carries a moneyline market, or Gamma's `games` tag, or a " vs " title.
+    ///
+    /// Only meaningful for events already known to be esports — see `isEsportsMatch(_:)`
+    /// before reaching for this from a general feed.
     public static func isMatch(_ event: Event) -> Bool {
         if event.markets.contains(where: { $0.sportsMarketType?.localizedCaseInsensitiveContains("moneyline") == true }) {
             return true

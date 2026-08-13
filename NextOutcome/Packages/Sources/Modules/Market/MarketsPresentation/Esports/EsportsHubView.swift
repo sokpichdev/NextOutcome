@@ -21,9 +21,6 @@ public struct EsportsHubView: View {
     private let tagID: String?
     /// The Leaderboard tab's screen, built by the composition root.
     private let leaderboard: AnyView
-    /// Builds the match detail screen's view model; `nil` in previews/tests, which fall back
-    /// to the generic event screen.
-    @Environment(\.esportsMatchDetailFactory) private var esportsMatchDetailFactory
 
     /// Creates the view.
     /// - Parameters:
@@ -50,17 +47,10 @@ public struct EsportsHubView: View {
         }
         .background(DSColor.background)
         // Matches get the purpose-built esports screen; futures ("LCK 2026 Season Winner")
-        // aren't matches at all, so they keep the generic event screen — as does any host
-        // that hasn't injected the factory (previews, tests).
-        .navigationDestination(for: Event.self) { event in
-            if EsportsCatalog.isMatch(event), let esportsMatchDetailFactory {
-                EsportsMatchDetailView(
-                    viewModel: esportsMatchDetailFactory(event, viewModel.league(for: event))
-                )
-            } else {
-                EventDetailView(event: event)
-            }
-        }
+        // aren't matches at all, so they keep the generic event screen. The rule itself now
+        // lives in `eventDetailDestination` so the other feeds route the same match the same
+        // way; this hub is just the one caller that can also name the league.
+        .eventDetailDestination { viewModel.league(for: $0) }
         .task {
             if let tagID { await viewModel.loadIfNeeded(tagID: tagID) }
             viewModel.startLivePolling()

@@ -42,6 +42,35 @@ final class EsportsCatalogTests: XCTestCase {
         XCTAssertFalse(EsportsCatalog.isMatch(e))
     }
 
+    // MARK: isEsportsMatch
+
+    func test_isEsportsMatch_esportsTaggedMatch() {
+        // Gamma ships the esports tag on every event under it, alongside the game's own tag
+        // and `sports` — matching on id 64 is what separates it from traditional sports.
+        let e = event(title: "Dota 2: Team Falcons vs LGD Gaming (BO3) - The International",
+                      tags: ["64", "102366", "100639", "1"],
+                      markets: [market(sportsMarketType: "child_moneyline")])
+        XCTAssertTrue(EsportsCatalog.isEsportsMatch(e))
+    }
+
+    func test_isEsportsMatch_rejectsTraditionalSportsGame() {
+        // The regression this guards: routing the general feed on `isMatch` alone sent every
+        // NFL/MLB/WNBA game to the esports scoreboard. A real MLB event carries a moneyline
+        // market, a " vs. " title AND the `games` tag — all three of `isMatch`'s signals —
+        // and is still not esports.
+        let e = event(title: "Kansas City Royals vs. Los Angeles Dodgers",
+                      tags: ["1", "100639", "mlb", "baseball"],
+                      markets: [market(sportsMarketType: "moneyline")])
+        XCTAssertTrue(EsportsCatalog.isMatch(e), "precondition: isMatch alone says yes")
+        XCTAssertFalse(EsportsCatalog.isEsportsMatch(e))
+    }
+
+    func test_isEsportsMatch_rejectsEsportsFutures() {
+        // Under the esports tag, but a season winner is not a match — keeps the generic screen.
+        let e = event(title: "The International 2026: Winner", tags: ["64", "102916", "1"])
+        XCTAssertFalse(EsportsCatalog.isEsportsMatch(e))
+    }
+
     // MARK: league(for:in:)
 
     /// The live catalogue's primary tag ids, trimmed to what these tests need.
