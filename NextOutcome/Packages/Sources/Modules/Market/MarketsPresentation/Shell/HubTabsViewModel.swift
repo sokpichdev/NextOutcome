@@ -73,6 +73,28 @@ public final class HubTabsViewModel {
     /// Polymarket ranked and labelled it — no duplicate chip, and the injection quietly retires
     /// itself the day the tag is added upstream.
     private static func injectingAppOwnedHubs(into row: [HubTab]) -> [HubTab] {
+        restoringUnfilteredTab(in: injectingEsports(into: row))
+    }
+
+    /// Puts the unfiltered "All" chip back at the head of the row when the fetch dropped it.
+    ///
+    /// Gamma *does* rank `all` first in `top-navbar`, but it reports `activeEventsCount: 0` —
+    /// nothing is literally tagged "all" — so `FetchRelatedTagsUseCase`'s dead-tag filter
+    /// removes it along with genuinely expired topics. That filter is right for every other
+    /// row (a chip leading to an empty feed is a bug); this one entry is the exception,
+    /// because it is a pseudo-tag that deliberately queries no tag at all. Without this step
+    /// the rail loses its default category the moment the live row lands, leaving no way back
+    /// to the unfiltered feed.
+    ///
+    /// Same "server wins" rule as `injectingEsports(into:)`: if the row still carries `all`,
+    /// it is left exactly as fetched.
+    private static func restoringUnfilteredTab(in row: [HubTab]) -> [HubTab] {
+        guard !row.contains(HubTab.all) else { return row }
+        return [.all] + row
+    }
+
+    /// Inserts the app-owned Esports entry after Crypto, mirroring polymarket.com's ordering.
+    private static func injectingEsports(into row: [HubTab]) -> [HubTab] {
         guard !row.contains(HubTab.esports) else { return row }
 
         var merged = row
