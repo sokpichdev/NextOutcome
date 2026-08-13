@@ -72,13 +72,17 @@ extension XCUIApplication {
         return app
     }
 
-    /// The four tab-bar buttons in order. The Portfolio tab's label is the
-    /// live balance string (e.g. "$7.02"), so callers must use these
-    /// positional accessors instead of label matching for tab 4.
+    /// The three primary tab-bar buttons in order. The Portfolio tab's label is the
+    /// live balance string (e.g. "$7.02"), so callers must use these positional
+    /// accessors instead of label matching for tab 3.
     var homeTab: XCUIElement { tabBars.buttons.element(boundBy: 0) }
-    var searchTab: XCUIElement { tabBars.buttons.element(boundBy: 1) }
-    var breakingTab: XCUIElement { tabBars.buttons.element(boundBy: 2) }
-    var portfolioTab: XCUIElement { tabBars.buttons.element(boundBy: 3) }
+    var breakingTab: XCUIElement { tabBars.buttons.element(boundBy: 1) }
+    var portfolioTab: XCUIElement { tabBars.buttons.element(boundBy: 2) }
+
+    /// The standalone Search button. It is a `Tab(role: .search)`, which the system lifts out
+    /// of the primary group and renders apart from the other three, so its position in the
+    /// bar is not something to rely on — match it by its stable "Search" label instead.
+    var searchTab: XCUIElement { tabBars.buttons["Search"] }
 
     /// The Search tab's query input. It is a plain `TextField`, not a system search
     /// field: the app hides the navigation bar in favour of its custom top bar, so
