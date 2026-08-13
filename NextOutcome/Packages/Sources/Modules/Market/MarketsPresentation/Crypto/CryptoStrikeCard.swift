@@ -23,8 +23,8 @@ public struct CryptoStrikeCard: View {
     /// The top 2 markets shown as a preview. The full, untruncated list lives one level
     /// deeper — tapping the card pushes `EventDetailView`, which lists every strike via
     /// `MarketGroupSection` (already built, no changes needed). Matches
-    /// `MultiOutcomeCard`'s existing `prefix(3)` precedent for the same "preview, not the
-    /// full list" idea.
+    /// `MultiOutcomeCard`, which previews the same number for the same "preview, not the
+    /// full list" reason.
     private var previewMarkets: [Market] { Array(event.markets.prefix(2)) }
 
     public var body: some View {

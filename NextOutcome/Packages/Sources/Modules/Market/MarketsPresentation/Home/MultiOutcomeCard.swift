@@ -10,8 +10,34 @@ public struct MultiOutcomeCard: View {
     /// - Parameter event: The event to display.
     public init(event: Event) { self.event = event }
 
-    /// The top 3 sub-markets shown as rows.
-    private var topMarkets: [Market] { Array(event.markets.prefix(3)) }
+    /// The two likeliest sub-markets, most probable first.
+    ///
+    /// A preview, not the full list — the event detail screen is where every sub-market is
+    /// listed. Two rows keeps a feed of these cards scannable and matches `CryptoStrikeCard`,
+    /// which shows the same number for the same reason.
+    ///
+    /// Ranking by probability is what makes those two rows worth showing. Gamma returns an
+    /// event's markets in its own configuration order, not by price, so a plain `prefix`
+    /// surfaced whichever options happened to be listed first — routinely the *least* likely
+    /// ones. "Fed Decision in September?" led with `50+ bps decrease` at 0.5% and `25 bps
+    /// decrease` at 1.3% while hiding `No change` at 66%. Same ranking `FuturesOddsCard`
+    /// applies for the same reason.
+    ///
+    /// Sorted on `primaryOutcome`, not `yesOutcome`: team-named markets have no Yes side and
+    /// would all rank as 0. The sort is made stable by the index tiebreak so equally-priced
+    /// rows — a date ladder where every option sits at 0% — keep Gamma's order rather than an
+    /// arbitrary one that could reshuffle between renders.
+    private var topMarkets: [Market] {
+        event.markets
+            .enumerated()
+            .sorted { lhs, rhs in
+                let lp = lhs.element.primaryOutcome?.price ?? 0
+                let rp = rhs.element.primaryOutcome?.price ?? 0
+                return lp == rp ? lhs.offset < rhs.offset : lp > rp
+            }
+            .prefix(2)
+            .map(\.element)
+    }
 
     public var body: some View {
         DSCard {
