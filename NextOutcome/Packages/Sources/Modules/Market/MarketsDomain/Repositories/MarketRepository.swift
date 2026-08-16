@@ -29,6 +29,12 @@ public protocol MarketRepository: Sendable {
     func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult]
     /// Team reference data (name, logo, colour) for a sports league, e.g. "fifwc".
     func fetchTeams(league: String) async throws -> [GameTeam]
+    /// Gamma's full league catalogue — every league Polymarket runs markets for, with its
+    /// display name, key art, classification tag, sport group, and current activity.
+    ///
+    /// Joined from two endpoints (`/sports` for identity, `/sports/summary` for activity)
+    /// because neither alone is enough: the first has no counts, the second has no tags.
+    func fetchSportsCatalogue() async throws -> [SportLeague]
     /// Gamma's league catalogue, scoped to the leagues carrying `tagID`.
     ///
     /// One endpoint returns every league Polymarket runs markets for, each with its display
@@ -78,6 +84,7 @@ public extension MarketRepository {
     /// repository overrides these.
     func fetchTeams(league: String) async throws -> [GameTeam] { [] }
     func fetchLeagues(tagID: String) async throws -> [EsportsLeague] { [] }
+    func fetchSportsCatalogue() async throws -> [SportLeague] { [] }
     func fetchFeaturedEvents(limit: Int) async throws -> [Event] { [] }
     func fetchCompletedEvents(seriesID: String, limit: Int) async throws -> [Event] { [] }
     func fetchAllEvents(tagID: String, status: EventStatus) async throws -> [Event] { [] }

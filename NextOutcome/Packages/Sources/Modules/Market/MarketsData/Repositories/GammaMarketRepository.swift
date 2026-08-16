@@ -256,16 +256,37 @@ public struct GammaMarketRepository: MarketRepository {
         return dtos.compactMap { $0.toDomain() }
     }
 
-    /// Fetches Gamma's `/sports` league catalogue, keeping the leagues tagged `tagID`.
+    /// The raw catalogue: `/sports` rows paired with the `/sports/summary` activity map.
     ///
-    /// The endpoint is unfiltered — it returns every league Polymarket runs markets for, so
-    /// the scoping happens here on each row's comma-separated `tags` field. It's a single
-    /// small payload fetched once per hub load, which is why it isn't cached; rows change on
-    /// the order of weeks, and pull-to-refresh re-reading it is the correct behaviour anyway.
-    public func fetchLeagues(tagID: String) async throws -> [EsportsLeague] {
-        let endpoint = Endpoint(host: .gamma, path: "/sports")
-        let dtos: [SportLeagueDTO] = try await client.fetch(endpoint)
-        return dtos.filter { $0.tagIDs.contains(tagID) }.compactMap { $0.toDomain() }
+    /// The two calls are concurrent because neither depends on the other and the summary is
+    /// the larger payload (~100KB); serialising them would add its latency to every hub
+    /// load. They join on the league slug — `/sports` calls it `sport`, `/sports/summary`
+    /// uses it as the dictionary key.
+    ///
+    /// Kept at DTO level so `fetchLeagues(tagID:)` can filter on the raw tag list, which the
+    /// domain entity deliberately doesn't carry.
+    private func rawCatalogue() async throws -> (rows: [SportLeagueDTO], activity: [String: SportsSummaryDTO.League]) {
+        async let leagues: [SportLeagueDTO] = client.fetch(Endpoint(host: .gamma, path: "/sports"))
+        async let summary: SportsSummaryDTO = client.fetch(Endpoint(host: .gamma, path: "/sports/summary"))
+        let (rows, activity) = try await (leagues, summary)
+        return (rows, activity.leagues)
+    }
+
+    /// Fetches Gamma's full league catalogue with activity merged in.
+    ///
+    /// Neither endpoint takes parameters, so scoping happens here. It isn't cached: rows
+    /// change on the order of weeks, and pull-to-refresh re-reading it is correct behaviour.
+    public func fetchSportsCatalogue() async throws -> [SportLeague] {
+        let (rows, activity) = try await rawCatalogue()
+        return rows.compactMap { $0.toDomain(summary: activity[$0.sport]) }
+    }
+
+    /// Fetches the catalogue, keeping only leagues whose raw `/sports` tag list contains
+    /// `tagID` — how the Esports hub scopes it to game titles (tag `64`).
+    public func fetchLeagues(tagID: String) async throws -> [SportLeague] {
+        let (rows, activity) = try await rawCatalogue()
+        return rows.filter { $0.tagIDs.contains(tagID) }
+            .compactMap { $0.toDomain(summary: activity[$0.sport]) }
     }
 
     /// Fetches the carousel filter tags from Gamma `/tags`.
