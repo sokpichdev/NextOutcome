@@ -6,6 +6,7 @@
 //
 
 import XCTest
+import SharedDomain
 @testable import MarketsDomain
 
 final class SportsCatalogueTests: XCTestCase {
@@ -84,4 +85,110 @@ final class SportsCatalogueTests: XCTestCase {
         XCTAssertFalse(empty.hasLive)
         XCTAssertFalse(empty.isLeaf)
     }
+}
+
+@MainActor
+final class FetchSportsCatalogueUseCaseTests: XCTestCase {
+    private func league(
+        _ id: String, group: String?, count: Int, live: Bool = false, volume: Decimal = 0
+    ) -> SportLeague {
+        SportLeague(
+            id: id, name: id.uppercased(), primaryTagID: "tag-\(id)", groupTagID: group,
+            activeEventCount: count, hasLive: live, volume: volume
+        )
+    }
+
+    private func useCase(_ leagues: [SportLeague]) -> FetchSportsCatalogueUseCase {
+        FetchSportsCatalogueUseCase(repository: CatalogueFakeRepository(leagues: leagues))
+    }
+
+    func test_execute_bucketsLeaguesIntoNamedGroups() async throws {
+        let groups = try await useCase([
+            league("epl", group: "100350", count: 140, volume: 297_170),
+            league("mls", group: "100350", count: 297, volume: 1_806_593),
+        ]).execute()
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].id, "100350")
+        XCTAssertEqual(groups[0].name, "Soccer")
+        XCTAssertEqual(groups[0].glyph, "soccerball")
+        XCTAssertEqual(groups[0].activeEventCount, 437)
+    }
+
+    func test_execute_ungroupedLeagueBecomesItsOwnLeaf() async throws {
+        // The mechanism behind the reference sheet's flat "MLB 130" row sitting above a
+        // separate Baseball group.
+        let groups = try await useCase([
+            league("mlb", group: nil, count: 118, live: true, volume: 5_957_601),
+        ]).execute()
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].id, "mlb")
+        XCTAssertEqual(groups[0].name, "MLB", "a leaf is named after its league, not a tag")
+        XCTAssertTrue(groups[0].isLeaf)
+    }
+
+    func test_execute_sortsGroupsByVolumeDescending() async throws {
+        let groups = try await useCase([
+            league("cyc", group: "102142", count: 3, volume: 4_089),
+            league("mlb", group: nil, count: 118, volume: 5_957_601),
+            league("epl", group: "100350", count: 140, volume: 297_170),
+        ]).execute()
+
+        XCTAssertEqual(groups.map(\.id), ["mlb", "100350", "102142"])
+    }
+
+    func test_execute_sortsLeaguesWithinAGroupByVolumeDescending() async throws {
+        let groups = try await useCase([
+            league("epl", group: "100350", count: 140, volume: 297_170),
+            league("mls", group: "100350", count: 297, volume: 1_806_593),
+        ]).execute()
+
+        XCTAssertEqual(groups[0].leagues.map(\.id), ["mls", "epl"])
+    }
+
+    func test_execute_excludesEsports() async throws {
+        // Esports has its own hub; surfacing it here would duplicate that hub's content.
+        let groups = try await useCase([
+            league("cs2", group: "64", count: 20, volume: 900),
+            league("epl", group: "100350", count: 140, volume: 297_170),
+        ]).execute()
+
+        XCTAssertEqual(groups.map(\.id), ["100350"])
+    }
+
+    func test_execute_unknownGroupTagStillRenders() async throws {
+        // Taxonomy drift must degrade, not disappear: a group tag the table doesn't know
+        // keeps its leagues visible under the tag id itself.
+        let groups = try await useCase([
+            league("newsport", group: "999999", count: 5, volume: 10),
+            league("newsport2", group: "999999", count: 5, volume: 10),
+        ]).execute()
+
+        XCTAssertEqual(groups.map(\.id), ["999999"])
+        XCTAssertEqual(groups[0].glyph, SportGroupCatalog.fallbackGlyph)
+        XCTAssertEqual(groups[0].activeEventCount, 10)
+    }
+}
+
+/// A fake repository serving a fixed league catalogue.
+private final class CatalogueFakeRepository: MarketRepository, @unchecked Sendable {
+    private let leagues: [SportLeague]
+
+    init(leagues: [SportLeague]) { self.leagues = leagues }
+
+    func fetchSportsCatalogue() async throws -> [SportLeague] { leagues }
+
+    func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod) async throws -> Page<Event> {
+        Page(items: [], nextCursor: nil)
+    }
+    func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] { [] }
+    func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] { [:] }
+    func fetchEvent(slug: String) async throws -> Event { fatalError("unused") }
+    func searchMarkets(query: String) async throws -> [Market] { [] }
+    func fetchTags() async throws -> [Tag] { [] }
+    func holders(conditionId: String) async throws -> [Holder] { [] }
+    func comments(eventID: String, sort: CommentSort, holdersOnly: Bool) async throws -> [Comment] { [] }
+    func trades(conditionId: String) async throws -> [ActivityTrade] { [] }
+    func fetchMarkets(cursor: String?) async throws -> Page<Market> { Page(items: [], nextCursor: nil) }
 }
