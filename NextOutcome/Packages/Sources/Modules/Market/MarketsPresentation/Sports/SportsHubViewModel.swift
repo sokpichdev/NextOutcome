@@ -64,8 +64,9 @@ public final class SportsHubViewModel {
     public var oddsFormat: OddsFormat = .price
     /// Whether `GameCard`s across the hub also show spread/total markets.
     public var showSpreadsAndTotals = false
-    /// Live events grouped by league, in `catalogue` order; leagues with no live events are omitted.
-    public private(set) var liveGroups: [(league: SportsLeague, events: [Event])] = []
+    /// The Live feed's dated sections — "Live now" first, then a section per calendar day.
+    /// Futures and esports are excluded; see `SportsFeedSectioner`.
+    public private(set) var liveGroups: [SportsFeedSection] = []
     /// How many events the Live feed reveals per scroll step.
     static let revealStep = 5
     /// How many of the loaded events the Live feed is currently showing.
@@ -80,17 +81,20 @@ public final class SportsHubViewModel {
     private var nextCursor: String?
     /// Whether another page of Live events exists.
     public var hasMore: Bool { nextCursor != nil }
+    /// How many games the sectioned feed holds — the denominator the reveal budget works
+    /// against, since most downloaded events never reach the feed.
+    private var feedEventCount: Int { liveGroups.reduce(0) { $0 + $1.events.count } }
 
     /// `liveGroups` truncated to the first `visibleLimit` events, section order preserved and
     /// sections that fall entirely past the limit dropped.
-    public var visibleGroups: [(league: SportsLeague, events: [Event])] {
+    public var visibleGroups: [SportsFeedSection] {
         var remaining = visibleLimit
-        var revealed: [(league: SportsLeague, events: [Event])] = []
-        for group in liveGroups {
+        var revealed: [SportsFeedSection] = []
+        for section in liveGroups {
             guard remaining > 0 else { break }
-            let slice = Array(group.events.prefix(remaining))
+            let slice = Array(section.events.prefix(remaining))
             remaining -= slice.count
-            revealed.append((group.league, slice))
+            revealed.append(SportsFeedSection(id: section.id, title: section.title, events: slice))
         }
         return revealed
     }
@@ -175,6 +179,8 @@ public final class SportsHubViewModel {
         state = .loaded
         lastUpdated = now()
         results = (try? await fetchGameResults.execute(eventIDs: Self.initialResultIDs(from: events, now: now()))) ?? [:]
+        // Re-section now that scores are in: "Live now" reads in-play state from them.
+        applyLiveSort()
         await loadFutures()
     }
 
@@ -190,8 +196,11 @@ public final class SportsHubViewModel {
     /// an already-fetched page is free and instant; only when the reader has actually seen
     /// every loaded event does this reach for the network.
     public func loadMore() async {
-        if visibleLimit < sampleEvents.count {
-            visibleLimit = min(visibleLimit + Self.revealStep, sampleEvents.count)
+        // Count what the feed actually shows, not what was downloaded. A page is 20 events but
+        // most are futures or esports, which the sectioner drops — budgeting against the raw
+        // page would spend several scroll steps revealing nothing before fetching.
+        if visibleLimit < feedEventCount {
+            visibleLimit = min(visibleLimit + Self.revealStep, feedEventCount)
             return
         }
         guard hasMore, !isLoadingMore else { return }
@@ -206,12 +215,13 @@ public final class SportsHubViewModel {
 
         sampleEvents += page.items
         applyLiveSort()
-        visibleLimit = min(visibleLimit + Self.revealStep, sampleEvents.count)
+        visibleLimit = min(visibleLimit + Self.revealStep, feedEventCount)
         // Scores for the new page only; the pages already on screen keep the ones they have.
         let newResults = (try? await fetchGameResults.execute(
             eventIDs: Self.initialResultIDs(from: page.items, now: now())
         )) ?? [:]
         results.merge(newResults) { _, fresh in fresh }
+        applyLiveSort()
     }
 
     /// Changes the Live tab's sort and regroups the already-fetched sample — no refetch.
@@ -228,9 +238,24 @@ public final class SportsHubViewModel {
         await loadFutures()
     }
 
-    /// Re-sorts `sampleEvents` by `liveSort` and regroups into `liveGroups`.
+    /// Re-sorts `sampleEvents` by `liveSort` and re-sections them into `liveGroups`.
     private func applyLiveSort() {
-        liveGroups = Self.grouped(liveSort.apply(to: sampleEvents), into: catalogue)
+        liveGroups = SportsFeedSectioner.sections(
+            for: liveSort.apply(to: sampleEvents), results: results, now: now()
+        )
+    }
+
+    /// The Gamma `/teams` league slug for an event, used to enrich a tapped team's profile.
+    ///
+    /// Sections are dated now, not per-league, so a card can no longer take its league from
+    /// the header above it — it is resolved from the catalogue per event instead.
+    /// - Parameter event: The event whose league to name.
+    func leagueSlug(for event: Event) -> String? {
+        let tagIDs = Set(event.tags.map(\.id))
+        for group in catalogue where group.leagues.contains(where: { tagIDs.contains($0.primaryTagID) }) {
+            return group.name.lowercased()
+        }
+        return nil
     }
 
     /// Fetches the selected Futures sport's markets, highest volume first.
@@ -261,24 +286,4 @@ public final class SportsHubViewModel {
             .map(\.id)
     }
 
-    /// Buckets events under the first sport carrying one of their tag ids, matching against
-    /// every league's `primaryTagID` in the group. Events matching no sport are dropped, and
-    /// sports with no live events are omitted; the result preserves catalogue order.
-    static func grouped(_ events: [Event], into catalogue: [SportGroup]) -> [(league: SportsLeague, events: [Event])] {
-        var tagToGroup: [String: String] = [:]
-        for group in catalogue {
-            for league in group.leagues where tagToGroup[league.primaryTagID] == nil {
-                tagToGroup[league.primaryTagID] = group.id
-            }
-        }
-        var buckets: [String: [Event]] = [:]
-        for event in events {
-            guard let groupID = event.tags.compactMap({ tagToGroup[$0.id] }).first else { continue }
-            buckets[groupID, default: []].append(event)
-        }
-        return catalogue.compactMap { group in
-            guard let events = buckets[group.id], !events.isEmpty else { return nil }
-            return (SportsLeague(id: group.id, title: group.name, glyph: group.glyph), events)
-        }
-    }
 }

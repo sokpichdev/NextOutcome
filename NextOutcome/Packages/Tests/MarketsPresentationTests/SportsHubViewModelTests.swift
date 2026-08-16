@@ -38,9 +38,23 @@ final class SportsHubViewModelTests: XCTestCase {
 
     // MARK: pagination
 
-    /// `count` events all tagged to one catalogue league, ids `<prefix>0`, `<prefix>1`, …
-    private func events(_ count: Int, prefix: String, leagueTagID: String) -> [Event] {
-        (0..<count).map { event("\(prefix)\($0)", tags: [tag(leagueTagID, "L")]) }
+    /// A moneyline market — with a kickoff, this is what makes an event a game rather than a
+    /// future. The feed shows only games, so pagination fixtures must carry one.
+    private func moneyline() -> Market {
+        Market(id: "ml", question: "Winner", slug: "ml", outcomes: [], volume: 0, liquidity: 0,
+               endDate: nil, isResolved: false, imageURL: nil, sportsMarketType: "moneyline")
+    }
+
+    /// `count` games tagged to one catalogue league, kicking off `hoursFromNow` out.
+    private func events(
+        _ count: Int, prefix: String, leagueTagID: String, hoursFromNow: Double = 2
+    ) -> [Event] {
+        (0..<count).map { index in
+            Event(id: "\(prefix)\(index)", title: "\(prefix)\(index)", slug: "\(prefix)\(index)",
+                  markets: [moneyline()], volume: 0, imageURL: nil,
+                  tags: [tag(leagueTagID, "L")],
+                  gameStartTime: Date().addingTimeInterval((hoursFromNow + Double(index) * 0.01) * 3600))
+        }
     }
 
     /// A catalogue of one league whose `primaryTagID` is `"tag-mlb"`, so events tagged with
@@ -60,7 +74,7 @@ final class SportsHubViewModelTests: XCTestCase {
         await vm.load()
 
         XCTAssertEqual(visibleCount(vm), 5)
-        XCTAssertEqual(vm.liveGroups.first?.events.count, 20, "all 20 are loaded, only 5 are shown")
+        XCTAssertEqual(vm.liveGroups.reduce(0) { $0 + $1.events.count }, 20, "all 20 are loaded, only 5 are shown")
     }
 
     func test_loadMore_revealsFiveMoreFromTheLoadedPage_withoutRefetching() async {
@@ -92,6 +106,25 @@ final class SportsHubViewModelTests: XCTestCase {
         XCTAssertFalse(vm.hasMore, "the second page reported no cursor")
     }
 
+    func test_loadMore_fetchesWhenThePageIsMostlyFilteredOut() async {
+        // A page is 20 events but the feed shows only games — futures and esports are dropped.
+        // The reveal budget must count what is on screen, not what was downloaded, or scrolling
+        // burns several no-op steps showing nothing new before it finally fetches.
+        let futures = (0..<18).map { event("f\($0)", tags: [tag("tag-mlb", "L")]) }
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.livePages = [
+            Page(items: events(2, prefix: "g", leagueTagID: "tag-mlb") + futures, nextCursor: "c1"),
+            Page(items: events(2, prefix: "h", leagueTagID: "tag-mlb"), nextCursor: nil),
+        ]
+        await vm.load()
+        XCTAssertEqual(visibleCount(vm), 2, "only the two games are in the feed")
+
+        await vm.loadMore()
+
+        XCTAssertEqual(repo.liveFetchCount, 2, "every feed event was already revealed, so fetch")
+        XCTAssertEqual(visibleCount(vm), 4)
+    }
+
     func test_loadMore_doesNothingWhenThereIsNoNextPage() async {
         let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
         repo.livePages = [Page(items: events(5, prefix: "a", leagueTagID: "tag-mlb"), nextCursor: nil)]
@@ -118,21 +151,21 @@ final class SportsHubViewModelTests: XCTestCase {
         XCTAssertEqual(repo.lastLiveCursor, nil, "and re-requests from the start, not from the held cursor")
     }
 
-    func test_pagination_preservesLeagueGroupingAcrossPages() async {
-        // A second page's events must land in their own section, not be appended to the first's.
-        let (vm, repo) = makeVM(events: [], catalogue: [
-            league("mlb", group: nil, count: 50, volume: 100),
-            league("nhl", group: nil, count: 50, volume: 50),
-        ])
+    func test_pagination_sectionsLaterPagesByTheirOwnDay() async {
+        // A second page's games must land in the day they are played, not be appended to the
+        // first page's section. The two pages are 48h apart, so they are different days in
+        // any time zone.
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
         repo.livePages = [
-            Page(items: events(5, prefix: "m", leagueTagID: "tag-mlb"), nextCursor: "c1"),
-            Page(items: events(5, prefix: "n", leagueTagID: "tag-nhl"), nextCursor: nil),
+            Page(items: events(5, prefix: "today", leagueTagID: "tag-mlb", hoursFromNow: 2), nextCursor: "c1"),
+            Page(items: events(5, prefix: "later", leagueTagID: "tag-mlb", hoursFromNow: 50), nextCursor: nil),
         ]
         await vm.load()
         await vm.loadMore()
 
-        XCTAssertEqual(vm.liveGroups.map(\.league.title), ["MLB", "NHL"])
-        XCTAssertEqual(vm.liveGroups.first(where: { $0.league.title == "NHL" })?.events.count, 5)
+        XCTAssertEqual(vm.liveGroups.count, 2, "two calendar days, two sections")
+        XCTAssertEqual(vm.liveGroups.map { $0.events.count }, [5, 5])
+        XCTAssertEqual(vm.liveGroups.last?.events.map(\.id), (0..<5).map { "later\($0)" })
     }
 
     func test_load_buildsChipsFromTheServerCatalogue_notFromEventTagKeywords() async {

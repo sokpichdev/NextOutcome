@@ -193,10 +193,10 @@ public struct SportsHubView: View {
     private var liveContent: some View {
         // Search filters what is *revealed*, not the whole loaded set — the feed pages in, so
         // matches further down arrive as the reader scrolls, same as unfiltered browsing.
-        let groups = viewModel.visibleGroups.compactMap { group -> (league: SportsLeague, events: [Event])? in
-            guard !searchQuery.isEmpty else { return group }
-            let filtered = group.events.filter { $0.title.localizedCaseInsensitiveContains(searchQuery) }
-            return filtered.isEmpty ? nil : (group.league, filtered)
+        let groups = viewModel.visibleGroups.compactMap { section -> SportsFeedSection? in
+            guard !searchQuery.isEmpty else { return section }
+            let filtered = section.events.filter { $0.title.localizedCaseInsensitiveContains(searchQuery) }
+            return filtered.isEmpty ? nil : SportsFeedSection(id: section.id, title: section.title, events: filtered)
         }
         let lastEventID = groups.last?.events.last?.id
         return ScrollView {
@@ -204,9 +204,9 @@ public struct SportsHubView: View {
                 StateView(.empty).padding(.top, DSLayout.spacingXLarge)
             } else {
                 LazyVStack(alignment: .leading, spacing: DSLayout.spacingLarge) {
-                    ForEach(groups, id: \.league.id) { group in
+                    ForEach(groups) { group in
                         VStack(alignment: .leading, spacing: DSLayout.spacing) {
-                            Text(group.league.title.uppercased())
+                            Text(group.title.uppercased())
                                 .font(DSFont.caption.bold())
                                 .foregroundStyle(DSColor.textSecondary)
                             ForEach(group.events) { event in
@@ -215,7 +215,7 @@ public struct SportsHubView: View {
                                         event: event,
                                         result: viewModel.results[event.id],
                                         onTeamTap: { selectedTeam = $0 },
-                                        leagueSlug: group.league.title.lowercased()
+                                        leagueSlug: viewModel.leagueSlug(for: event)
                                     )
                                 }
                                 .buttonStyle(.plain)
