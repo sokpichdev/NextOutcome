@@ -9,9 +9,9 @@ import Foundation
 import MarketsDomain
 import SharedDomain
 
-/// Drives the Sports hub: the Live/Futures mode switch, the league chip row (World Cup,
-/// Wimbledon, MLB, UFC, Combat, …), the live feed grouped by league, and the Futures
-/// sport picker (NBA/EPL) with its ranked markets.
+/// Drives the Sports hub: the Live/Futures mode switch, the league chip row (built from the
+/// server sport catalogue, highest volume first), the live feed grouped by league, and the
+/// Futures sport picker (NBA/EPL) with its ranked markets.
 @MainActor
 @Observable
 public final class SportsHubViewModel {
@@ -64,7 +64,7 @@ public final class SportsHubViewModel {
     public var oddsFormat: OddsFormat = .price
     /// Whether `GameCard`s across the hub also show spread/total markets.
     public var showSpreadsAndTotals = false
-    /// Live events grouped by league, in `leagues` order; leagues with no live events are omitted.
+    /// Live events grouped by league, in `catalogue` order; leagues with no live events are omitted.
     public private(set) var liveGroups: [(league: SportsLeague, events: [Event])] = []
     /// The raw Live sample (unsorted, ungrouped), kept so changing `liveSort` doesn't require
     /// a refetch.
@@ -122,19 +122,24 @@ public final class SportsHubViewModel {
     public func load() async {
         state = .loading
         async let catalogueTask = try? fetchSportsCatalogue.execute()
-        let events = (try? await fetchAllEvents.execute(tagID: Self.sportsTagID, status: .active)) ?? []
-        // The catalogue is an enhancement, the feed is the screen: a catalogue failure
-        // costs the chip row, not the hub. Bind before defaulting — `await x ?? []` binds as
+        async let eventsTask = try? fetchAllEvents.execute(tagID: Self.sportsTagID, status: .active)
+
+        // Publish the catalogue the moment it lands: the chip row is useful long before the
+        // ~25MB event sample finishes, and gating it behind that read as a broken screen for
+        // 45+ seconds. Bind before defaulting on both — `await x ?? []` binds as
         // `await (x ?? [])`, which reads the unresolved value.
         let loadedCatalogue = await catalogueTask
         catalogue = loadedCatalogue ?? []
+
+        let loadedEvents = await eventsTask
+        let events = loadedEvents ?? []
         guard !events.isEmpty else {
             state = .failed("Couldn't load Sports. Pull to refresh.")
             return
         }
         sampleEvents = events
         futuresSports = catalogue.prefix(8).map {
-            SportsLeague(id: $0.leagues.first?.primaryTagID ?? $0.id, title: $0.name, glyph: $0.glyph)
+            SportsLeague(id: $0.navigationTagID, title: $0.name, glyph: $0.glyph)
         }
         if selectedFuturesSportID == nil || !futuresSports.contains(where: { $0.id == selectedFuturesSportID }) {
             selectedFuturesSportID = futuresSports.first?.id
@@ -142,7 +147,7 @@ public final class SportsHubViewModel {
         applyLiveSort()
         state = .loaded
         lastUpdated = now()
-        results = (try? await fetchGameResults.execute(eventIDs: events.map(\.id))) ?? [:]
+        results = (try? await fetchGameResults.execute(eventIDs: Self.initialResultIDs(from: events, now: now()))) ?? [:]
         await loadFutures()
     }
 
@@ -174,6 +179,28 @@ public final class SportsHubViewModel {
     private func loadFutures() async {
         guard let tagID = selectedFuturesSportID else { futuresEvents = []; return }
         futuresEvents = (try? await fetchEvents.execute(tagID: tagID, sort: .volume24h, status: .active))?.items ?? []
+    }
+
+    /// Events worth an initial score fetch: kickoff within ±24h of `now`, bounded fan-out.
+    ///
+    /// `fetchGameResults` has no batch endpoint — it issues one HTTP request per id — so
+    /// fetching scores for the entire ~500-event sample on every load/refresh fires hundreds
+    /// of requests. This narrows to the games whose scores could plausibly be interesting
+    /// right now, same approach as `WorldCupHubViewModel.initialResultIDs(windowHours:cap:)`.
+    /// - Parameters:
+    ///   - events: The candidate events, already volume-sorted (most-traded first).
+    ///   - now: The reference time to measure the window from.
+    ///   - windowHours: How far around `now` (± hours) a kickoff must fall to qualify.
+    ///   - cap: The maximum number of ids to return.
+    /// - Returns: Ids of events worth an immediate score fetch, in `events` order.
+    static func initialResultIDs(from events: [Event], now: Date, windowHours: Double = 24, cap: Int = 30) -> [String] {
+        events
+            .filter {
+                guard let kickoff = $0.gameStartTime else { return false }
+                return abs(kickoff.timeIntervalSince(now)) <= windowHours * 3600
+            }
+            .prefix(cap)
+            .map(\.id)
     }
 
     /// Buckets events under the first sport carrying one of their tag ids, matching against

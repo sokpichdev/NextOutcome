@@ -143,12 +143,15 @@ public struct SportsHubView: View {
     @ViewBuilder
     private var content: some View {
         if let group = viewModel.selectedGroup {
-            if group.name == "World Cup" {
+            // Case-insensitive substring match: the server labels this group "FIFA World Cup",
+            // not "World Cup", so an exact match would silently fall through to the generic
+            // league screen instead of the purpose-built World Cup hub.
+            if group.name.localizedCaseInsensitiveContains("world cup") {
                 WorldCupHubView(viewModel: worldCupViewModel)
             } else {
                 SportsLeagueDetailView(
                     league: SportsLeague(
-                        id: group.leagues.first?.primaryTagID ?? group.id,
+                        id: group.navigationTagID,
                         title: group.name,
                         glyph: group.glyph
                     ),

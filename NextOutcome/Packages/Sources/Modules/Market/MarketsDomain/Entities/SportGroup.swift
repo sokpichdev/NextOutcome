@@ -38,4 +38,14 @@ public struct SportGroup: Identifiable, Hashable, Sendable {
     /// Whether this group is a single league, and so renders as a flat row with a count
     /// rather than an expandable one. MLB and UFC reach the sheet this way.
     public var isLeaf: Bool { leagues.count == 1 }
+
+    /// The Gamma tag id to load this group's events from.
+    ///
+    /// A real sport group's `id` IS its Gamma tag, so it is used directly — that is what makes
+    /// "Soccer" mean all 169 soccer leagues rather than only the biggest one. A leaf group is
+    /// manufactured from a single league whose `id` is a league *slug*, not a tag, so the
+    /// league's own `primaryTagID` is the only usable id there.
+    public var navigationTagID: String {
+        isLeaf ? (leagues.first?.primaryTagID ?? id) : id
+    }
 }

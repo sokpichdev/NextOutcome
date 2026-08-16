@@ -85,6 +85,35 @@ final class SportsCatalogueTests: XCTestCase {
         XCTAssertFalse(empty.hasLive)
         XCTAssertFalse(empty.isLeaf)
     }
+
+    // MARK: SportGroup.navigationTagID
+
+    func test_navigationTagID_realGroup_returnsItsOwnID() {
+        // Soccer's `id` (100350) IS the Gamma tag that covers all 169 soccer leagues; using a
+        // member league's tag instead would narrow the screen to just that one league.
+        let soccer = SportGroup(id: "100350", name: "Soccer", glyph: "soccerball", leagues: [
+            league("epl", group: "100350", count: 140, volume: 297_170),
+            league("mls", group: "100350", count: 297, volume: 1_806_593),
+        ])
+
+        XCTAssertEqual(soccer.navigationTagID, "100350")
+    }
+
+    func test_navigationTagID_leafGroup_returnsItsLeaguesPrimaryTagID() {
+        // MLB's `id` is the league slug "mlb", not a Gamma tag, so the real tag has to come
+        // from the sole member league's `primaryTagID`.
+        let mlb = SportGroup(id: "mlb", name: "MLB", glyph: "baseball.fill", leagues: [
+            league("mlb", group: nil, count: 118, live: true),
+        ])
+
+        XCTAssertEqual(mlb.navigationTagID, "tag-mlb")
+    }
+
+    func test_navigationTagID_leafGroupWithNoLeagues_fallsBackToID_withoutCrashing() {
+        let empty = SportGroup(id: "x", name: "X", glyph: "sportscourt.fill", leagues: [])
+
+        XCTAssertEqual(empty.navigationTagID, "x")
+    }
 }
 
 @MainActor

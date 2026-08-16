@@ -13,8 +13,8 @@ import MarketsDomain
 final class SportsHubViewModelTests: XCTestCase {
     private func tag(_ id: String, _ label: String) -> Tag { Tag(id: id, label: label, slug: label.lowercased()) }
 
-    private func event(_ id: String, tags: [Tag], volume: Decimal = 0) -> Event {
-        Event(id: id, title: id, slug: id, markets: [], volume: volume, imageURL: nil, tags: tags)
+    private func event(_ id: String, tags: [Tag], volume: Decimal = 0, gameStartTime: Date? = nil) -> Event {
+        Event(id: id, title: id, slug: id, markets: [], volume: volume, imageURL: nil, tags: tags, gameStartTime: gameStartTime)
     }
 
     private func league(_ id: String, group: String?, count: Int, live: Bool = false, volume: Decimal = 0) -> SportLeague {
@@ -22,14 +22,17 @@ final class SportsHubViewModelTests: XCTestCase {
                     activeEventCount: count, hasLive: live, volume: volume)
     }
 
-    private func makeVM(events: [Event], catalogue: [SportLeague] = []) -> (SportsHubViewModel, SportsFakeRepository) {
+    private func makeVM(
+        events: [Event], catalogue: [SportLeague] = [], now: @escaping @Sendable () -> Date = Date.init
+    ) -> (SportsHubViewModel, SportsFakeRepository) {
         let repo = SportsFakeRepository(allEvents: events)
         repo.catalogue = catalogue
         let vm = SportsHubViewModel(
             fetchEvents: FetchEventsUseCase(repository: repo),
             fetchAllEvents: FetchAllEventsUseCase(repository: repo),
             fetchSportsCatalogue: FetchSportsCatalogueUseCase(repository: repo),
-            fetchGameResults: FetchGameResultsUseCase(repository: repo)
+            fetchGameResults: FetchGameResultsUseCase(repository: repo),
+            now: now
         )
         return (vm, repo)
     }
@@ -61,7 +64,9 @@ final class SportsHubViewModelTests: XCTestCase {
     }
 
     func test_load_fetchesResultsForTheLiveFeedsEvents() async {
-        let (vm, repo) = makeVM(events: [event("g1", tags: [tag("1", "Sports")])])
+        // gameStartTime must fall within the ±24h fetch window (Finding 2's narrowing), or the
+        // event is excluded from the results fetch entirely.
+        let (vm, repo) = makeVM(events: [event("g1", tags: [tag("1", "Sports")], gameStartTime: Date())])
         repo.results = ["g1": GameResult(eventID: "g1", score: "3-1", elapsed: "5:41",
                                          period: "Q4", live: true, ended: false, teams: [])]
 
@@ -133,6 +138,70 @@ final class SportsHubViewModelTests: XCTestCase {
         let fetchCountBefore = repo.futuresFetchCount
         await vm.selectFuturesSport("101")
         XCTAssertEqual(repo.futuresFetchCount, fetchCountBefore)
+    }
+
+    // MARK: SportsHubViewModel.initialResultIDs
+
+    private static let referenceNow = Date(timeIntervalSince1970: 1_700_000_000)
+
+    func test_initialResultIDs_excludesEventsOutsideTheWindow() {
+        let now = Self.referenceNow
+        let events = [
+            event("inWindow", tags: [], gameStartTime: now.addingTimeInterval(3600)), // +1h
+            event("outsideWindow", tags: [], gameStartTime: now.addingTimeInterval(25 * 3600)), // +25h
+        ]
+
+        XCTAssertEqual(SportsHubViewModel.initialResultIDs(from: events, now: now), ["inWindow"])
+    }
+
+    func test_initialResultIDs_excludesEventsWithNoGameStartTime() {
+        let now = Self.referenceNow
+        let events = [
+            event("scheduled", tags: [], gameStartTime: now),
+            event("notAGame", tags: []), // nil gameStartTime — not a scheduled game
+        ]
+
+        XCTAssertEqual(SportsHubViewModel.initialResultIDs(from: events, now: now), ["scheduled"])
+    }
+
+    func test_initialResultIDs_capsAtTheLimit() {
+        let now = Self.referenceNow
+        let events = (0..<40).map { event("e\($0)", tags: [], gameStartTime: now) }
+
+        let ids = SportsHubViewModel.initialResultIDs(from: events, now: now, cap: 30)
+
+        XCTAssertEqual(ids.count, 30)
+    }
+
+    func test_initialResultIDs_preservesIncomingOrder() {
+        // `events` arrives volume-sorted; the narrowed list must keep that order so the
+        // most-traded games win the fetch budget.
+        let now = Self.referenceNow
+        let events = [
+            event("highestVolume", tags: [], gameStartTime: now),
+            event("midVolume", tags: [], gameStartTime: now.addingTimeInterval(-3600)),
+            event("lowestVolume", tags: [], gameStartTime: now.addingTimeInterval(3600)),
+        ]
+
+        XCTAssertEqual(
+            SportsHubViewModel.initialResultIDs(from: events, now: now),
+            ["highestVolume", "midVolume", "lowestVolume"]
+        )
+    }
+
+    func test_load_fetchesResultsOnlyForTheNarrowedEventWindow() async {
+        // Regression for unbounded fan-out: the full ~500-event sample must not all be passed
+        // to fetchGameResults, only the ones within the window (and capped).
+        let now = Self.referenceNow
+        let (vm, repo) = makeVM(events: [
+            event("nearKickoff", tags: [tag("1", "Sports")], gameStartTime: now.addingTimeInterval(3600)),
+            event("farAway", tags: [tag("1", "Sports")], gameStartTime: now.addingTimeInterval(48 * 3600)),
+            event("noKickoff", tags: [tag("1", "Sports")]),
+        ], now: { now })
+
+        await vm.load()
+
+        XCTAssertEqual(repo.lastGameResultsEventIDs, ["nearKickoff"])
     }
 }
 
@@ -240,6 +309,8 @@ private final class SportsFakeRepository: MarketRepository, @unchecked Sendable 
     var catalogue: [SportLeague] = []
     var catalogueError = false
     var results: [String: GameResult] = [:]
+    /// The ids passed to the most recent `fetchGameResults` call, for asserting fan-out is bounded.
+    private(set) var lastGameResultsEventIDs: [String] = []
 
     init(allEvents: [Event]) { self.allEvents = allEvents }
 
@@ -255,7 +326,10 @@ private final class SportsFakeRepository: MarketRepository, @unchecked Sendable 
         return Page(items: [], nextCursor: nil)
     }
     func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] { [] }
-    func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] { results }
+    func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] {
+        lastGameResultsEventIDs = eventIDs
+        return results
+    }
     func fetchSportsCatalogue() async throws -> [SportLeague] {
         if catalogueError { throw URLError(.badServerResponse) }
         return catalogue
