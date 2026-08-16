@@ -37,16 +37,32 @@ struct SportLeagueDTO: Decodable {
         (tags ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
-    /// Maps to the domain league, or `nil` when the row can't identify its events —
-    /// without `primaryTagId` there is nothing to classify against, so a tile would be inert.
-    func toDomain() -> EsportsLeague? {
+    /// Maps to the domain league without activity data — the identity-only path the Esports
+    /// hub uses.
+    func toDomain() -> SportLeague? { toDomain(summary: nil) }
+
+    /// Maps to the domain league, merging this row's `/sports/summary` counterpart when one
+    /// exists.
+    ///
+    /// Returns `nil` when the row can't identify its events: without `primaryTagId` there is
+    /// nothing to classify against, so a chip would be inert — better absent than dead.
+    ///
+    /// - Parameter summary: The matching summary row, keyed by the same slug. `nil` zeroes
+    ///   the activity fields, which reads as "no open events" and filters the league out of
+    ///   the nav row rather than showing an empty chip.
+    func toDomain(summary: SportsSummaryDTO.League?) -> SportLeague? {
         guard let primaryTagId else { return nil }
-        return EsportsLeague(
+        return SportLeague(
             id: sport,
-            name: name ?? sport,
+            name: summary?.name ?? name ?? sport,
             primaryTagID: String(primaryTagId),
+            groupTagID: SportGroupCatalog.groupTagID(forTagIDs: tagIDs, slug: sport),
             seriesID: series.flatMap { $0.isEmpty ? nil : $0 },
-            iconURL: image.flatMap(URL.init(string:))
+            iconURL: (summary?.image ?? image).flatMap(URL.init(string:)),
+            activeEventCount: summary?.activeEventCount ?? 0,
+            hasLive: summary?.hasLive ?? false,
+            volume: Decimal(summary?.volume ?? 0),
+            eventDates: summary?.eventDates ?? []
         )
     }
 }
