@@ -39,31 +39,24 @@ public final class SportsHubViewModel {
     /// `.sports`, backing the Live tab's aggregate feed.
     static let sportsTagID = "1"
 
-    /// League chip keywords (matched as a case-insensitive substring against the sample's
-    /// event tags, e.g. "world cup" matches the real tag label "FIFA World Cup") and their
-    /// chip glyph, in the order they should appear. World Cup routes into the existing
-    /// `WorldCupHubView` rather than a generic league detail screen.
-    static let knownLeagues: [(label: String, glyph: String)] = [
-        ("World Cup", "soccerball"),
-        ("Wimbledon", "figure.tennis"),
-        ("MLB", "baseball.fill"),
-        ("UFC", "figure.martial.arts"),
-        ("Combat", "figure.boxing"),
-    ]
-
-    /// Futures sport-picker keywords and glyphs, in display order.
-    static let knownFuturesSports: [(label: String, glyph: String)] = [
-        ("NBA", "basketball.fill"),
-        ("EPL", "soccerball"),
-    ]
-
     /// The current load state.
     public private(set) var state: State = .idle
     /// The selected top-level mode.
     public var mode: Mode = .live
-    /// League chips resolved from the live sample's event tags, for navigation into
-    /// per-league detail.
-    public private(set) var leagues: [SportsLeague] = []
+    /// The full sport taxonomy from the server, highest volume first. Drives both the nav
+    /// row and the All Sports sheet.
+    public private(set) var catalogue: [SportGroup] = []
+    /// The subset of `catalogue` shown as chips: sports with something open to trade right
+    /// now. The sheet still lists the rest, so a dormant sport is reachable, just not
+    /// occupying a chip.
+    public var navGroups: [SportGroup] { catalogue.filter { $0.activeEventCount > 0 } }
+    /// Whether the All Sports sheet is presented.
+    public var isShowingAllSports = false
+    /// Live/final scores for the Live feed's events, keyed by event id. Absent ids simply
+    /// render as not-yet-started.
+    public private(set) var results: [String: GameResult] = [:]
+    /// The sport selected from the nav row or the sheet, shown in place of the Live feed.
+    public var selectedGroup: SportGroup?
     /// The Live tab's sort, chosen via its filter icon.
     public private(set) var liveSort: SportsSort = .volume
     /// The hub-wide odds display format, chosen via the mode bar's Odds Format menu. Applies
@@ -90,6 +83,10 @@ public final class SportsHubViewModel {
     /// Loads every event under a tag, unpaginated (used for the Live tab's sample, so
     /// league/sport chips can be derived from more than just the highest-volume page).
     private let fetchAllEvents: FetchAllEventsUseCase
+    /// Loads the server-side sport taxonomy behind the chip row and All Sports sheet.
+    private let fetchSportsCatalogue: FetchSportsCatalogueUseCase
+    /// Loads live scores for the events the Live feed is showing.
+    private let fetchGameResults: FetchGameResultsUseCase
     /// Injectable clock (defaults to `Date()`), for deterministic tests.
     private let now: @Sendable () -> Date
 
@@ -97,10 +94,14 @@ public final class SportsHubViewModel {
     public init(
         fetchEvents: FetchEventsUseCase,
         fetchAllEvents: FetchAllEventsUseCase,
+        fetchSportsCatalogue: FetchSportsCatalogueUseCase,
+        fetchGameResults: FetchGameResultsUseCase,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.fetchEvents = fetchEvents
         self.fetchAllEvents = fetchAllEvents
+        self.fetchSportsCatalogue = fetchSportsCatalogue
+        self.fetchGameResults = fetchGameResults
         self.now = now
     }
 
@@ -109,29 +110,39 @@ public final class SportsHubViewModel {
         if case .idle = state { await load() }
     }
 
-    /// Fetches every event under the general sports tag, derives the league/sport chips from
-    /// their own tags, groups them into the Live tab's sections (highest volume first), then
-    /// kicks off the initial Futures fetch.
+    /// Fetches every event under the general sports tag, loads the server sport catalogue that
+    /// drives the chip row and All Sports sheet, groups events into the Live tab's sections
+    /// (highest volume first), then kicks off the initial Futures fetch.
     ///
-    /// These chips stay event-derived rather than using Gamma's own sub-topic row: that row
-    /// (`/tags/slug/sports/related-tags/tags`) tops out around 18 broad entries — NFL, Soccer,
-    /// EPL — whereas the Live tab needs a section per league actually playing right now.
+    /// Chips come from Gamma's `/sports` + `/sports/summary` catalogue, not from the sampled
+    /// feed's own tags. An earlier version matched five hardcoded keywords as substrings
+    /// against event tag labels, which meant a league appeared only when it happened to be in
+    /// the sample — Wimbledon vanished for fifty weeks a year, and a new sport never showed at
+    /// all. The catalogue also carries the counts and live flags a sampled feed can't.
     public func load() async {
         state = .loading
+        async let catalogueTask = try? fetchSportsCatalogue.execute()
         let events = (try? await fetchAllEvents.execute(tagID: Self.sportsTagID, status: .active)) ?? []
+        // The catalogue is an enhancement, the feed is the screen: a catalogue failure
+        // costs the chip row, not the hub. Bind before defaulting — `await x ?? []` binds as
+        // `await (x ?? [])`, which reads the unresolved value.
+        let loadedCatalogue = await catalogueTask
+        catalogue = loadedCatalogue ?? []
         guard !events.isEmpty else {
             state = .failed("Couldn't load Sports. Pull to refresh.")
             return
         }
         sampleEvents = events
-        leagues = Self.resolve(Self.knownLeagues, in: events)
-        futuresSports = Self.resolve(Self.knownFuturesSports, in: events)
+        futuresSports = catalogue.prefix(8).map {
+            SportsLeague(id: $0.leagues.first?.primaryTagID ?? $0.id, title: $0.name, glyph: $0.glyph)
+        }
         if selectedFuturesSportID == nil || !futuresSports.contains(where: { $0.id == selectedFuturesSportID }) {
             selectedFuturesSportID = futuresSports.first?.id
         }
         applyLiveSort()
         state = .loaded
         lastUpdated = now()
+        results = (try? await fetchGameResults.execute(eventIDs: events.map(\.id))) ?? [:]
         await loadFutures()
     }
 
@@ -156,7 +167,7 @@ public final class SportsHubViewModel {
 
     /// Re-sorts `sampleEvents` by `liveSort` and regroups into `liveGroups`.
     private func applyLiveSort() {
-        liveGroups = Self.grouped(liveSort.apply(to: sampleEvents), into: leagues)
+        liveGroups = Self.grouped(liveSort.apply(to: sampleEvents), into: catalogue)
     }
 
     /// Fetches the selected Futures sport's markets, highest volume first.
@@ -165,31 +176,24 @@ public final class SportsHubViewModel {
         futuresEvents = (try? await fetchEvents.execute(tagID: tagID, sort: .volume24h, status: .active))?.items ?? []
     }
 
-    /// Matches known (keyword, glyph) pairs against the sample's event tags: the first tag
-    /// whose label contains the keyword (case-insensitive) becomes that league's real tag id.
-    /// Keeps declaration order; keywords with no match in the sample are dropped.
-    static func resolve(_ known: [(label: String, glyph: String)], in events: [Event]) -> [SportsLeague] {
-        let tags = events.flatMap(\.tags)
-        return known.compactMap { entry in
-            let keyword = entry.label.lowercased()
-            return tags.first { $0.label.lowercased().contains(keyword) }
-                .map { SportsLeague(id: $0.id, title: entry.label, glyph: entry.glyph) }
+    /// Buckets events under the first sport carrying one of their tag ids, matching against
+    /// every league's `primaryTagID` in the group. Events matching no sport are dropped, and
+    /// sports with no live events are omitted; the result preserves catalogue order.
+    static func grouped(_ events: [Event], into catalogue: [SportGroup]) -> [(league: SportsLeague, events: [Event])] {
+        var tagToGroup: [String: String] = [:]
+        for group in catalogue {
+            for league in group.leagues where tagToGroup[league.primaryTagID] == nil {
+                tagToGroup[league.primaryTagID] = group.id
+            }
         }
-    }
-
-    /// Buckets events under the first league whose resolved tag id the event carries; events
-    /// matching no known league are dropped from the grouped Live feed. Leagues with no live
-    /// events are omitted, and the result preserves `leagues` order.
-    static func grouped(_ events: [Event], into leagues: [SportsLeague]) -> [(league: SportsLeague, events: [Event])] {
         var buckets: [String: [Event]] = [:]
         for event in events {
-            let tagIDs = Set(event.tags.map(\.id))
-            guard let match = leagues.first(where: { tagIDs.contains($0.id) }) else { continue }
-            buckets[match.id, default: []].append(event)
+            guard let groupID = event.tags.compactMap({ tagToGroup[$0.id] }).first else { continue }
+            buckets[groupID, default: []].append(event)
         }
-        return leagues.compactMap { league in
-            guard let events = buckets[league.id], !events.isEmpty else { return nil }
-            return (league, events)
+        return catalogue.compactMap { group in
+            guard let events = buckets[group.id], !events.isEmpty else { return nil }
+            return (SportsLeague(id: group.id, title: group.name, glyph: group.glyph), events)
         }
     }
 }

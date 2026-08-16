@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import Foundation
 import SharedDomain
 @testable import MarketsPresentation
 import MarketsDomain
@@ -16,41 +17,69 @@ final class SportsHubViewModelTests: XCTestCase {
         Event(id: id, title: id, slug: id, markets: [], volume: volume, imageURL: nil, tags: tags)
     }
 
-    private func makeVM(events: [Event]) -> (SportsHubViewModel, SportsFakeRepository) {
+    private func league(_ id: String, group: String?, count: Int, live: Bool = false, volume: Decimal = 0) -> SportLeague {
+        SportLeague(id: id, name: id.uppercased(), primaryTagID: "tag-\(id)", groupTagID: group,
+                    activeEventCount: count, hasLive: live, volume: volume)
+    }
+
+    private func makeVM(events: [Event], catalogue: [SportLeague] = []) -> (SportsHubViewModel, SportsFakeRepository) {
         let repo = SportsFakeRepository(allEvents: events)
+        repo.catalogue = catalogue
         let vm = SportsHubViewModel(
             fetchEvents: FetchEventsUseCase(repository: repo),
-            fetchAllEvents: FetchAllEventsUseCase(repository: repo)
+            fetchAllEvents: FetchAllEventsUseCase(repository: repo),
+            fetchSportsCatalogue: FetchSportsCatalogueUseCase(repository: repo),
+            fetchGameResults: FetchGameResultsUseCase(repository: repo)
         )
         return (vm, repo)
     }
 
-    func test_load_derivesLeaguesFromSampleTags_notFromTagCatalogue() async {
-        let (vm, _) = makeVM(events: [
-            event("wimbledon-1", tags: [tag("1", "Sports"), tag("85", "Wimbledon")]),
-            event("mlb-1", tags: [tag("1", "Sports"), tag("128", "MLB")]),
-            event("wc-1", tags: [tag("1", "Sports"), tag("519", "FIFA World Cup")]),
+    func test_load_buildsChipsFromTheServerCatalogue_notFromEventTagKeywords() async {
+        // The regression this locks in: chips used to be five hardcoded keywords matched as
+        // substrings against sampled event tags, so a league only appeared if it happened to
+        // be in the feed. Now the catalogue decides.
+        let (vm, _) = makeVM(events: [event("e1", tags: [tag("1", "Sports")])], catalogue: [
+            league("mlb", group: nil, count: 118, live: true, volume: 5_957_601),
+            league("epl", group: "100350", count: 140, volume: 297_170),
         ])
 
         await vm.load()
 
-        XCTAssertEqual(vm.leagues.map(\.title), ["World Cup", "Wimbledon", "MLB"])
-        XCTAssertEqual(vm.leagues.first { $0.title == "World Cup" }?.id, "519")
+        XCTAssertEqual(vm.catalogue.map(\.name), ["MLB", "Soccer"])
     }
 
-    func test_load_groupsEventsByLeague_dropsUnmatched_sortsByVolumeDescending() async {
-        let (vm, _) = makeVM(events: [
-            event("wimbledon-1", tags: [tag("85", "Wimbledon")], volume: 10),
-            event("wimbledon-2", tags: [tag("85", "Wimbledon")], volume: 50),
-            event("mlb-1", tags: [tag("128", "MLB")]),
-            event("other", tags: [tag("999", "Chess")]),
+    func test_navGroups_excludeSportsWithNoOpenEvents() async {
+        let (vm, _) = makeVM(events: [event("e1", tags: [tag("1", "Sports")])], catalogue: [
+            league("mlb", group: nil, count: 118, volume: 5_957_601),
+            league("nhl", group: nil, count: 0, volume: 900),
         ])
 
         await vm.load()
 
-        let groupTitles = vm.liveGroups.map(\.league.title)
-        XCTAssertEqual(groupTitles, ["Wimbledon", "MLB"])
-        XCTAssertEqual(vm.liveGroups.first { $0.league.title == "Wimbledon" }?.events.map(\.id), ["wimbledon-2", "wimbledon-1"])
+        XCTAssertEqual(vm.navGroups.map(\.name), ["MLB"])
+        XCTAssertEqual(vm.catalogue.count, 2, "the All Sports sheet still lists the dormant sport")
+    }
+
+    func test_load_fetchesResultsForTheLiveFeedsEvents() async {
+        let (vm, repo) = makeVM(events: [event("g1", tags: [tag("1", "Sports")])])
+        repo.results = ["g1": GameResult(eventID: "g1", score: "3-1", elapsed: "5:41",
+                                         period: "Q4", live: true, ended: false, teams: [])]
+
+        await vm.load()
+
+        XCTAssertEqual(vm.results["g1"]?.period, "Q4")
+    }
+
+    func test_load_survivesCatalogueFailure() async {
+        // Chips are an enhancement; the feed is the screen. A catalogue error must not blank
+        // the hub.
+        let (vm, repo) = makeVM(events: [event("e1", tags: [tag("1", "Sports")])])
+        repo.catalogueError = true
+
+        await vm.load()
+
+        XCTAssertEqual(vm.state, .loaded)
+        XCTAssertTrue(vm.navGroups.isEmpty)
     }
 
     func test_setLiveSort_soonest_reordersWithoutRefetch() async {
@@ -74,9 +103,14 @@ final class SportsHubViewModelTests: XCTestCase {
     }
 
     func test_selectFuturesSport_reloadsFuturesEvents() async {
+        // futuresSports now comes from catalogue.prefix(8), not from event tags — seed the
+        // catalogue with distinct volumes so the NBA group sorts first and is auto-selected.
         let (vm, repo) = makeVM(events: [
             event("nba-sample", tags: [tag("101", "NBA")]),
             event("epl-sample", tags: [tag("102", "EPL")]),
+        ], catalogue: [
+            SportLeague(id: "nba", name: "NBA", primaryTagID: "101", volume: 1_000),
+            SportLeague(id: "epl", name: "EPL", primaryTagID: "102", volume: 500),
         ])
         repo.futuresPages["101"] = [event("nba-champ", tags: [])]
         repo.futuresPages["102"] = [event("epl-winner", tags: [])]
@@ -90,7 +124,9 @@ final class SportsHubViewModelTests: XCTestCase {
     }
 
     func test_selectFuturesSport_sameID_isNoOp() async {
-        let (vm, repo) = makeVM(events: [event("nba-sample", tags: [tag("101", "NBA")])])
+        let (vm, repo) = makeVM(events: [event("nba-sample", tags: [tag("101", "NBA")])], catalogue: [
+            SportLeague(id: "nba", name: "NBA", primaryTagID: "101", volume: 1_000),
+        ])
         repo.futuresPages["101"] = [event("nba-champ", tags: [])]
         await vm.load()
 
@@ -201,6 +237,9 @@ private final class SportsFakeRepository: MarketRepository, @unchecked Sendable 
     var leagueEvents: [Event] = []
     private(set) var futuresFetchCount = 0
     private(set) var fetchAllCallCount = 0
+    var catalogue: [SportLeague] = []
+    var catalogueError = false
+    var results: [String: GameResult] = [:]
 
     init(allEvents: [Event]) { self.allEvents = allEvents }
 
@@ -216,7 +255,11 @@ private final class SportsFakeRepository: MarketRepository, @unchecked Sendable 
         return Page(items: [], nextCursor: nil)
     }
     func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] { [] }
-    func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] { [:] }
+    func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] { results }
+    func fetchSportsCatalogue() async throws -> [SportLeague] {
+        if catalogueError { throw URLError(.badServerResponse) }
+        return catalogue
+    }
     func fetchEvent(slug: String) async throws -> Event { fatalError("unused") }
     func searchMarkets(query: String) async throws -> [Market] { [] }
     func fetchTags() async throws -> [Tag] { [] }
