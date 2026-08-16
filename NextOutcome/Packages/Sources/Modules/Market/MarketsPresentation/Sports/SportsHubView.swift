@@ -22,6 +22,8 @@ public struct SportsHubView: View {
     private let worldCupViewModel: WorldCupHubViewModel
     /// The use case used to build a league detail screen's view model on demand.
     private let fetchAllEvents: FetchAllEventsUseCase
+    /// Loads a selected sport's games, paged — forwarded to the league detail screen.
+    private let fetchSportsGames: FetchSportsGamesUseCase
     /// Whether the Live tab's league search field is shown.
     @State private var isSearchActive = false
     /// The Live tab's league search text.
@@ -36,10 +38,16 @@ public struct SportsHubView: View {
     ///   - viewModel: The Sports hub view model.
     ///   - worldCupViewModel: The shared World Cup hub view model.
     ///   - fetchAllEvents: The use case for building league detail screens.
-    public init(viewModel: SportsHubViewModel, worldCupViewModel: WorldCupHubViewModel, fetchAllEvents: FetchAllEventsUseCase) {
+    public init(
+        viewModel: SportsHubViewModel,
+        worldCupViewModel: WorldCupHubViewModel,
+        fetchAllEvents: FetchAllEventsUseCase,
+        fetchSportsGames: FetchSportsGamesUseCase
+    ) {
         self._viewModel = State(initialValue: viewModel)
         self.worldCupViewModel = worldCupViewModel
         self.fetchAllEvents = fetchAllEvents
+        self.fetchSportsGames = fetchSportsGames
     }
 
     public var body: some View {
@@ -155,7 +163,8 @@ public struct SportsHubView: View {
                         title: group.name,
                         glyph: group.glyph
                     ),
-                    fetchAllEvents: fetchAllEvents
+                    fetchAllEvents: fetchAllEvents,
+                    fetchSportsGames: fetchSportsGames
                 )
                 .id(group.id)
             }

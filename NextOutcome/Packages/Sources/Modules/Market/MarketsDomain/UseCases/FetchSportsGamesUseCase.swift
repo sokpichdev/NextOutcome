@@ -29,7 +29,12 @@ public struct FetchSportsGamesUseCase: Sendable {
     ///     is bounded by kickoff, so a game already under way falls outside it.
     ///   - startingAfter: Lower bound on kickoff; also orders by kickoff ascending.
     ///   - cursor: Keyset cursor, `nil` for the first page.
-    public func execute(live: Bool, startingAfter: Date?, cursor: String?) async throws -> Page<Event> {
-        try await repository.fetchSportsGames(live: live, startingAfter: startingAfter, cursor: cursor)
+    ///   - leagueTagID: Narrows to one sport or league; `nil` for the whole feed.
+    public func execute(
+        live: Bool, startingAfter: Date?, cursor: String?, leagueTagID: String? = nil
+    ) async throws -> Page<Event> {
+        try await repository.fetchSportsGames(
+            live: live, startingAfter: startingAfter, cursor: cursor, leagueTagID: leagueTagID
+        )
     }
 }

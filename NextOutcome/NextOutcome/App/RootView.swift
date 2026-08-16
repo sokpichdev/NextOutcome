@@ -46,6 +46,8 @@ struct RootView: View {
     @State private var esportsLeaderboardViewModel: EsportsLeaderboardViewModel
     /// Shared use case for building Sports league detail screens on demand.
     private let fetchAllEventsUseCase: FetchAllEventsUseCase
+    /// Loads a selected sport's games, paged — used by the Sports hub's league screens.
+    private let fetchSportsGamesUseCase: FetchSportsGamesUseCase
     /// Drives the Search tab.
     @State private var searchViewModel: SearchViewModel
     /// Drives the Portfolio tab.
@@ -129,6 +131,7 @@ struct RootView: View {
         _esportsHubViewModel = State(initialValue: container.makeEsportsHubViewModel())
         _esportsLeaderboardViewModel = State(initialValue: container.makeEsportsLeaderboardViewModel())
         fetchAllEventsUseCase = container.makeFetchAllEventsUseCase()
+        fetchSportsGamesUseCase = container.makeFetchSportsGamesUseCase()
         _searchViewModel = State(initialValue: container.makeSearchViewModel())
         _portfolioViewModel = State(initialValue: portfolio)
         _shellViewModel = State(initialValue: ShellViewModel(portfolio: portfolio))
@@ -214,7 +217,8 @@ struct RootView: View {
                             SportsHubView(
                                 viewModel: sportsHubViewModel,
                                 worldCupViewModel: worldCupViewModel,
-                                fetchAllEvents: fetchAllEventsUseCase
+                                fetchAllEvents: fetchAllEventsUseCase,
+                                fetchSportsGames: fetchSportsGamesUseCase
                             )
                         } else if selectedCategory.id == "crypto" {
                             CryptoHubView(viewModel: cryptoHubViewModel, tagID: selectedCategory.tagID)

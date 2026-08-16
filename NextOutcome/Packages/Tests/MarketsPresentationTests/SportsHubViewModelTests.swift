@@ -373,13 +373,13 @@ final class SportsHubViewModelTests: XCTestCase {
 
 @MainActor
 final class SportsLeagueDetailViewModelTests: XCTestCase {
-    private func game(_ id: String, volume: Decimal = 0) -> Event {
+    private func game(_ id: String, volume: Decimal = 0, live: Bool = false) -> Event {
         Event(
             id: id, title: id, slug: id,
             markets: [.init(id: "\(id)-ml", question: id, slug: id, outcomes: [], volume: 0,
                             liquidity: 0, endDate: nil, isResolved: false, imageURL: nil,
                             sportsMarketType: "moneyline")],
-            volume: volume, imageURL: nil, gameStartTime: .now
+            volume: volume, imageURL: nil, gameStartTime: .now, live: live
         )
     }
 
@@ -388,21 +388,81 @@ final class SportsLeagueDetailViewModelTests: XCTestCase {
     }
 
     private func makeVM(repo: SportsFakeRepository, league: SportsLeague = .init(id: "85", title: "Wimbledon", glyph: "figure.tennis")) -> SportsLeagueDetailViewModel {
-        SportsLeagueDetailViewModel(league: league, fetchAllEvents: FetchAllEventsUseCase(repository: repo))
+        SportsLeagueDetailViewModel(
+            league: league,
+            fetchAllEvents: FetchAllEventsUseCase(repository: repo),
+            fetchSportsGames: FetchSportsGamesUseCase(repository: repo)
+        )
     }
 
-    func test_load_splitsIntoGamesAndProps() async {
+    // MARK: paged, sectioned games tab
+
+    func test_load_scopesTheGamesQueryToThisLeague() async {
         let repo = SportsFakeRepository(allEvents: [])
-        repo.leagueEvents = [game("g1"), prop("p1")]
+        repo.livePages = [Page(items: [game("g1")], nextCursor: nil)]
+        let vm = makeVM(repo: repo, league: .init(id: "100350", title: "Soccer", glyph: "soccerball"))
+
+        await vm.load()
+
+        XCTAssertEqual(repo.lastLeagueTagID, "100350")
+    }
+
+    func test_load_sectionsGamesLiveFirstThenByDate() async {
+        let repo = SportsFakeRepository(allEvents: [])
+        repo.inPlayGames = [game("playing", live: true)]
+        repo.livePages = [Page(items: [game("later")], nextCursor: nil)]
         let vm = makeVM(repo: repo)
 
         await vm.load()
 
+        XCTAssertEqual(vm.gameSections.first?.title, "Live now")
+        XCTAssertEqual(vm.gameSections.first?.events.map(\.id), ["playing"])
+    }
+
+    func test_load_doesNotFetchPropsUntilThatTabIsOpened() async {
+        // Props needs the unpaginated league fetch, which pulls up to 500 events. The common
+        // path is looking at games, so that cost must not be paid on load.
+        let repo = SportsFakeRepository(allEvents: [])
+        repo.leagueEvents = [prop("p1")]
+        repo.livePages = [Page(items: [game("g1")], nextCursor: nil)]
+        let vm = makeVM(repo: repo)
+
+        await vm.load()
+        XCTAssertEqual(repo.fetchAllCallCount, 0, "games load must not touch the props fetch")
+
+        await vm.loadPropsIfNeeded()
+
+        XCTAssertEqual(repo.fetchAllCallCount, 1)
+        XCTAssertEqual(vm.propEvents.map(\.id), ["p1"])
+    }
+
+    func test_openingPropsTwiceFetchesOnce() async {
+        let repo = SportsFakeRepository(allEvents: [])
+        repo.leagueEvents = [prop("p1")]
+        repo.livePages = [Page(items: [game("g1")], nextCursor: nil)]
+        let vm = makeVM(repo: repo)
+        await vm.load()
+
+        await vm.loadPropsIfNeeded()
+        await vm.loadPropsIfNeeded()
+
+        XCTAssertEqual(repo.fetchAllCallCount, 1)
+    }
+
+    func test_gamesComeFromTheGamesQueryAndPropsFromTheLeagueFetch() async {
+        // The two tabs now have separate sources: games are paged and games-only, props come
+        // from the unpaginated league fetch and are split client-side.
+        let repo = SportsFakeRepository(allEvents: [])
+        repo.livePages = [Page(items: [game("g1")], nextCursor: nil)]
+        repo.leagueEvents = [game("g1"), prop("p1")]
+        let vm = makeVM(repo: repo)
+
+        await vm.load()
         XCTAssertEqual(vm.state, .loaded)
-        vm.selectedTab = .games
-        XCTAssertEqual(vm.visibleEvents.map(\.id), ["g1"])
-        vm.selectedTab = .props
-        XCTAssertEqual(vm.visibleEvents.map(\.id), ["p1"])
+        XCTAssertEqual(vm.gameSections.flatMap(\.events).map(\.id), ["g1"])
+
+        await vm.loadPropsIfNeeded()
+        XCTAssertEqual(vm.visibleEvents.map(\.id), ["p1"], "the games are not repeated under Props")
     }
 
     func test_load_empty_fails() async {
@@ -420,8 +480,10 @@ final class SportsLeagueDetailViewModelTests: XCTestCase {
             Event(id: "m1", title: "Wimbledon Final", slug: "m1", markets: [], volume: 0, imageURL: nil),
             Event(id: "m2", title: "MLB Game", slug: "m2", markets: [], volume: 0, imageURL: nil),
         ]
+        repo.livePages = [Page(items: [game("g1")], nextCursor: nil)]
         let vm = makeVM(repo: repo)
         await vm.load()
+        await vm.loadPropsIfNeeded()
         vm.selectedTab = .props // these events have no kickoff/moneyline, so they're props
 
         vm.searchQuery = "final"
@@ -434,8 +496,10 @@ final class SportsLeagueDetailViewModelTests: XCTestCase {
     func test_setSort_appliesToVisibleEvents() async {
         let repo = SportsFakeRepository(allEvents: [])
         repo.leagueEvents = [prop("low", volume: 5), prop("high", volume: 50)]
+        repo.livePages = [Page(items: [game("g1")], nextCursor: nil)]
         let vm = makeVM(repo: repo)
         await vm.load()
+        await vm.loadPropsIfNeeded()
         vm.selectedTab = .props
 
         XCTAssertEqual(vm.visibleEvents.map(\.id), ["high", "low"]) // default: volume desc
@@ -446,8 +510,10 @@ final class SportsLeagueDetailViewModelTests: XCTestCase {
     func test_standingsEvent_isHighestVolumeProp() async {
         let repo = SportsFakeRepository(allEvents: [])
         repo.leagueEvents = [game("g1", volume: 999), prop("low", volume: 5), prop("high", volume: 50)]
+        repo.livePages = [Page(items: [game("g1")], nextCursor: nil)]
         let vm = makeVM(repo: repo)
         await vm.load()
+        await vm.loadPropsIfNeeded()
 
         XCTAssertEqual(vm.standingsEvent?.id, "high")
     }
@@ -455,8 +521,10 @@ final class SportsLeagueDetailViewModelTests: XCTestCase {
     func test_standingsEvent_nilWhenNoProps() async {
         let repo = SportsFakeRepository(allEvents: [])
         repo.leagueEvents = [game("g1")]
+        repo.livePages = [Page(items: [game("g1")], nextCursor: nil)]
         let vm = makeVM(repo: repo)
         await vm.load()
+        await vm.loadPropsIfNeeded()
 
         XCTAssertNil(vm.standingsEvent)
     }
@@ -488,6 +556,8 @@ private final class SportsFakeRepository: MarketRepository, @unchecked Sendable 
     var inPlayGames: [Event] = []
     /// How many times the in-play query was made.
     private(set) var inPlayFetchCount = 0
+    /// The league scope the most recent games request carried, if any.
+    private(set) var lastLeagueTagID: String?
 
     init(allEvents: [Event]) { self.allEvents = allEvents }
 
@@ -507,7 +577,8 @@ private final class SportsFakeRepository: MarketRepository, @unchecked Sendable 
         lastGameResultsEventIDs = eventIDs
         return results
     }
-    func fetchSportsGames(live: Bool, startingAfter: Date?, cursor: String?) async throws -> Page<Event> {
+    func fetchSportsGames(live: Bool, startingAfter: Date?, cursor: String?, leagueTagID: String?) async throws -> Page<Event> {
+        lastLeagueTagID = leagueTagID
         if live {
             inPlayFetchCount += 1
             return Page(items: inPlayGames, nextCursor: nil)

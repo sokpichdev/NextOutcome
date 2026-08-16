@@ -6,6 +6,7 @@
 //
 
 import XCTest
+import Foundation
 @testable import MarketsData
 import MarketsDomain
 
@@ -13,8 +14,9 @@ import MarketsDomain
 /// volume, which is dominated by futures — measured against the live API, 20 fetched events
 /// yielded 4 non-esports games and none in play. These params move both filters server-side.
 final class GammaSportsGamesQueryTests: XCTestCase {
+    /// The dictionary half of the query; the repeated-key half is asserted separately.
     private func params(live: Bool = false, startingAfter: Date? = nil, cursor: String? = nil) -> [String: String] {
-        GammaEventQuery.sportsGamesParams(live: live, startingAfter: startingAfter, cursor: cursor)
+        GammaEventQuery.sportsGamesParams(live: live, startingAfter: startingAfter, cursor: cursor).query
     }
 
     func test_scopesToGamesAndExcludesEsports() {
@@ -43,6 +45,25 @@ final class GammaSportsGamesQueryTests: XCTestCase {
     func test_upcomingGamesAreOrderedByKickoffAscending() {
         XCTAssertEqual(params(startingAfter: Date())["order"], "startTime")
         XCTAssertEqual(params(startingAfter: Date())["ascending"], "true")
+    }
+
+    func test_leagueScopeIsAndedOntoTheGamesTagAsARepeatedItem() {
+        // `tag_id` takes a single integer — a comma list is rejected outright — so Gamma ANDs
+        // tags by repeating the key, which only works alongside `tag_match=all`.
+        let scoped = GammaEventQuery.sportsGamesParams(
+            live: false, startingAfter: nil, cursor: nil, leagueTagID: "100350"
+        )
+
+        XCTAssertEqual(scoped.query["tag_id"], "100639", "the Games tag stays in the dictionary")
+        XCTAssertEqual(scoped.query["tag_match"], "all")
+        XCTAssertEqual(scoped.extraItems, [URLQueryItem(name: "tag_id", value: "100350")])
+    }
+
+    func test_unscopedQuerySendsNeitherTheExtraTagNorTheMatchMode() {
+        let unscoped = GammaEventQuery.sportsGamesParams(live: false, startingAfter: nil, cursor: nil)
+
+        XCTAssertNil(unscoped.query["tag_match"], "match mode is meaningless with one tag")
+        XCTAssertTrue(unscoped.extraItems.isEmpty)
     }
 
     func test_excludesClosedGames() {

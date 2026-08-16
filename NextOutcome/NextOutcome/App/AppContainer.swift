@@ -101,6 +101,12 @@ final class AppContainer {
         PoliticsHubViewModel(fetchAllEvents: FetchAllEventsUseCase(repository: repository))
     }
 
+    /// Builds the use case that loads a sport's games, paged and games-only.
+    /// - Returns: A use case wired to the shared repository.
+    func makeFetchSportsGamesUseCase() -> FetchSportsGamesUseCase {
+        FetchSportsGamesUseCase(repository: repository)
+    }
+
     /// Builds the view model for the Sports hub (Live/Futures modes, the server-driven sport
     /// chip row, and live scores on its cards).
     /// - Returns: A view model wired to fetch events, the sport catalogue, and game results.

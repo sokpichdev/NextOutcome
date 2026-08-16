@@ -278,10 +278,14 @@ public struct GammaMarketRepository: MarketRepository {
     /// only the filters differ. Gamma's variant markets ("Halftime Result", "Exact Score")
     /// come back alongside each fixture and are dropped downstream by the moneyline rule,
     /// which is what keeps one card per game.
-    public func fetchSportsGames(live: Bool, startingAfter: Date?, cursor: String?) async throws -> Page<Event> {
-        let query = GammaEventQuery.sportsGamesParams(live: live, startingAfter: startingAfter, cursor: cursor)
+    public func fetchSportsGames(
+        live: Bool, startingAfter: Date?, cursor: String?, leagueTagID: String?
+    ) async throws -> Page<Event> {
+        let params = GammaEventQuery.sportsGamesParams(
+            live: live, startingAfter: startingAfter, cursor: cursor, leagueTagID: leagueTagID
+        )
         let page: EventKeysetPageDTO = try await client.fetch(
-            Endpoint(host: .gamma, path: "/events/keyset", query: query)
+            Endpoint(host: .gamma, path: "/events/keyset", query: params.query, extraQueryItems: params.extraItems)
         )
         return Page(items: page.events.map(MarketMapper.event(from:)), nextCursor: page.nextCursor)
     }
@@ -411,13 +415,24 @@ public enum GammaEventQuery {
     ///   - startingAfter: Lower bound on kickoff, for the upcoming feed. Supplying it also
     ///     switches the sort to kickoff order.
     ///   - cursor: The keyset cursor, or `nil`/empty for the first page.
-    static func sportsGamesParams(live: Bool, startingAfter: Date?, cursor: String?) -> [String: String] {
+    ///   - leagueTagID: Narrows to one sport or league. Gamma ANDs tags by *repeating*
+    ///     `tag_id` — a comma list is rejected as an invalid integer — so the extra tag comes
+    ///     back separately, to be sent as its own query item alongside `tag_match=all`.
+    /// - Returns: The dictionary parameters plus any items that must repeat a key.
+    static func sportsGamesParams(
+        live: Bool, startingAfter: Date?, cursor: String?, leagueTagID: String? = nil
+    ) -> (query: [String: String], extraItems: [URLQueryItem]) {
         var query: [String: String] = [
             "tag_id": gamesTagID,
             "exclude_tag_id": esportsTagID,
             "closed": "false",
             "limit": "\(keysetPageSize)",
         ]
+        var extraItems: [URLQueryItem] = []
+        if let leagueTagID {
+            query["tag_match"] = "all"
+            extraItems.append(URLQueryItem(name: "tag_id", value: leagueTagID))
+        }
         if live { query["live"] = "true" }
         if let startingAfter {
             query["start_time_min"] = ISO8601DateFormatter().string(from: startingAfter)
@@ -425,7 +440,7 @@ public enum GammaEventQuery {
             query["ascending"] = "true"
         }
         if let cursor, !cursor.isEmpty { query["after_cursor"] = cursor }
-        return query
+        return (query, extraItems)
     }
 
     /// The filter/sort params common to the offset and keyset list shapes.
