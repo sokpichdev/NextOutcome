@@ -272,6 +272,20 @@ public struct GammaMarketRepository: MarketRepository {
         return (rows, activity.leagues)
     }
 
+    /// Fetches one keyset page of sports games, in-play or upcoming.
+    ///
+    /// Uses the same `/events/keyset` shape as the main feed, so paging behaves identically —
+    /// only the filters differ. Gamma's variant markets ("Halftime Result", "Exact Score")
+    /// come back alongside each fixture and are dropped downstream by the moneyline rule,
+    /// which is what keeps one card per game.
+    public func fetchSportsGames(live: Bool, startingAfter: Date?, cursor: String?) async throws -> Page<Event> {
+        let query = GammaEventQuery.sportsGamesParams(live: live, startingAfter: startingAfter, cursor: cursor)
+        let page: EventKeysetPageDTO = try await client.fetch(
+            Endpoint(host: .gamma, path: "/events/keyset", query: query)
+        )
+        return Page(items: page.events.map(MarketMapper.event(from:)), nextCursor: page.nextCursor)
+    }
+
     /// Fetches Gamma's full league catalogue with activity merged in.
     ///
     /// Neither endpoint takes parameters, so scoping happens here. It isn't cached: rows
@@ -373,6 +387,43 @@ public enum GammaEventQuery {
     public static func keysetParams(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod = .all) -> [String: String] {
         var query = sharedParams(tagID: tagID, sort: sort, status: status, period: period)
         query["limit"] = "\(keysetPageSize)"
+        if let cursor, !cursor.isEmpty { query["after_cursor"] = cursor }
+        return query
+    }
+
+    /// Gamma's "Games" tag — the one real fixtures carry, as opposed to season futures.
+    static let gamesTagID = "100639"
+    /// The esports tag, excluded server-side: esports has its own hub, and the Sports chip row
+    /// already filters it, so showing its matches in this feed would contradict the chips.
+    static let esportsTagID = "64"
+
+    /// Builds the Sports hub's games query.
+    ///
+    /// The hub previously read the general sports tag sorted by 24h volume, a feed dominated
+    /// by season futures — measured against the live API, 20 fetched events yielded 4
+    /// non-esports games and none in play. Scoping to the Games tag and excluding esports
+    /// server-side is what makes the feed actually about games.
+    ///
+    /// - Parameters:
+    ///   - live: When true, asks for in-play games only. When false the flag is omitted
+    ///     entirely rather than sent as `false`, which would exclude in-play games instead of
+    ///     simply not filtering on them.
+    ///   - startingAfter: Lower bound on kickoff, for the upcoming feed. Supplying it also
+    ///     switches the sort to kickoff order.
+    ///   - cursor: The keyset cursor, or `nil`/empty for the first page.
+    static func sportsGamesParams(live: Bool, startingAfter: Date?, cursor: String?) -> [String: String] {
+        var query: [String: String] = [
+            "tag_id": gamesTagID,
+            "exclude_tag_id": esportsTagID,
+            "closed": "false",
+            "limit": "\(keysetPageSize)",
+        ]
+        if live { query["live"] = "true" }
+        if let startingAfter {
+            query["start_time_min"] = ISO8601DateFormatter().string(from: startingAfter)
+            query["order"] = "startTime"
+            query["ascending"] = "true"
+        }
         if let cursor, !cursor.isEmpty { query["after_cursor"] = cursor }
         return query
     }

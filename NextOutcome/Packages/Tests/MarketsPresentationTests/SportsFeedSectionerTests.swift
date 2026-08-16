@@ -84,10 +84,36 @@ final class SportsFeedSectionerTests: XCTestCase {
         XCTAssertEqual(result.first?.title, "Live now")
     }
 
+    func test_liveStateFromTheEventsOwnEmbeddedResultCounts() {
+        // Gamma ships score/period/live on the event payload itself, so a live game must land
+        // in "Live now" on the first frame — before the separate results call returns.
+        let embedded = GameResult(eventID: "g", score: "2-0", elapsed: "60", period: "2H",
+                                  live: true, ended: false, teams: [])
+        let event = Event(id: "g", title: "g", slug: "g", markets: [moneyline()], volume: 0,
+                          imageURL: nil, tags: [tag("1")],
+                          gameStartTime: now.addingTimeInterval(-3600), initialResult: embedded)
+
+        XCTAssertEqual(sections([event]).first?.title, "Live now")
+    }
+
+    func test_todaysGamesAreTitledStartingSoonWithTheDate() {
+        let result = sections([game("g", hoursFromNow: 3)])
+
+        XCTAssertEqual(result.map(\.title), ["Starting Soon"])
+        XCTAssertEqual(result.first?.subtitle, "Mon, August 17")
+    }
+
+    func test_laterDaysKeepPlainTitlesAndNoSubtitle() {
+        let result = sections([game("t", hoursFromNow: 26), game("d", hoursFromNow: 74)])
+
+        XCTAssertEqual(result.map(\.title), ["Tomorrow", "Thu 20 Aug"])
+        XCTAssertNil(result.first?.subtitle)
+    }
+
     func test_endedGameStaysInItsDayRatherThanLiveNow() {
         let result = sections([game("final", hoursFromNow: -3, ended: true)])
 
-        XCTAssertEqual(result.map(\.title), ["Today"])
+        XCTAssertEqual(result.map(\.title), ["Starting Soon"])
     }
 
     func test_remainingGamesAreTitledTodayTomorrowThenDated() {
@@ -97,7 +123,7 @@ final class SportsFeedSectionerTests: XCTestCase {
             game("tomorrow", hoursFromNow: 26),
         ])
 
-        XCTAssertEqual(result.map(\.title), ["Today", "Tomorrow", "Wed 19 Aug"])
+        XCTAssertEqual(result.map(\.title), ["Starting Soon", "Tomorrow", "Wed 19 Aug"])
         XCTAssertEqual(result.map { $0.events.map(\.id) }, [["today"], ["tomorrow"], ["d2"]])
     }
 

@@ -112,6 +112,8 @@ public final class SportsHubViewModel {
 
     /// Loads a page of events, optionally by tag (used for the Futures sport picker).
     private let fetchEvents: FetchEventsUseCase
+    /// Loads the Live feed's games — in-play and upcoming, esports already excluded.
+    private let fetchSportsGames: FetchSportsGamesUseCase
     /// Loads the server-side sport taxonomy behind the chip row and All Sports sheet.
     private let fetchSportsCatalogue: FetchSportsCatalogueUseCase
     /// Loads live scores for the events the Live feed is showing.
@@ -122,11 +124,13 @@ public final class SportsHubViewModel {
     /// Creates the view model with its use cases.
     public init(
         fetchEvents: FetchEventsUseCase,
+        fetchSportsGames: FetchSportsGamesUseCase,
         fetchSportsCatalogue: FetchSportsCatalogueUseCase,
         fetchGameResults: FetchGameResultsUseCase,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.fetchEvents = fetchEvents
+        self.fetchSportsGames = fetchSportsGames
         self.fetchSportsCatalogue = fetchSportsCatalogue
         self.fetchGameResults = fetchGameResults
         self.now = now
@@ -151,8 +155,11 @@ public final class SportsHubViewModel {
         visibleLimit = Self.revealStep
         nextCursor = nil
         async let catalogueTask = try? fetchSportsCatalogue.execute()
-        async let pageTask = try? fetchEvents.execute(
-            cursor: nil, tagID: Self.sportsTagID, sort: .volume24h, status: .active
+        // Two game queries, not one general feed. The upcoming query is bounded by kickoff, so
+        // a game already under way cannot appear in it — in-play games need their own request.
+        async let inPlayTask = try? fetchSportsGames.execute(live: true, startingAfter: nil, cursor: nil)
+        async let pageTask = try? fetchSportsGames.execute(
+            live: false, startingAfter: now(), cursor: nil
         )
 
         // Publish the catalogue the moment it lands: the chip row is useful before the feed
@@ -161,8 +168,9 @@ public final class SportsHubViewModel {
         let loadedCatalogue = await catalogueTask
         catalogue = loadedCatalogue ?? []
 
+        let loadedInPlay = await inPlayTask
         let loadedPage = await pageTask
-        let events = loadedPage?.items ?? []
+        let events = (loadedInPlay?.items ?? []) + (loadedPage?.items ?? [])
         guard !events.isEmpty else {
             state = .failed("Couldn't load Sports. Pull to refresh.")
             return
@@ -207,8 +215,10 @@ public final class SportsHubViewModel {
         isLoadingMore = true
         defer { isLoadingMore = false }
 
-        guard let page = try? await fetchEvents.execute(
-            cursor: nextCursor, tagID: Self.sportsTagID, sort: .volume24h, status: .active
+        // Only the upcoming query pages; "Live now" is a bounded head that refreshes with the
+        // feed rather than being re-asked on every scroll step.
+        guard let page = try? await fetchSportsGames.execute(
+            live: false, startingAfter: now(), cursor: nextCursor
         ) else { return }
         nextCursor = page.nextCursor
         guard !page.items.isEmpty else { return }

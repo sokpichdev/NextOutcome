@@ -29,6 +29,7 @@ final class SportsHubViewModelTests: XCTestCase {
         repo.catalogue = catalogue
         let vm = SportsHubViewModel(
             fetchEvents: FetchEventsUseCase(repository: repo),
+            fetchSportsGames: FetchSportsGamesUseCase(repository: repo),
             fetchSportsCatalogue: FetchSportsCatalogueUseCase(repository: repo),
             fetchGameResults: FetchGameResultsUseCase(repository: repo),
             now: now
@@ -123,6 +124,40 @@ final class SportsHubViewModelTests: XCTestCase {
 
         XCTAssertEqual(repo.liveFetchCount, 2, "every feed event was already revealed, so fetch")
         XCTAssertEqual(visibleCount(vm), 4)
+    }
+
+    func test_load_asksForInPlayGamesSeparatelyAndLeadsWithThem() async {
+        // The upcoming query is bounded by kickoff, so a game already under way would not
+        // appear in it at all — in-play games need their own request.
+        let inPlay = Event(id: "playing", title: "playing", slug: "playing", markets: [moneyline()],
+                           volume: 0, imageURL: nil, tags: [tag("tag-mlb", "L")],
+                           gameStartTime: Date().addingTimeInterval(-3600), live: true)
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.inPlayGames = [inPlay]
+        repo.livePages = [Page(items: events(3, prefix: "soon", leagueTagID: "tag-mlb"), nextCursor: nil)]
+
+        await vm.load()
+
+        XCTAssertEqual(repo.inPlayFetchCount, 1)
+        XCTAssertEqual(vm.liveGroups.first?.title, "Live now")
+        XCTAssertEqual(vm.liveGroups.first?.events.map(\.id), ["playing"])
+    }
+
+    func test_loadMore_pagesOnlyTheUpcomingQuery() async {
+        // "Live now" is a bounded head that refreshes with the feed; scrolling must not re-ask
+        // for in-play games on every step.
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.inPlayGames = []
+        repo.livePages = [
+            Page(items: events(5, prefix: "a", leagueTagID: "tag-mlb"), nextCursor: "c1"),
+            Page(items: events(5, prefix: "b", leagueTagID: "tag-mlb"), nextCursor: nil),
+        ]
+        await vm.load()
+
+        await vm.loadMore()
+
+        XCTAssertEqual(repo.inPlayFetchCount, 1, "the in-play query ran once, at load")
+        XCTAssertEqual(repo.liveFetchCount, 2, "only the upcoming query paged")
     }
 
     func test_loadMore_doesNothingWhenThereIsNoNextPage() async {
@@ -449,6 +484,10 @@ private final class SportsFakeRepository: MarketRepository, @unchecked Sendable 
     private(set) var liveFetchCount = 0
     /// The cursor the most recent Live request carried, so a refresh can be shown to restart.
     private(set) var lastLiveCursor: String?
+    /// Games served to the in-play query.
+    var inPlayGames: [Event] = []
+    /// How many times the in-play query was made.
+    private(set) var inPlayFetchCount = 0
 
     init(allEvents: [Event]) { self.allEvents = allEvents }
 
@@ -457,17 +496,6 @@ private final class SportsFakeRepository: MarketRepository, @unchecked Sendable 
         return tagID == SportsHubViewModel.sportsTagID ? allEvents : leagueEvents
     }
     func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod) async throws -> Page<Event> {
-        if tagID == SportsHubViewModel.sportsTagID {
-            liveFetchCount += 1
-            lastLiveCursor = cursor
-            // Tests that don't care about paging just seed `allEvents`; they get it as a
-            // single, final page so their setup reads the same as before the feed was paged.
-            guard !livePages.isEmpty else { return Page(items: allEvents, nextCursor: nil) }
-            // nil cursor means "first page"; otherwise the cursor is the previous page's.
-            let index = cursor.flatMap { c in livePages.firstIndex { $0.nextCursor == c }.map { $0 + 1 } } ?? 0
-            guard index < livePages.count else { return Page(items: [], nextCursor: nil) }
-            return livePages[index]
-        }
         if let tagID, let futures = futuresPages[tagID] {
             futuresFetchCount += 1
             return Page(items: futures, nextCursor: nil)
@@ -479,6 +507,22 @@ private final class SportsFakeRepository: MarketRepository, @unchecked Sendable 
         lastGameResultsEventIDs = eventIDs
         return results
     }
+    func fetchSportsGames(live: Bool, startingAfter: Date?, cursor: String?) async throws -> Page<Event> {
+        if live {
+            inPlayFetchCount += 1
+            return Page(items: inPlayGames, nextCursor: nil)
+        }
+        liveFetchCount += 1
+        lastLiveCursor = cursor
+        // Tests that don't care about paging just seed `allEvents`; they get it as a single,
+        // final page so their setup reads the same as before the feed was paged.
+        guard !livePages.isEmpty else { return Page(items: allEvents, nextCursor: nil) }
+        // nil cursor means "first page"; otherwise the cursor is the previous page's.
+        let index = cursor.flatMap { c in livePages.firstIndex { $0.nextCursor == c }.map { $0 + 1 } } ?? 0
+        guard index < livePages.count else { return Page(items: [], nextCursor: nil) }
+        return livePages[index]
+    }
+
     func fetchSportsCatalogue() async throws -> [SportLeague] {
         if catalogueError { throw URLError(.badServerResponse) }
         return catalogue

@@ -14,13 +14,16 @@ public struct SportsFeedSection: Identifiable {
     public let id: String
     /// The header shown above the band.
     public let title: String
+    /// The date beneath the header, on today's band only — "Sun, August 16".
+    public let subtitle: String?
     /// The games in the band, kickoff order.
     public let events: [Event]
 
     /// Creates a section.
-    public init(id: String, title: String, events: [Event]) {
+    public init(id: String, title: String, subtitle: String? = nil, events: [Event]) {
         self.id = id
         self.title = title
+        self.subtitle = subtitle
         self.events = events
     }
 }
@@ -60,7 +63,9 @@ enum SportsFeedSectioner {
         // An ended game is not "on now" even though its result is loaded, so it stays with
         // the day it was played.
         let (live, scheduled) = games.reduce(into: ([Event](), [Event]())) { partial, event in
-            let result = results[event.id]
+            // Gamma ships score/period/live on the event itself, so a game is known to be in
+            // play on the first frame — before the separate results call returns.
+            let result = results[event.id] ?? event.initialResult
             let isEnded = result?.ended ?? event.isEnded
             let isLive = result?.live ?? event.isLive
             if isLive, !isEnded { partial.0.append(event) } else { partial.1.append(event) }
@@ -74,9 +79,13 @@ enum SportsFeedSectioner {
             sections.append(SportsFeedSection(id: liveSectionID, title: "Live now", events: ordered))
         }
         sections += WorldCupEventSplitter.gamesByDay(scheduled, calendar: calendar).map { day, games in
-            SportsFeedSection(id: Self.dayID(day, calendar: calendar),
-                              title: Self.title(for: day, now: now, calendar: calendar),
-                              events: games)
+            let isToday = calendar.isDate(day, inSameDayAs: calendar.startOfDay(for: now))
+            return SportsFeedSection(
+                id: Self.dayID(day, calendar: calendar),
+                title: Self.title(for: day, now: now, calendar: calendar),
+                subtitle: isToday ? Self.formatted(day, "EEE, MMMM d", calendar: calendar) : nil,
+                events: games
+            )
         }
         return sections
     }
@@ -87,17 +96,23 @@ enum SportsFeedSectioner {
         return "\(parts.year ?? 0)-\(parts.month ?? 0)-\(parts.day ?? 0)"
     }
 
-    /// "Today" and "Tomorrow" where they apply, else a short date like "Wed 19 Aug".
+    /// Today's band is "Starting Soon" (it carries the date as a subtitle), then "Tomorrow",
+    /// then a short date like "Wed 19 Aug".
     private static func title(for day: Date, now: Date, calendar: Calendar) -> String {
         let today = calendar.startOfDay(for: now)
-        if calendar.isDate(day, inSameDayAs: today) { return "Today" }
+        if calendar.isDate(day, inSameDayAs: today) { return "Starting Soon" }
         if let tomorrow = calendar.date(byAdding: .day, value: 1, to: today),
            calendar.isDate(day, inSameDayAs: tomorrow) { return "Tomorrow" }
+        return formatted(day, "EEE d MMM", calendar: calendar)
+    }
+
+    /// Formats a day with a fixed locale so section headers don't shift with device settings.
+    private static func formatted(_ day: Date, _ format: String, calendar: Calendar) -> String {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.timeZone = calendar.timeZone
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "EEE d MMM"
+        formatter.dateFormat = format
         return formatter.string(from: day)
     }
 }

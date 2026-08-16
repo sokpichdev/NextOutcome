@@ -107,6 +107,7 @@ final class AppContainer {
     func makeSportsHubViewModel() -> SportsHubViewModel {
         SportsHubViewModel(
             fetchEvents: FetchEventsUseCase(repository: repository),
+            fetchSportsGames: FetchSportsGamesUseCase(repository: repository),
             fetchSportsCatalogue: FetchSportsCatalogueUseCase(repository: repository),
             fetchGameResults: FetchGameResultsUseCase(repository: repository)
         )

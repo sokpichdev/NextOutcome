@@ -206,14 +206,30 @@ public struct SportsHubView: View {
                 LazyVStack(alignment: .leading, spacing: DSLayout.spacingLarge) {
                     ForEach(groups) { group in
                         VStack(alignment: .leading, spacing: DSLayout.spacing) {
-                            Text(group.title.uppercased())
-                                .font(DSFont.caption.bold())
-                                .foregroundStyle(DSColor.textSecondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(group.title.uppercased())
+                                    .font(DSFont.caption.bold())
+                                    .foregroundStyle(DSColor.textSecondary)
+                                if let subtitle = group.subtitle {
+                                    Text(subtitle)
+                                        .font(DSFont.caption)
+                                        .foregroundStyle(DSColor.textSecondary.opacity(0.7))
+                                }
+                            }
                             ForEach(group.events) { event in
                                 NavigationLink(value: event) {
                                     HomeCard(
                                         event: event,
-                                        result: viewModel.results[event.id],
+                                        // The sectioner already guarantees every event here is
+                                        // a game, so render it as one. Left to classify itself,
+                                        // a sparse fixture (Setka Cup table tennis, say) falls
+                                        // through to the generic multi-outcome card and shows a
+                                        // duplicated title with $0 Vol instead of a scoreboard.
+                                        kindOverride: .game,
+                                        // Gamma ships the live clock on the event itself, so a
+                                        // card shows "2H · 60" on its first frame rather than
+                                        // waiting on the separate results call.
+                                        result: viewModel.results[event.id] ?? event.initialResult,
                                         onTeamTap: { selectedTeam = $0 },
                                         leagueSlug: viewModel.leagueSlug(for: event)
                                     )

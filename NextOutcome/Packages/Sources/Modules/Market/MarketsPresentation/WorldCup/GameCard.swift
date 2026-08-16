@@ -274,9 +274,13 @@ struct GameCard: View {
     /// "COL 87¢"-style label: team abbreviation from results when the name matches,
     /// otherwise the first three letters of the market's team label. "DRAW" for the draw.
     private func shortLabel(for market: Market) -> String {
-        if isDraw(market) { return "DRAW" }
-        if let abbreviation = team(for: market)?.abbreviation { return abbreviation }
-        return String((market.groupItemTitle ?? market.question).prefix(3)).uppercased()
+        GameCardLabel.shortLabel(
+            groupItemTitle: market.groupItemTitle,
+            question: market.question,
+            index: teamMarkets.firstIndex(where: { $0.id == market.id }) ?? 0,
+            teams: result?.teams ?? [],
+            isDraw: isDraw(market)
+        )
     }
 
     /// Finds the result team matching a market's team label, if any.

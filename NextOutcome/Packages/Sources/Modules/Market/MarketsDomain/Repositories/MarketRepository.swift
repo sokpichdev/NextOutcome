@@ -5,6 +5,7 @@
 //  Created by Sok Pich on 30/06/2026.
 //
 
+import Foundation
 import SharedDomain
 
 /// Read access to Polymarket's market/event catalogue and the social data around it
@@ -29,6 +30,16 @@ public protocol MarketRepository: Sendable {
     func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult]
     /// Team reference data (name, logo, colour) for a sports league, e.g. "fifwc".
     func fetchTeams(league: String) async throws -> [GameTeam]
+    /// One page of sports *games* — real fixtures, esports excluded.
+    ///
+    /// Separate from `fetchEvents` because the Sports feed needs filters no other feed wants
+    /// (games-only, esports-excluded, in-play, kickoff-bounded); folding them into the general
+    /// query would burden every caller with sports concerns.
+    /// - Parameters:
+    ///   - live: Ask for in-play games only.
+    ///   - startingAfter: Lower bound on kickoff; also sorts by kickoff ascending.
+    ///   - cursor: Keyset cursor, `nil` for the first page.
+    func fetchSportsGames(live: Bool, startingAfter: Date?, cursor: String?) async throws -> Page<Event>
     /// Gamma's full league catalogue — every league Polymarket runs markets for, with its
     /// display name, key art, classification tag, sport group, and current activity.
     ///
@@ -85,6 +96,9 @@ public extension MarketRepository {
     func fetchTeams(league: String) async throws -> [GameTeam] { [] }
     func fetchLeagues(tagID: String) async throws -> [EsportsLeague] { [] }
     func fetchSportsCatalogue() async throws -> [SportLeague] { [] }
+    func fetchSportsGames(live: Bool, startingAfter: Date?, cursor: String?) async throws -> Page<Event> {
+        Page(items: [], nextCursor: nil)
+    }
     func fetchFeaturedEvents(limit: Int) async throws -> [Event] { [] }
     func fetchCompletedEvents(seriesID: String, limit: Int) async throws -> [Event] { [] }
     func fetchAllEvents(tagID: String, status: EventStatus) async throws -> [Event] { [] }
