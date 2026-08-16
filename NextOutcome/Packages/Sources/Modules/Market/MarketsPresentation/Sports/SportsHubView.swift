@@ -191,11 +191,14 @@ public struct SportsHubView: View {
 
     /// The Live tab: league sections of match cards, filtered by `searchQuery`.
     private var liveContent: some View {
-        let groups = viewModel.liveGroups.compactMap { group -> (league: SportsLeague, events: [Event])? in
+        // Search filters what is *revealed*, not the whole loaded set — the feed pages in, so
+        // matches further down arrive as the reader scrolls, same as unfiltered browsing.
+        let groups = viewModel.visibleGroups.compactMap { group -> (league: SportsLeague, events: [Event])? in
             guard !searchQuery.isEmpty else { return group }
             let filtered = group.events.filter { $0.title.localizedCaseInsensitiveContains(searchQuery) }
             return filtered.isEmpty ? nil : (group.league, filtered)
         }
+        let lastEventID = groups.last?.events.last?.id
         return ScrollView {
             if groups.isEmpty {
                 StateView(.empty).padding(.top, DSLayout.spacingXLarge)
@@ -216,8 +219,19 @@ public struct SportsHubView: View {
                                     )
                                 }
                                 .buttonStyle(.plain)
+                                // Infinite scroll, same trigger the main feed uses: the last
+                                // rendered card asks for the next batch as it comes into view.
+                                .onAppear {
+                                    guard event.id == lastEventID else { return }
+                                    Task { await viewModel.loadMore() }
+                                }
                             }
                         }
+                    }
+                    if viewModel.isLoadingMore {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, DSLayout.spacing)
                     }
                 }
                 .padding(.horizontal, DSLayout.margin)

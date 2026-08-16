@@ -66,6 +66,34 @@ public final class SportsHubViewModel {
     public var showSpreadsAndTotals = false
     /// Live events grouped by league, in `catalogue` order; leagues with no live events are omitted.
     public private(set) var liveGroups: [(league: SportsLeague, events: [Event])] = []
+    /// How many events the Live feed reveals per scroll step.
+    static let revealStep = 5
+    /// How many of the loaded events the Live feed is currently showing.
+    ///
+    /// Loading and revealing are deliberately separate. A network page is 20 events (the size
+    /// the whole app pages at), but a phone shows roughly five cards, so rendering a full page
+    /// at once builds cards nobody has scrolled to yet.
+    public private(set) var visibleLimit = revealStep
+    /// Whether a `loadMore()` network fetch is in flight — drives the feed's footer spinner.
+    public private(set) var isLoadingMore = false
+    /// The keyset cursor for the next Live page, or `nil` once the feed is exhausted.
+    private var nextCursor: String?
+    /// Whether another page of Live events exists.
+    public var hasMore: Bool { nextCursor != nil }
+
+    /// `liveGroups` truncated to the first `visibleLimit` events, section order preserved and
+    /// sections that fall entirely past the limit dropped.
+    public var visibleGroups: [(league: SportsLeague, events: [Event])] {
+        var remaining = visibleLimit
+        var revealed: [(league: SportsLeague, events: [Event])] = []
+        for group in liveGroups {
+            guard remaining > 0 else { break }
+            let slice = Array(group.events.prefix(remaining))
+            remaining -= slice.count
+            revealed.append((group.league, slice))
+        }
+        return revealed
+    }
     /// The raw Live sample (unsorted, ungrouped), kept so changing `liveSort` doesn't require
     /// a refetch.
     private var sampleEvents: [Event] = []
@@ -80,9 +108,6 @@ public final class SportsHubViewModel {
 
     /// Loads a page of events, optionally by tag (used for the Futures sport picker).
     private let fetchEvents: FetchEventsUseCase
-    /// Loads every event under a tag, unpaginated (used for the Live tab's sample, so
-    /// league/sport chips can be derived from more than just the highest-volume page).
-    private let fetchAllEvents: FetchAllEventsUseCase
     /// Loads the server-side sport taxonomy behind the chip row and All Sports sheet.
     private let fetchSportsCatalogue: FetchSportsCatalogueUseCase
     /// Loads live scores for the events the Live feed is showing.
@@ -93,13 +118,11 @@ public final class SportsHubViewModel {
     /// Creates the view model with its use cases.
     public init(
         fetchEvents: FetchEventsUseCase,
-        fetchAllEvents: FetchAllEventsUseCase,
         fetchSportsCatalogue: FetchSportsCatalogueUseCase,
         fetchGameResults: FetchGameResultsUseCase,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.fetchEvents = fetchEvents
-        self.fetchAllEvents = fetchAllEvents
         self.fetchSportsCatalogue = fetchSportsCatalogue
         self.fetchGameResults = fetchGameResults
         self.now = now
@@ -121,22 +144,26 @@ public final class SportsHubViewModel {
     /// all. The catalogue also carries the counts and live flags a sampled feed can't.
     public func load() async {
         state = .loading
+        visibleLimit = Self.revealStep
+        nextCursor = nil
         async let catalogueTask = try? fetchSportsCatalogue.execute()
-        async let eventsTask = try? fetchAllEvents.execute(tagID: Self.sportsTagID, status: .active)
+        async let pageTask = try? fetchEvents.execute(
+            cursor: nil, tagID: Self.sportsTagID, sort: .volume24h, status: .active
+        )
 
-        // Publish the catalogue the moment it lands: the chip row is useful long before the
-        // ~25MB event sample finishes, and gating it behind that read as a broken screen for
-        // 45+ seconds. Bind before defaulting on both — `await x ?? []` binds as
-        // `await (x ?? [])`, which reads the unresolved value.
+        // Publish the catalogue the moment it lands: the chip row is useful before the feed
+        // is, and gating it behind the feed read as a broken screen. Bind before defaulting on
+        // both — `await x ?? []` binds as `await (x ?? [])`, reading the unresolved value.
         let loadedCatalogue = await catalogueTask
         catalogue = loadedCatalogue ?? []
 
-        let loadedEvents = await eventsTask
-        let events = loadedEvents ?? []
+        let loadedPage = await pageTask
+        let events = loadedPage?.items ?? []
         guard !events.isEmpty else {
             state = .failed("Couldn't load Sports. Pull to refresh.")
             return
         }
+        nextCursor = loadedPage?.nextCursor
         sampleEvents = events
         futuresSports = catalogue.prefix(8).map {
             SportsLeague(id: $0.navigationTagID, title: $0.name, glyph: $0.glyph)
@@ -151,9 +178,40 @@ public final class SportsHubViewModel {
         await loadFutures()
     }
 
-    /// Reloads everything (pull-to-refresh).
+    /// Reloads everything from the first page (pull-to-refresh).
     public func refresh() async {
         await load()
+    }
+
+    /// Reveals the next five events, fetching another page first when everything already
+    /// loaded is on screen.
+    ///
+    /// Two steps behind one call, because they cost very different things. Revealing more of
+    /// an already-fetched page is free and instant; only when the reader has actually seen
+    /// every loaded event does this reach for the network.
+    public func loadMore() async {
+        if visibleLimit < sampleEvents.count {
+            visibleLimit = min(visibleLimit + Self.revealStep, sampleEvents.count)
+            return
+        }
+        guard hasMore, !isLoadingMore else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+
+        guard let page = try? await fetchEvents.execute(
+            cursor: nextCursor, tagID: Self.sportsTagID, sort: .volume24h, status: .active
+        ) else { return }
+        nextCursor = page.nextCursor
+        guard !page.items.isEmpty else { return }
+
+        sampleEvents += page.items
+        applyLiveSort()
+        visibleLimit = min(visibleLimit + Self.revealStep, sampleEvents.count)
+        // Scores for the new page only; the pages already on screen keep the ones they have.
+        let newResults = (try? await fetchGameResults.execute(
+            eventIDs: Self.initialResultIDs(from: page.items, now: now())
+        )) ?? [:]
+        results.merge(newResults) { _, fresh in fresh }
     }
 
     /// Changes the Live tab's sort and regroups the already-fetched sample — no refetch.

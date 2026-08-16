@@ -29,12 +29,110 @@ final class SportsHubViewModelTests: XCTestCase {
         repo.catalogue = catalogue
         let vm = SportsHubViewModel(
             fetchEvents: FetchEventsUseCase(repository: repo),
-            fetchAllEvents: FetchAllEventsUseCase(repository: repo),
             fetchSportsCatalogue: FetchSportsCatalogueUseCase(repository: repo),
             fetchGameResults: FetchGameResultsUseCase(repository: repo),
             now: now
         )
         return (vm, repo)
+    }
+
+    // MARK: pagination
+
+    /// `count` events all tagged to one catalogue league, ids `<prefix>0`, `<prefix>1`, …
+    private func events(_ count: Int, prefix: String, leagueTagID: String) -> [Event] {
+        (0..<count).map { event("\(prefix)\($0)", tags: [tag(leagueTagID, "L")]) }
+    }
+
+    /// A catalogue of one league whose `primaryTagID` is `"tag-mlb"`, so events tagged with
+    /// that id group under it.
+    private var oneLeagueCatalogue: [SportLeague] { [league("mlb", group: nil, count: 50, volume: 100)] }
+
+    /// Total events actually rendered, across every section.
+    private func visibleCount(_ vm: SportsHubViewModel) -> Int {
+        vm.visibleGroups.reduce(0) { $0 + $1.events.count }
+    }
+
+    func test_load_revealsOnlyTheFirstFiveEvents() async {
+        // The whole point: a 20-event page must not render 20 cards on a phone.
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.livePages = [Page(items: events(20, prefix: "e", leagueTagID: "tag-mlb"), nextCursor: "c1")]
+
+        await vm.load()
+
+        XCTAssertEqual(visibleCount(vm), 5)
+        XCTAssertEqual(vm.liveGroups.first?.events.count, 20, "all 20 are loaded, only 5 are shown")
+    }
+
+    func test_loadMore_revealsFiveMoreFromTheLoadedPage_withoutRefetching() async {
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.livePages = [Page(items: events(20, prefix: "e", leagueTagID: "tag-mlb"), nextCursor: "c1")]
+        await vm.load()
+        let fetchesAfterLoad = repo.liveFetchCount
+
+        await vm.loadMore()
+
+        XCTAssertEqual(visibleCount(vm), 10)
+        XCTAssertEqual(repo.liveFetchCount, fetchesAfterLoad, "revealing loaded events must not hit the network")
+    }
+
+    func test_loadMore_fetchesTheNextPageOnceRevealedCatchesLoaded() async {
+        // Page one holds exactly the first reveal, so the next scroll has to go to the network.
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.livePages = [
+            Page(items: events(5, prefix: "a", leagueTagID: "tag-mlb"), nextCursor: "c1"),
+            Page(items: events(5, prefix: "b", leagueTagID: "tag-mlb"), nextCursor: nil),
+        ]
+        await vm.load()
+        XCTAssertEqual(visibleCount(vm), 5)
+
+        await vm.loadMore()
+
+        XCTAssertEqual(repo.liveFetchCount, 2, "revealed had caught up to loaded, so a page was fetched")
+        XCTAssertEqual(visibleCount(vm), 10)
+        XCTAssertFalse(vm.hasMore, "the second page reported no cursor")
+    }
+
+    func test_loadMore_doesNothingWhenThereIsNoNextPage() async {
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.livePages = [Page(items: events(5, prefix: "a", leagueTagID: "tag-mlb"), nextCursor: nil)]
+        await vm.load()
+        let fetchesAfterLoad = repo.liveFetchCount
+
+        await vm.loadMore()
+
+        XCTAssertEqual(repo.liveFetchCount, fetchesAfterLoad)
+        XCTAssertEqual(visibleCount(vm), 5)
+        XCTAssertFalse(vm.hasMore)
+    }
+
+    func test_refresh_resetsRevealedCountAndStartsFromTheFirstPage() async {
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.livePages = [Page(items: events(20, prefix: "e", leagueTagID: "tag-mlb"), nextCursor: "c1")]
+        await vm.load()
+        await vm.loadMore()
+        XCTAssertEqual(visibleCount(vm), 10)
+
+        await vm.refresh()
+
+        XCTAssertEqual(visibleCount(vm), 5, "pull-to-refresh returns to the first five")
+        XCTAssertEqual(repo.lastLiveCursor, nil, "and re-requests from the start, not from the held cursor")
+    }
+
+    func test_pagination_preservesLeagueGroupingAcrossPages() async {
+        // A second page's events must land in their own section, not be appended to the first's.
+        let (vm, repo) = makeVM(events: [], catalogue: [
+            league("mlb", group: nil, count: 50, volume: 100),
+            league("nhl", group: nil, count: 50, volume: 50),
+        ])
+        repo.livePages = [
+            Page(items: events(5, prefix: "m", leagueTagID: "tag-mlb"), nextCursor: "c1"),
+            Page(items: events(5, prefix: "n", leagueTagID: "tag-nhl"), nextCursor: nil),
+        ]
+        await vm.load()
+        await vm.loadMore()
+
+        XCTAssertEqual(vm.liveGroups.map(\.league.title), ["MLB", "NHL"])
+        XCTAssertEqual(vm.liveGroups.first(where: { $0.league.title == "NHL" })?.events.count, 5)
     }
 
     func test_load_buildsChipsFromTheServerCatalogue_notFromEventTagKeywords() async {
@@ -311,6 +409,13 @@ private final class SportsFakeRepository: MarketRepository, @unchecked Sendable 
     var results: [String: GameResult] = [:]
     /// The ids passed to the most recent `fetchGameResults` call, for asserting fan-out is bounded.
     private(set) var lastGameResultsEventIDs: [String] = []
+    /// Keyset pages served in order for the general sports tag. Page *n*'s `nextCursor` is the
+    /// key to page *n+1*; a nil cursor means the feed is exhausted.
+    var livePages: [Page<Event>] = []
+    /// How many times the Live feed hit the network, for asserting reveals don't refetch.
+    private(set) var liveFetchCount = 0
+    /// The cursor the most recent Live request carried, so a refresh can be shown to restart.
+    private(set) var lastLiveCursor: String?
 
     init(allEvents: [Event]) { self.allEvents = allEvents }
 
@@ -319,6 +424,17 @@ private final class SportsFakeRepository: MarketRepository, @unchecked Sendable 
         return tagID == SportsHubViewModel.sportsTagID ? allEvents : leagueEvents
     }
     func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod) async throws -> Page<Event> {
+        if tagID == SportsHubViewModel.sportsTagID {
+            liveFetchCount += 1
+            lastLiveCursor = cursor
+            // Tests that don't care about paging just seed `allEvents`; they get it as a
+            // single, final page so their setup reads the same as before the feed was paged.
+            guard !livePages.isEmpty else { return Page(items: allEvents, nextCursor: nil) }
+            // nil cursor means "first page"; otherwise the cursor is the previous page's.
+            let index = cursor.flatMap { c in livePages.firstIndex { $0.nextCursor == c }.map { $0 + 1 } } ?? 0
+            guard index < livePages.count else { return Page(items: [], nextCursor: nil) }
+            return livePages[index]
+        }
         if let tagID, let futures = futuresPages[tagID] {
             futuresFetchCount += 1
             return Page(items: futures, nextCursor: nil)
