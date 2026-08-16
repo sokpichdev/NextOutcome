@@ -40,7 +40,7 @@ public struct PortfolioView: View {
         case .needsAddress:
             addressEntry
         case .loading:
-            StateView(.loading)
+            SkeletonView(.dashboard, count: 4)
         case .empty:
             StateView(.empty)
         case .failed(let message):

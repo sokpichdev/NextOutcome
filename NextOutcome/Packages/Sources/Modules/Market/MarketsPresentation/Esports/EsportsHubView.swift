@@ -101,16 +101,20 @@ public struct EsportsHubView: View {
         }
     }
 
+    /// Stands in for the hero carousel and the key-art tile row. Bespoke rather than a
+    /// `SkeletonView` style because those two blocks are unique to this hub — but it uses
+    /// the same tokens and the same sweep, so it reads as the app's one skeleton treatment.
+    ///
+    /// (Previously plain `surface` rectangles under `.redacted(.placeholder)`, which is a
+    /// no-op on a filled `Shape` — the placeholder never animated.)
     private var loadingPlaceholder: some View {
         VStack(spacing: DSLayout.spacing) {
-            RoundedRectangle(cornerRadius: DSLayout.cardRadius)
-                .fill(DSColor.surface)
-                .frame(height: 380)
-            RoundedRectangle(cornerRadius: DSLayout.cardRadius)
-                .fill(DSColor.surface)
-                .frame(height: 130)
+            SkeletonBlock(height: 380, cornerRadius: DSLayout.cardRadius)
+            SkeletonBlock(height: 130, cornerRadius: DSLayout.cardRadius)
         }
-        .redacted(reason: .placeholder)
+        .shimmering()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading")
     }
 
     /// The paged hero carousel of live (or next-up) matches.

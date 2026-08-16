@@ -132,7 +132,7 @@ public struct MoversDetailView: View {
             }
             .frame(maxWidth: .infinity, minHeight: 220)
         } else {
-            StateView(.loading).frame(height: 220)
+            SkeletonView(.row, count: 4, placement: .inline)
         }
     }
 

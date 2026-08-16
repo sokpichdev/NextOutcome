@@ -109,7 +109,10 @@ public struct BTCLiveView: View {
     private var chanceChartBody: some View {
         switch viewModel.state {
         case .idle, .loading:
-            ProgressView().frame(maxWidth: .infinity)
+            // `chartBody` is already pinned to 200pt by its caller, so this reserves
+            // nothing new — it just replaces a spinner with the same loading language
+            // the rest of the app uses.
+            SkeletonView(.block(height: 200), placement: .inline)
         case .empty:
             emptyOrError("No price data yet.", showRetry: false)
         case let .failed(message):
@@ -188,7 +191,10 @@ public struct BTCLiveView: View {
     private var spotChartBody: some View {
         switch viewModel.spotState {
         case .idle, .loading:
-            ProgressView().frame(maxWidth: .infinity)
+            // `chartBody` is already pinned to 200pt by its caller, so this reserves
+            // nothing new — it just replaces a spinner with the same loading language
+            // the rest of the app uses.
+            SkeletonView(.block(height: 200), placement: .inline)
         case .empty:
             emptyOrError("No price data yet.", showRetry: false)
         case .failed:
@@ -283,7 +289,10 @@ public struct BTCLiveView: View {
     @ViewBuilder
     private var candleChart: some View {
         if viewModel.candles.isEmpty {
-            ProgressView().frame(maxWidth: .infinity)
+            // `chartBody` is already pinned to 200pt by its caller, so this reserves
+            // nothing new — it just replaces a spinner with the same loading language
+            // the rest of the app uses.
+            SkeletonView(.block(height: 200), placement: .inline)
         } else {
             candleChartBody
         }

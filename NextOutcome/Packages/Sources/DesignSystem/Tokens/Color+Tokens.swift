@@ -67,6 +67,14 @@ public enum DSColor {
     /// A near-invisible hairline for subtle borders/dividers: translucent white
     /// on Dark surfaces, translucent black on Light surfaces.
     public static let hairline         = dynamicHairline()
+    /// The resting fill of a skeleton placeholder block. Sits one step away from
+    /// `surface` in both themes so a placeholder reads as "content pending" rather
+    /// than as an empty card.
+    public static let skeleton         = dynamic(light: 0xE7EAF0, dark: 0x1F2636)
+    /// The crest of the shimmer band that sweeps across skeleton blocks. Only a
+    /// step brighter than `skeleton` — a high-contrast sweep reads as a glare
+    /// effect rather than as loading.
+    public static let skeletonHighlight = dynamic(light: 0xF6F8FC, dark: 0x2C3547)
 
     /// Builds a `Color` that resolves to `light` in Light mode and `dark` in Dark
     /// mode, tracking the environment's active appearance rather than being fixed

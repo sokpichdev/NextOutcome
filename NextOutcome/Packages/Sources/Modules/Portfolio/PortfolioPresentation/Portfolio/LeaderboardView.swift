@@ -56,7 +56,7 @@ public struct LeaderboardView: View {
     private var content: some View {
         switch viewModel.state {
         case .loading:
-            StateView(.loading)
+            SkeletonView(.row, count: 8)
         case .empty:
             StateView(.empty)
         case .failed(let message):

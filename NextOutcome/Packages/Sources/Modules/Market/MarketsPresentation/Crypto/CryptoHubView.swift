@@ -291,7 +291,7 @@ public struct CryptoHubView: View {
     private var content: some View {
         switch viewModel.state {
         case .idle, .loading:
-            StateView(.loading).frame(height: 320)
+            SkeletonView(.feedCard, count: 3, placement: .inline)
         case .failed(let message):
             StateView(.error(message)).frame(height: 320)
         case .loaded:

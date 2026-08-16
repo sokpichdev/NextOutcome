@@ -203,7 +203,10 @@ private struct CommentsTabContent: View {
     var body: some View {
         switch state {
         case .idle, .loading:
-            ProgressView().tint(DSColor.accent).frame(maxWidth: .infinity).padding(.vertical, DSLayout.spacingLarge)
+            // Skeleton rows rather than a spinner: each tab loads on first selection, and a
+            // short centred spinner would collapse the strip's height and then expand again
+            // once rows land — moving the whole detail page under the reader mid-scroll.
+            SkeletonView(.row, count: 4, placement: .inline)
         case .empty:
             EmptyRow(text: "No comments yet.")
         case .failed(let message):
@@ -349,7 +352,10 @@ private struct HoldersTabContent: View {
     var body: some View {
         switch state {
         case .idle, .loading:
-            ProgressView().tint(DSColor.accent).frame(maxWidth: .infinity).padding(.vertical, DSLayout.spacingLarge)
+            // Skeleton rows rather than a spinner: each tab loads on first selection, and a
+            // short centred spinner would collapse the strip's height and then expand again
+            // once rows land — moving the whole detail page under the reader mid-scroll.
+            SkeletonView(.row, count: 4, placement: .inline)
         case .empty:
             EmptyRow(text: "No holder data.")
         case .failed(let message):
@@ -451,7 +457,10 @@ private struct ActivityTabContent: View {
     var body: some View {
         switch state {
         case .idle, .loading:
-            ProgressView().tint(DSColor.accent).frame(maxWidth: .infinity).padding(.vertical, DSLayout.spacingLarge)
+            // Skeleton rows rather than a spinner: each tab loads on first selection, and a
+            // short centred spinner would collapse the strip's height and then expand again
+            // once rows land — moving the whole detail page under the reader mid-scroll.
+            SkeletonView(.row, count: 4, placement: .inline)
         case .empty:
             EmptyRow(text: "No activity yet.")
         case .failed(let message):

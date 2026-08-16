@@ -187,7 +187,9 @@ public struct SportsHubView: View {
     private var ownModeContent: some View {
         switch viewModel.state {
         case .idle, .loading:
-            StateView(.loading).frame(maxHeight: .infinity)
+            // Both modes land as dated sections of fixture cards, so sketch that shape
+            // rather than spinning and reflowing into it.
+            SkeletonView(.gameCard, count: 4)
         case .failed(let message):
             StateView(.error(message)).frame(maxHeight: .infinity)
         case .loaded:

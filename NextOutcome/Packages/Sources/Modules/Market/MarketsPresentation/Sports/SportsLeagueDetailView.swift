@@ -136,7 +136,9 @@ public struct SportsLeagueDetailView: View {
     private var content: some View {
         switch viewModel.state {
         case .idle, .loading:
-            StateView(.loading).frame(maxHeight: .infinity)
+            // Same dated fixture sections the hub's Live feed uses, so a league reads the
+            // way the feed it was opened from does — while loading as well as after.
+            SkeletonView(.gameCard, count: 4)
         case .failed(let message):
             StateView(.error(message)).frame(maxHeight: .infinity)
         case .loaded:
