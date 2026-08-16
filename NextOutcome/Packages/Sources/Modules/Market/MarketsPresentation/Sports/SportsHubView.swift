@@ -26,9 +26,6 @@ public struct SportsHubView: View {
     @State private var isSearchActive = false
     /// The Live tab's league search text.
     @State private var searchQuery = ""
-    /// The league chip selected in the mode bar, if any. Non-nil replaces the Live/Futures
-    /// content with that league's detail, in place — no navigation push.
-    @State private var selectedLeague: SportsLeague?
     /// The team logo tapped in the Live tab, if any — drives the profile push.
     @State private var selectedTeam: TeamProfileTarget?
     /// Builds the profile view model when a team logo is tapped.
@@ -47,16 +44,24 @@ public struct SportsHubView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            SportsModeBar(mode: $viewModel.mode, leagues: viewModel.leagues, selectedLeague: $selectedLeague)
+            SportsNavBar(
+                mode: $viewModel.mode,
+                groups: viewModel.navGroups,
+                selectedGroup: $viewModel.selectedGroup,
+                isShowingAllSports: $viewModel.isShowingAllSports
+            )
                 .padding(.vertical, DSLayout.spacingSmall)
-            if selectedLeague == nil { header }
-            if isSearchActive, selectedLeague == nil, viewModel.mode == .live { searchField }
+            if viewModel.selectedGroup == nil { header }
+            if isSearchActive, viewModel.selectedGroup == nil, viewModel.mode == .live { searchField }
             content
         }
         .background(DSColor.background)
         .environment(\.oddsFormat, viewModel.oddsFormat)
         .environment(\.showSpreadsAndTotals, viewModel.showSpreadsAndTotals)
         .task { await viewModel.loadIfNeeded() }
+        .sheet(isPresented: $viewModel.isShowingAllSports) {
+            AllSportsSheet(groups: viewModel.catalogue) { viewModel.selectedGroup = $0 }
+        }
     }
 
     /// The Odds Format menu icon: Odds Format plus Show Spreads + Totals (no sort — Volume/
@@ -137,12 +142,19 @@ public struct SportsHubView: View {
     /// entirely on their own.
     @ViewBuilder
     private var content: some View {
-        if let selectedLeague {
-            if selectedLeague.title == "World Cup" {
+        if let group = viewModel.selectedGroup {
+            if group.name == "World Cup" {
                 WorldCupHubView(viewModel: worldCupViewModel)
             } else {
-                SportsLeagueDetailView(league: selectedLeague, fetchAllEvents: fetchAllEvents)
-                    .id(selectedLeague.id)
+                SportsLeagueDetailView(
+                    league: SportsLeague(
+                        id: group.leagues.first?.primaryTagID ?? group.id,
+                        title: group.name,
+                        glyph: group.glyph
+                    ),
+                    fetchAllEvents: fetchAllEvents
+                )
+                .id(group.id)
             }
         } else {
             ownModeContent
