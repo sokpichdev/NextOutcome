@@ -171,6 +171,11 @@ struct GameCard: View {
                 .font(DSFont.subheadline.bold())
                 .foregroundStyle(DSColor.textPrimary)
                 .lineLimit(1)
+            if let record = team?.record {
+                Text(record)
+                    .font(DSFont.caption)
+                    .foregroundStyle(DSColor.textSecondary)
+            }
         }
         if let onTeamTap {
             Button {

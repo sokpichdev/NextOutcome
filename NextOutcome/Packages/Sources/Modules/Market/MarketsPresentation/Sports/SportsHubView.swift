@@ -207,6 +207,7 @@ public struct SportsHubView: View {
                                 NavigationLink(value: event) {
                                     HomeCard(
                                         event: event,
+                                        result: viewModel.results[event.id],
                                         onTeamTap: { selectedTeam = $0 },
                                         leagueSlug: group.league.title.lowercased()
                                     )
