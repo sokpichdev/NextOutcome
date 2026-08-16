@@ -101,12 +101,15 @@ final class AppContainer {
         PoliticsHubViewModel(fetchAllEvents: FetchAllEventsUseCase(repository: repository))
     }
 
-    /// Builds the view model for the Sports hub (Live/Futures modes, league chips).
-    /// - Returns: A view model wired to fetch events and the tag catalogue.
+    /// Builds the view model for the Sports hub (Live/Futures modes, the server-driven sport
+    /// chip row, and live scores on its cards).
+    /// - Returns: A view model wired to fetch events, the sport catalogue, and game results.
     func makeSportsHubViewModel() -> SportsHubViewModel {
         SportsHubViewModel(
             fetchEvents: FetchEventsUseCase(repository: repository),
-            fetchAllEvents: FetchAllEventsUseCase(repository: repository)
+            fetchAllEvents: FetchAllEventsUseCase(repository: repository),
+            fetchSportsCatalogue: FetchSportsCatalogueUseCase(repository: repository),
+            fetchGameResults: FetchGameResultsUseCase(repository: repository)
         )
     }
 
