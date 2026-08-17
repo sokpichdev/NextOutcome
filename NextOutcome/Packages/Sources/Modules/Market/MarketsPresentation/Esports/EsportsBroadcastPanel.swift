@@ -77,6 +77,9 @@ struct EsportsBroadcastPanel: View {
         if host.contains("twitch") { return "Watch on Twitch" }
         if host.contains("youtube") || host.contains("youtu.be") { return "Watch on YouTube" }
         if host.contains("kick") { return "Watch on Kick" }
+        // Honor of Kings and other CN-region events broadcast here; 
+        // Douyu has no embeddable player, so this link is the only route to the stream.
+        if host.contains("douyu") { return "Watch on Douyu" }
         return "Open broadcast"
     }
 }

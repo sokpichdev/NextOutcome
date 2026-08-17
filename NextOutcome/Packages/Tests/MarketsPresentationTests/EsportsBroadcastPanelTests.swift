@@ -18,8 +18,10 @@ final class EsportsBroadcastPanelTests: XCTestCase {
         XCTAssertEqual(label("https://player.twitch.tv/?channel=eslcs"), "Watch on Twitch")
         XCTAssertEqual(label("https://www.youtube.com/watch?v=zbEa-ffJs0w"), "Watch on YouTube")
         XCTAssertEqual(label("https://youtu.be/zbEa-ffJs0w"), "Watch on YouTube")
-        // The host we can't embed, and so the one most likely to be tapped.
+        // The hosts we can't embed, and so the ones most likely to be tapped.
         XCTAssertEqual(label("https://kick.com/eplcs_en"), "Watch on Kick")
+        XCTAssertEqual(label("https://www.douyu.com/9999"), "Watch on Douyu")
+        XCTAssertEqual(label("https://douyu.com/topic/hok"), "Watch on Douyu")
     }
 
     func test_unknownHostsFallBackToAGenericLabel() {
