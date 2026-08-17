@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import Foundation
 import SharedDomain
 @testable import MarketsPresentation
 import MarketsDomain
@@ -12,45 +13,244 @@ import MarketsDomain
 final class SportsHubViewModelTests: XCTestCase {
     private func tag(_ id: String, _ label: String) -> Tag { Tag(id: id, label: label, slug: label.lowercased()) }
 
-    private func event(_ id: String, tags: [Tag], volume: Decimal = 0) -> Event {
-        Event(id: id, title: id, slug: id, markets: [], volume: volume, imageURL: nil, tags: tags)
+    private func event(_ id: String, tags: [Tag], volume: Decimal = 0, gameStartTime: Date? = nil) -> Event {
+        Event(id: id, title: id, slug: id, markets: [], volume: volume, imageURL: nil, tags: tags, gameStartTime: gameStartTime)
     }
 
-    private func makeVM(events: [Event]) -> (SportsHubViewModel, SportsFakeRepository) {
+    private func league(_ id: String, group: String?, count: Int, live: Bool = false, volume: Decimal = 0) -> SportLeague {
+        SportLeague(id: id, name: id.uppercased(), primaryTagID: "tag-\(id)", groupTagID: group,
+                    activeEventCount: count, hasLive: live, volume: volume)
+    }
+
+    private func makeVM(
+        events: [Event], catalogue: [SportLeague] = [], now: @escaping @Sendable () -> Date = Date.init
+    ) -> (SportsHubViewModel, SportsFakeRepository) {
         let repo = SportsFakeRepository(allEvents: events)
+        repo.catalogue = catalogue
         let vm = SportsHubViewModel(
             fetchEvents: FetchEventsUseCase(repository: repo),
-            fetchAllEvents: FetchAllEventsUseCase(repository: repo)
+            fetchSportsGames: FetchSportsGamesUseCase(repository: repo),
+            fetchSportsCatalogue: FetchSportsCatalogueUseCase(repository: repo),
+            fetchGameResults: FetchGameResultsUseCase(repository: repo),
+            now: now
         )
         return (vm, repo)
     }
 
-    func test_load_derivesLeaguesFromSampleTags_notFromTagCatalogue() async {
-        let (vm, _) = makeVM(events: [
-            event("wimbledon-1", tags: [tag("1", "Sports"), tag("85", "Wimbledon")]),
-            event("mlb-1", tags: [tag("1", "Sports"), tag("128", "MLB")]),
-            event("wc-1", tags: [tag("1", "Sports"), tag("519", "FIFA World Cup")]),
-        ])
+    // MARK: pagination
 
-        await vm.load()
-
-        XCTAssertEqual(vm.leagues.map(\.title), ["World Cup", "Wimbledon", "MLB"])
-        XCTAssertEqual(vm.leagues.first { $0.title == "World Cup" }?.id, "519")
+    /// A moneyline market — with a kickoff, this is what makes an event a game rather than a
+    /// future. The feed shows only games, so pagination fixtures must carry one.
+    private func moneyline() -> Market {
+        Market(id: "ml", question: "Winner", slug: "ml", outcomes: [], volume: 0, liquidity: 0,
+               endDate: nil, isResolved: false, imageURL: nil, sportsMarketType: "moneyline")
     }
 
-    func test_load_groupsEventsByLeague_dropsUnmatched_sortsByVolumeDescending() async {
-        let (vm, _) = makeVM(events: [
-            event("wimbledon-1", tags: [tag("85", "Wimbledon")], volume: 10),
-            event("wimbledon-2", tags: [tag("85", "Wimbledon")], volume: 50),
-            event("mlb-1", tags: [tag("128", "MLB")]),
-            event("other", tags: [tag("999", "Chess")]),
+    /// `count` games tagged to one catalogue league, kicking off `hoursFromNow` out.
+    private func events(
+        _ count: Int, prefix: String, leagueTagID: String, hoursFromNow: Double = 2
+    ) -> [Event] {
+        (0..<count).map { index in
+            Event(id: "\(prefix)\(index)", title: "\(prefix)\(index)", slug: "\(prefix)\(index)",
+                  markets: [moneyline()], volume: 0, imageURL: nil,
+                  tags: [tag(leagueTagID, "L")],
+                  gameStartTime: Date().addingTimeInterval((hoursFromNow + Double(index) * 0.01) * 3600))
+        }
+    }
+
+    /// A catalogue of one league whose `primaryTagID` is `"tag-mlb"`, so events tagged with
+    /// that id group under it.
+    private var oneLeagueCatalogue: [SportLeague] { [league("mlb", group: nil, count: 50, volume: 100)] }
+
+    /// Total events actually rendered, across every section.
+    private func visibleCount(_ vm: SportsHubViewModel) -> Int {
+        vm.visibleGroups.reduce(0) { $0 + $1.events.count }
+    }
+
+    func test_load_revealsOnlyTheFirstFiveEvents() async {
+        // The whole point: a 20-event page must not render 20 cards on a phone.
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.livePages = [Page(items: events(20, prefix: "e", leagueTagID: "tag-mlb"), nextCursor: "c1")]
+
+        await vm.load()
+
+        XCTAssertEqual(visibleCount(vm), 5)
+        XCTAssertEqual(vm.liveGroups.reduce(0) { $0 + $1.events.count }, 20, "all 20 are loaded, only 5 are shown")
+    }
+
+    func test_loadMore_revealsFiveMoreFromTheLoadedPage_withoutRefetching() async {
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.livePages = [Page(items: events(20, prefix: "e", leagueTagID: "tag-mlb"), nextCursor: "c1")]
+        await vm.load()
+        let fetchesAfterLoad = repo.liveFetchCount
+
+        await vm.loadMore()
+
+        XCTAssertEqual(visibleCount(vm), 10)
+        XCTAssertEqual(repo.liveFetchCount, fetchesAfterLoad, "revealing loaded events must not hit the network")
+    }
+
+    func test_loadMore_fetchesTheNextPageOnceRevealedCatchesLoaded() async {
+        // Page one holds exactly the first reveal, so the next scroll has to go to the network.
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.livePages = [
+            Page(items: events(5, prefix: "a", leagueTagID: "tag-mlb"), nextCursor: "c1"),
+            Page(items: events(5, prefix: "b", leagueTagID: "tag-mlb"), nextCursor: nil),
+        ]
+        await vm.load()
+        XCTAssertEqual(visibleCount(vm), 5)
+
+        await vm.loadMore()
+
+        XCTAssertEqual(repo.liveFetchCount, 2, "revealed had caught up to loaded, so a page was fetched")
+        XCTAssertEqual(visibleCount(vm), 10)
+        XCTAssertFalse(vm.hasMore, "the second page reported no cursor")
+    }
+
+    func test_loadMore_fetchesWhenThePageIsMostlyFilteredOut() async {
+        // A page is 20 events but the feed shows only games — futures and esports are dropped.
+        // The reveal budget must count what is on screen, not what was downloaded, or scrolling
+        // burns several no-op steps showing nothing new before it finally fetches.
+        let futures = (0..<18).map { event("f\($0)", tags: [tag("tag-mlb", "L")]) }
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.livePages = [
+            Page(items: events(2, prefix: "g", leagueTagID: "tag-mlb") + futures, nextCursor: "c1"),
+            Page(items: events(2, prefix: "h", leagueTagID: "tag-mlb"), nextCursor: nil),
+        ]
+        await vm.load()
+        XCTAssertEqual(visibleCount(vm), 2, "only the two games are in the feed")
+
+        await vm.loadMore()
+
+        XCTAssertEqual(repo.liveFetchCount, 2, "every feed event was already revealed, so fetch")
+        XCTAssertEqual(visibleCount(vm), 4)
+    }
+
+    func test_load_asksForInPlayGamesSeparatelyAndLeadsWithThem() async {
+        // The upcoming query is bounded by kickoff, so a game already under way would not
+        // appear in it at all — in-play games need their own request.
+        let inPlay = Event(id: "playing", title: "playing", slug: "playing", markets: [moneyline()],
+                           volume: 0, imageURL: nil, tags: [tag("tag-mlb", "L")],
+                           gameStartTime: Date().addingTimeInterval(-3600), live: true)
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.inPlayGames = [inPlay]
+        repo.livePages = [Page(items: events(3, prefix: "soon", leagueTagID: "tag-mlb"), nextCursor: nil)]
+
+        await vm.load()
+
+        XCTAssertEqual(repo.inPlayFetchCount, 1)
+        XCTAssertEqual(vm.liveGroups.first?.title, "Live now")
+        XCTAssertEqual(vm.liveGroups.first?.events.map(\.id), ["playing"])
+    }
+
+    func test_loadMore_pagesOnlyTheUpcomingQuery() async {
+        // "Live now" is a bounded head that refreshes with the feed; scrolling must not re-ask
+        // for in-play games on every step.
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.inPlayGames = []
+        repo.livePages = [
+            Page(items: events(5, prefix: "a", leagueTagID: "tag-mlb"), nextCursor: "c1"),
+            Page(items: events(5, prefix: "b", leagueTagID: "tag-mlb"), nextCursor: nil),
+        ]
+        await vm.load()
+
+        await vm.loadMore()
+
+        XCTAssertEqual(repo.inPlayFetchCount, 1, "the in-play query ran once, at load")
+        XCTAssertEqual(repo.liveFetchCount, 2, "only the upcoming query paged")
+    }
+
+    func test_loadMore_doesNothingWhenThereIsNoNextPage() async {
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.livePages = [Page(items: events(5, prefix: "a", leagueTagID: "tag-mlb"), nextCursor: nil)]
+        await vm.load()
+        let fetchesAfterLoad = repo.liveFetchCount
+
+        await vm.loadMore()
+
+        XCTAssertEqual(repo.liveFetchCount, fetchesAfterLoad)
+        XCTAssertEqual(visibleCount(vm), 5)
+        XCTAssertFalse(vm.hasMore)
+    }
+
+    func test_refresh_resetsRevealedCountAndStartsFromTheFirstPage() async {
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.livePages = [Page(items: events(20, prefix: "e", leagueTagID: "tag-mlb"), nextCursor: "c1")]
+        await vm.load()
+        await vm.loadMore()
+        XCTAssertEqual(visibleCount(vm), 10)
+
+        await vm.refresh()
+
+        XCTAssertEqual(visibleCount(vm), 5, "pull-to-refresh returns to the first five")
+        XCTAssertEqual(repo.lastLiveCursor, nil, "and re-requests from the start, not from the held cursor")
+    }
+
+    func test_pagination_sectionsLaterPagesByTheirOwnDay() async {
+        // A second page's games must land in the day they are played, not be appended to the
+        // first page's section. The two pages are 48h apart, so they are different days in
+        // any time zone.
+        let (vm, repo) = makeVM(events: [], catalogue: oneLeagueCatalogue)
+        repo.livePages = [
+            Page(items: events(5, prefix: "today", leagueTagID: "tag-mlb", hoursFromNow: 2), nextCursor: "c1"),
+            Page(items: events(5, prefix: "later", leagueTagID: "tag-mlb", hoursFromNow: 50), nextCursor: nil),
+        ]
+        await vm.load()
+        await vm.loadMore()
+
+        XCTAssertEqual(vm.liveGroups.count, 2, "two calendar days, two sections")
+        XCTAssertEqual(vm.liveGroups.map { $0.events.count }, [5, 5])
+        XCTAssertEqual(vm.liveGroups.last?.events.map(\.id), (0..<5).map { "later\($0)" })
+    }
+
+    func test_load_buildsChipsFromTheServerCatalogue_notFromEventTagKeywords() async {
+        // The regression this locks in: chips used to be five hardcoded keywords matched as
+        // substrings against sampled event tags, so a league only appeared if it happened to
+        // be in the feed. Now the catalogue decides.
+        let (vm, _) = makeVM(events: [event("e1", tags: [tag("1", "Sports")])], catalogue: [
+            league("mlb", group: nil, count: 118, live: true, volume: 5_957_601),
+            league("epl", group: "100350", count: 140, volume: 297_170),
         ])
 
         await vm.load()
 
-        let groupTitles = vm.liveGroups.map(\.league.title)
-        XCTAssertEqual(groupTitles, ["Wimbledon", "MLB"])
-        XCTAssertEqual(vm.liveGroups.first { $0.league.title == "Wimbledon" }?.events.map(\.id), ["wimbledon-2", "wimbledon-1"])
+        XCTAssertEqual(vm.catalogue.map(\.name), ["MLB", "Soccer"])
+    }
+
+    func test_navGroups_excludeSportsWithNoOpenEvents() async {
+        let (vm, _) = makeVM(events: [event("e1", tags: [tag("1", "Sports")])], catalogue: [
+            league("mlb", group: nil, count: 118, volume: 5_957_601),
+            league("nhl", group: nil, count: 0, volume: 900),
+        ])
+
+        await vm.load()
+
+        XCTAssertEqual(vm.navGroups.map(\.name), ["MLB"])
+        XCTAssertEqual(vm.catalogue.count, 2, "the All Sports sheet still lists the dormant sport")
+    }
+
+    func test_load_fetchesResultsForTheLiveFeedsEvents() async {
+        // gameStartTime must fall within the ±24h fetch window (Finding 2's narrowing), or the
+        // event is excluded from the results fetch entirely.
+        let (vm, repo) = makeVM(events: [event("g1", tags: [tag("1", "Sports")], gameStartTime: Date())])
+        repo.results = ["g1": GameResult(eventID: "g1", score: "3-1", elapsed: "5:41",
+                                         period: "Q4", live: true, ended: false, teams: [])]
+
+        await vm.load()
+
+        XCTAssertEqual(vm.results["g1"]?.period, "Q4")
+    }
+
+    func test_load_survivesCatalogueFailure() async {
+        // Chips are an enhancement; the feed is the screen. A catalogue error must not blank
+        // the hub.
+        let (vm, repo) = makeVM(events: [event("e1", tags: [tag("1", "Sports")])])
+        repo.catalogueError = true
+
+        await vm.load()
+
+        XCTAssertEqual(vm.state, .loaded)
+        XCTAssertTrue(vm.navGroups.isEmpty)
     }
 
     func test_setLiveSort_soonest_reordersWithoutRefetch() async {
@@ -74,9 +274,14 @@ final class SportsHubViewModelTests: XCTestCase {
     }
 
     func test_selectFuturesSport_reloadsFuturesEvents() async {
+        // futuresSports now comes from catalogue.prefix(8), not from event tags — seed the
+        // catalogue with distinct volumes so the NBA group sorts first and is auto-selected.
         let (vm, repo) = makeVM(events: [
             event("nba-sample", tags: [tag("101", "NBA")]),
             event("epl-sample", tags: [tag("102", "EPL")]),
+        ], catalogue: [
+            SportLeague(id: "nba", name: "NBA", primaryTagID: "101", volume: 1_000),
+            SportLeague(id: "epl", name: "EPL", primaryTagID: "102", volume: 500),
         ])
         repo.futuresPages["101"] = [event("nba-champ", tags: [])]
         repo.futuresPages["102"] = [event("epl-winner", tags: [])]
@@ -90,7 +295,9 @@ final class SportsHubViewModelTests: XCTestCase {
     }
 
     func test_selectFuturesSport_sameID_isNoOp() async {
-        let (vm, repo) = makeVM(events: [event("nba-sample", tags: [tag("101", "NBA")])])
+        let (vm, repo) = makeVM(events: [event("nba-sample", tags: [tag("101", "NBA")])], catalogue: [
+            SportLeague(id: "nba", name: "NBA", primaryTagID: "101", volume: 1_000),
+        ])
         repo.futuresPages["101"] = [event("nba-champ", tags: [])]
         await vm.load()
 
@@ -98,17 +305,81 @@ final class SportsHubViewModelTests: XCTestCase {
         await vm.selectFuturesSport("101")
         XCTAssertEqual(repo.futuresFetchCount, fetchCountBefore)
     }
+
+    // MARK: SportsHubViewModel.initialResultIDs
+
+    private static let referenceNow = Date(timeIntervalSince1970: 1_700_000_000)
+
+    func test_initialResultIDs_excludesEventsOutsideTheWindow() {
+        let now = Self.referenceNow
+        let events = [
+            event("inWindow", tags: [], gameStartTime: now.addingTimeInterval(3600)), // +1h
+            event("outsideWindow", tags: [], gameStartTime: now.addingTimeInterval(25 * 3600)), // +25h
+        ]
+
+        XCTAssertEqual(SportsHubViewModel.initialResultIDs(from: events, now: now), ["inWindow"])
+    }
+
+    func test_initialResultIDs_excludesEventsWithNoGameStartTime() {
+        let now = Self.referenceNow
+        let events = [
+            event("scheduled", tags: [], gameStartTime: now),
+            event("notAGame", tags: []), // nil gameStartTime — not a scheduled game
+        ]
+
+        XCTAssertEqual(SportsHubViewModel.initialResultIDs(from: events, now: now), ["scheduled"])
+    }
+
+    func test_initialResultIDs_capsAtTheLimit() {
+        let now = Self.referenceNow
+        let events = (0..<40).map { event("e\($0)", tags: [], gameStartTime: now) }
+
+        let ids = SportsHubViewModel.initialResultIDs(from: events, now: now, cap: 30)
+
+        XCTAssertEqual(ids.count, 30)
+    }
+
+    func test_initialResultIDs_preservesIncomingOrder() {
+        // `events` arrives volume-sorted; the narrowed list must keep that order so the
+        // most-traded games win the fetch budget.
+        let now = Self.referenceNow
+        let events = [
+            event("highestVolume", tags: [], gameStartTime: now),
+            event("midVolume", tags: [], gameStartTime: now.addingTimeInterval(-3600)),
+            event("lowestVolume", tags: [], gameStartTime: now.addingTimeInterval(3600)),
+        ]
+
+        XCTAssertEqual(
+            SportsHubViewModel.initialResultIDs(from: events, now: now),
+            ["highestVolume", "midVolume", "lowestVolume"]
+        )
+    }
+
+    func test_load_fetchesResultsOnlyForTheNarrowedEventWindow() async {
+        // Regression for unbounded fan-out: the full ~500-event sample must not all be passed
+        // to fetchGameResults, only the ones within the window (and capped).
+        let now = Self.referenceNow
+        let (vm, repo) = makeVM(events: [
+            event("nearKickoff", tags: [tag("1", "Sports")], gameStartTime: now.addingTimeInterval(3600)),
+            event("farAway", tags: [tag("1", "Sports")], gameStartTime: now.addingTimeInterval(48 * 3600)),
+            event("noKickoff", tags: [tag("1", "Sports")]),
+        ], now: { now })
+
+        await vm.load()
+
+        XCTAssertEqual(repo.lastGameResultsEventIDs, ["nearKickoff"])
+    }
 }
 
 @MainActor
 final class SportsLeagueDetailViewModelTests: XCTestCase {
-    private func game(_ id: String, volume: Decimal = 0) -> Event {
+    private func game(_ id: String, volume: Decimal = 0, live: Bool = false) -> Event {
         Event(
             id: id, title: id, slug: id,
             markets: [.init(id: "\(id)-ml", question: id, slug: id, outcomes: [], volume: 0,
                             liquidity: 0, endDate: nil, isResolved: false, imageURL: nil,
                             sportsMarketType: "moneyline")],
-            volume: volume, imageURL: nil, gameStartTime: .now
+            volume: volume, imageURL: nil, gameStartTime: .now, live: live
         )
     }
 
@@ -117,21 +388,81 @@ final class SportsLeagueDetailViewModelTests: XCTestCase {
     }
 
     private func makeVM(repo: SportsFakeRepository, league: SportsLeague = .init(id: "85", title: "Wimbledon", glyph: "figure.tennis")) -> SportsLeagueDetailViewModel {
-        SportsLeagueDetailViewModel(league: league, fetchAllEvents: FetchAllEventsUseCase(repository: repo))
+        SportsLeagueDetailViewModel(
+            league: league,
+            fetchAllEvents: FetchAllEventsUseCase(repository: repo),
+            fetchSportsGames: FetchSportsGamesUseCase(repository: repo)
+        )
     }
 
-    func test_load_splitsIntoGamesAndProps() async {
+    // MARK: paged, sectioned games tab
+
+    func test_load_scopesTheGamesQueryToThisLeague() async {
         let repo = SportsFakeRepository(allEvents: [])
-        repo.leagueEvents = [game("g1"), prop("p1")]
+        repo.livePages = [Page(items: [game("g1")], nextCursor: nil)]
+        let vm = makeVM(repo: repo, league: .init(id: "100350", title: "Soccer", glyph: "soccerball"))
+
+        await vm.load()
+
+        XCTAssertEqual(repo.lastLeagueTagID, "100350")
+    }
+
+    func test_load_sectionsGamesLiveFirstThenByDate() async {
+        let repo = SportsFakeRepository(allEvents: [])
+        repo.inPlayGames = [game("playing", live: true)]
+        repo.livePages = [Page(items: [game("later")], nextCursor: nil)]
         let vm = makeVM(repo: repo)
 
         await vm.load()
 
+        XCTAssertEqual(vm.gameSections.first?.title, "Live now")
+        XCTAssertEqual(vm.gameSections.first?.events.map(\.id), ["playing"])
+    }
+
+    func test_load_doesNotFetchPropsUntilThatTabIsOpened() async {
+        // Props needs the unpaginated league fetch, which pulls up to 500 events. The common
+        // path is looking at games, so that cost must not be paid on load.
+        let repo = SportsFakeRepository(allEvents: [])
+        repo.leagueEvents = [prop("p1")]
+        repo.livePages = [Page(items: [game("g1")], nextCursor: nil)]
+        let vm = makeVM(repo: repo)
+
+        await vm.load()
+        XCTAssertEqual(repo.fetchAllCallCount, 0, "games load must not touch the props fetch")
+
+        await vm.loadPropsIfNeeded()
+
+        XCTAssertEqual(repo.fetchAllCallCount, 1)
+        XCTAssertEqual(vm.propEvents.map(\.id), ["p1"])
+    }
+
+    func test_openingPropsTwiceFetchesOnce() async {
+        let repo = SportsFakeRepository(allEvents: [])
+        repo.leagueEvents = [prop("p1")]
+        repo.livePages = [Page(items: [game("g1")], nextCursor: nil)]
+        let vm = makeVM(repo: repo)
+        await vm.load()
+
+        await vm.loadPropsIfNeeded()
+        await vm.loadPropsIfNeeded()
+
+        XCTAssertEqual(repo.fetchAllCallCount, 1)
+    }
+
+    func test_gamesComeFromTheGamesQueryAndPropsFromTheLeagueFetch() async {
+        // The two tabs now have separate sources: games are paged and games-only, props come
+        // from the unpaginated league fetch and are split client-side.
+        let repo = SportsFakeRepository(allEvents: [])
+        repo.livePages = [Page(items: [game("g1")], nextCursor: nil)]
+        repo.leagueEvents = [game("g1"), prop("p1")]
+        let vm = makeVM(repo: repo)
+
+        await vm.load()
         XCTAssertEqual(vm.state, .loaded)
-        vm.selectedTab = .games
-        XCTAssertEqual(vm.visibleEvents.map(\.id), ["g1"])
-        vm.selectedTab = .props
-        XCTAssertEqual(vm.visibleEvents.map(\.id), ["p1"])
+        XCTAssertEqual(vm.gameSections.flatMap(\.events).map(\.id), ["g1"])
+
+        await vm.loadPropsIfNeeded()
+        XCTAssertEqual(vm.visibleEvents.map(\.id), ["p1"], "the games are not repeated under Props")
     }
 
     func test_load_empty_fails() async {
@@ -149,8 +480,10 @@ final class SportsLeagueDetailViewModelTests: XCTestCase {
             Event(id: "m1", title: "Wimbledon Final", slug: "m1", markets: [], volume: 0, imageURL: nil),
             Event(id: "m2", title: "MLB Game", slug: "m2", markets: [], volume: 0, imageURL: nil),
         ]
+        repo.livePages = [Page(items: [game("g1")], nextCursor: nil)]
         let vm = makeVM(repo: repo)
         await vm.load()
+        await vm.loadPropsIfNeeded()
         vm.selectedTab = .props // these events have no kickoff/moneyline, so they're props
 
         vm.searchQuery = "final"
@@ -163,8 +496,10 @@ final class SportsLeagueDetailViewModelTests: XCTestCase {
     func test_setSort_appliesToVisibleEvents() async {
         let repo = SportsFakeRepository(allEvents: [])
         repo.leagueEvents = [prop("low", volume: 5), prop("high", volume: 50)]
+        repo.livePages = [Page(items: [game("g1")], nextCursor: nil)]
         let vm = makeVM(repo: repo)
         await vm.load()
+        await vm.loadPropsIfNeeded()
         vm.selectedTab = .props
 
         XCTAssertEqual(vm.visibleEvents.map(\.id), ["high", "low"]) // default: volume desc
@@ -175,8 +510,10 @@ final class SportsLeagueDetailViewModelTests: XCTestCase {
     func test_standingsEvent_isHighestVolumeProp() async {
         let repo = SportsFakeRepository(allEvents: [])
         repo.leagueEvents = [game("g1", volume: 999), prop("low", volume: 5), prop("high", volume: 50)]
+        repo.livePages = [Page(items: [game("g1")], nextCursor: nil)]
         let vm = makeVM(repo: repo)
         await vm.load()
+        await vm.loadPropsIfNeeded()
 
         XCTAssertEqual(vm.standingsEvent?.id, "high")
     }
@@ -184,8 +521,10 @@ final class SportsLeagueDetailViewModelTests: XCTestCase {
     func test_standingsEvent_nilWhenNoProps() async {
         let repo = SportsFakeRepository(allEvents: [])
         repo.leagueEvents = [game("g1")]
+        repo.livePages = [Page(items: [game("g1")], nextCursor: nil)]
         let vm = makeVM(repo: repo)
         await vm.load()
+        await vm.loadPropsIfNeeded()
 
         XCTAssertNil(vm.standingsEvent)
     }
@@ -201,6 +540,24 @@ private final class SportsFakeRepository: MarketRepository, @unchecked Sendable 
     var leagueEvents: [Event] = []
     private(set) var futuresFetchCount = 0
     private(set) var fetchAllCallCount = 0
+    var catalogue: [SportLeague] = []
+    var catalogueError = false
+    var results: [String: GameResult] = [:]
+    /// The ids passed to the most recent `fetchGameResults` call, for asserting fan-out is bounded.
+    private(set) var lastGameResultsEventIDs: [String] = []
+    /// Keyset pages served in order for the general sports tag. Page *n*'s `nextCursor` is the
+    /// key to page *n+1*; a nil cursor means the feed is exhausted.
+    var livePages: [Page<Event>] = []
+    /// How many times the Live feed hit the network, for asserting reveals don't refetch.
+    private(set) var liveFetchCount = 0
+    /// The cursor the most recent Live request carried, so a refresh can be shown to restart.
+    private(set) var lastLiveCursor: String?
+    /// Games served to the in-play query.
+    var inPlayGames: [Event] = []
+    /// How many times the in-play query was made.
+    private(set) var inPlayFetchCount = 0
+    /// The league scope the most recent games request carried, if any.
+    private(set) var lastLeagueTagID: String?
 
     init(allEvents: [Event]) { self.allEvents = allEvents }
 
@@ -216,7 +573,31 @@ private final class SportsFakeRepository: MarketRepository, @unchecked Sendable 
         return Page(items: [], nextCursor: nil)
     }
     func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] { [] }
-    func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] { [:] }
+    func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] {
+        lastGameResultsEventIDs = eventIDs
+        return results
+    }
+    func fetchSportsGames(live: Bool, startingAfter: Date?, cursor: String?, leagueTagID: String?) async throws -> Page<Event> {
+        lastLeagueTagID = leagueTagID
+        if live {
+            inPlayFetchCount += 1
+            return Page(items: inPlayGames, nextCursor: nil)
+        }
+        liveFetchCount += 1
+        lastLiveCursor = cursor
+        // Tests that don't care about paging just seed `allEvents`; they get it as a single,
+        // final page so their setup reads the same as before the feed was paged.
+        guard !livePages.isEmpty else { return Page(items: allEvents, nextCursor: nil) }
+        // nil cursor means "first page"; otherwise the cursor is the previous page's.
+        let index = cursor.flatMap { c in livePages.firstIndex { $0.nextCursor == c }.map { $0 + 1 } } ?? 0
+        guard index < livePages.count else { return Page(items: [], nextCursor: nil) }
+        return livePages[index]
+    }
+
+    func fetchSportsCatalogue() async throws -> [SportLeague] {
+        if catalogueError { throw URLError(.badServerResponse) }
+        return catalogue
+    }
     func fetchEvent(slug: String) async throws -> Event { fatalError("unused") }
     func searchMarkets(query: String) async throws -> [Market] { [] }
     func fetchTags() async throws -> [Tag] { [] }

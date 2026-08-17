@@ -25,9 +25,16 @@ public struct SportsLeagueDetailView: View {
     /// Creates the view.
     /// - Parameters:
     ///   - league: The league this screen shows.
-    ///   - fetchAllEvents: The use case used to load the league's markets.
-    public init(league: SportsLeague, fetchAllEvents: FetchAllEventsUseCase) {
-        self._viewModel = State(initialValue: SportsLeagueDetailViewModel(league: league, fetchAllEvents: fetchAllEvents))
+    ///   - fetchAllEvents: Loads the league's non-game markets, for the Props tab.
+    ///   - fetchSportsGames: Loads the league's games, paged.
+    public init(
+        league: SportsLeague,
+        fetchAllEvents: FetchAllEventsUseCase,
+        fetchSportsGames: FetchSportsGamesUseCase
+    ) {
+        self._viewModel = State(initialValue: SportsLeagueDetailViewModel(
+            league: league, fetchAllEvents: fetchAllEvents, fetchSportsGames: fetchSportsGames
+        ))
     }
 
     public var body: some View {
@@ -94,10 +101,18 @@ public struct SportsLeagueDetailView: View {
         HStack(spacing: DSLayout.spacing) {
             HStack(spacing: 8) {
                 ForEach(SportsLeagueDetailViewModel.Tab.allCases, id: \.self) { tab in
-                    DSChip(tab.title, isActive: viewModel.selectedTab == tab) { viewModel.selectedTab = tab }
+                    DSChip(tab.title, isActive: viewModel.selectedTab == tab) {
+                        viewModel.selectedTab = tab
+                        // Props are fetched on first open, not at load — that call is
+                        // unpaginated and the common path is looking at games.
+                        if tab == .props { Task { await viewModel.loadPropsIfNeeded() } }
+                    }
                 }
             }
             Spacer()
+            // Games are ordered by kickoff within dated sections, so a Volume/Soonest choice
+            // would silently do nothing there — the control belongs to Props only.
+            if viewModel.selectedTab == .props {
             Menu {
                 ForEach(SportsSort.allCases, id: \.self) { sort in
                     Button {
@@ -110,6 +125,7 @@ public struct SportsLeagueDetailView: View {
             } label: {
                 Image(systemName: "slider.horizontal.3").foregroundStyle(DSColor.textPrimary)
             }
+            }
         }
         .padding(.horizontal, DSLayout.margin)
         .padding(.vertical, DSLayout.spacing)
@@ -120,13 +136,71 @@ public struct SportsLeagueDetailView: View {
     private var content: some View {
         switch viewModel.state {
         case .idle, .loading:
-            StateView(.loading).frame(maxHeight: .infinity)
+            // Same dated fixture sections the hub's Live feed uses, so a league reads the
+            // way the feed it was opened from does — while loading as well as after.
+            SkeletonView(.gameCard, count: 4)
         case .failed(let message):
             StateView(.error(message)).frame(maxHeight: .infinity)
         case .loaded:
-            if viewModel.visibleEvents.isEmpty {
-                StateView(.empty).frame(maxHeight: .infinity)
-            } else {
+            if viewModel.selectedTab == .games { gamesList } else { propsList }
+        }
+    }
+
+    /// The Games tab: dated sections, in play first, then nearest kickoff onward — the same
+    /// shape the hub's Live feed uses, so a sport reads the way the feed it was picked from does.
+    @ViewBuilder
+    private var gamesList: some View {
+        let sections = viewModel.gameSections
+        if sections.isEmpty {
+            StateView(.empty).frame(maxHeight: .infinity)
+        } else {
+            let lastEventID = sections.last?.events.last?.id
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: DSLayout.spacingLarge) {
+                    ForEach(sections) { section in
+                        VStack(alignment: .leading, spacing: DSLayout.spacing) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(section.title.uppercased())
+                                    .font(DSFont.caption.bold())
+                                    .foregroundStyle(DSColor.textSecondary)
+                                if let subtitle = section.subtitle {
+                                    Text(subtitle)
+                                        .font(DSFont.caption)
+                                        .foregroundStyle(DSColor.textSecondary.opacity(0.7))
+                                }
+                            }
+                            ForEach(section.events) { event in
+                                NavigationLink(value: event) {
+                                    HomeCard(
+                                        event: event,
+                                        kindOverride: .game,
+                                        result: event.initialResult,
+                                        onTeamTap: { selectedTeam = $0 },
+                                        leagueSlug: viewModel.league.title.lowercased()
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .onAppear {
+                                    guard event.id == lastEventID else { return }
+                                    Task { await viewModel.loadMore() }
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, DSLayout.margin)
+                .padding(.vertical, DSLayout.spacing)
+            }
+            .refreshable { await viewModel.refresh() }
+        }
+    }
+
+    /// The Props tab: season winners, awards and player props, flat and volume-sorted.
+    @ViewBuilder
+    private var propsList: some View {
+        if viewModel.visibleEvents.isEmpty {
+            StateView(.empty).frame(maxHeight: .infinity)
+        } else {
                 ScrollView {
                     LazyVStack(spacing: DSLayout.spacing) {
                         ForEach(viewModel.visibleEvents) { event in
@@ -144,7 +218,6 @@ public struct SportsLeagueDetailView: View {
                     .padding(.vertical, DSLayout.spacing)
                 }
                 .refreshable { await viewModel.refresh() }
-            }
         }
     }
 }

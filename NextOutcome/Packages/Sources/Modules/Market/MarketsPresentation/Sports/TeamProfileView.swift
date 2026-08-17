@@ -67,7 +67,7 @@ public struct TeamProfileView: View {
     private var content: some View {
         switch viewModel.state {
         case .idle, .loading:
-            StateView(.loading).frame(maxWidth: .infinity).padding(.top, DSLayout.spacingXLarge)
+            SkeletonView(.row, count: 5, placement: .inline)
         case .failed(let message):
             StateView(.error(message)).frame(maxWidth: .infinity).padding(.top, DSLayout.spacingXLarge)
         case .loaded:

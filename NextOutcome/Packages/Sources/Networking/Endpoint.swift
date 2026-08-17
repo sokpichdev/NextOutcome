@@ -29,6 +29,13 @@ public struct Endpoint {
     /// Empty by default.
     public let query: [String: String]
 
+    /// Query items appended after `query`, for keys that must repeat.
+    ///
+    /// A `[String: String]` cannot hold the same key twice, but Gamma ANDs tag filters by
+    /// repeating `tag_id` — asking for games *and* soccer needs `tag_id` twice alongside
+    /// `tag_match=all`. Empty by default, so every existing call site is unaffected.
+    public let extraQueryItems: [URLQueryItem]
+
     /// The raw request body to send, if any (already-encoded JSON `Data`).
     /// `nil` for requests with no body, such as most GET requests.
     public let body: Data?
@@ -39,18 +46,22 @@ public struct Endpoint {
     ///   - path: The URL path on that host.
     ///   - method: The HTTP method to use. Defaults to `.get`.
     ///   - query: Query string parameters. Defaults to none.
+    ///   - extraQueryItems: Additional items appended after `query`, for keys that must
+    ///     repeat. Defaults to none.
     ///   - body: An already-encoded request body. Defaults to `nil`.
     public init(
         host: PolymarketService,
         path: String,
         method: HTTPMethod = .get,
         query: [String: String] = [:],
+        extraQueryItems: [URLQueryItem] = [],
         body: Data? = nil
     ) {
         self.host = host
         self.path = path
         self.method = method
         self.query = query
+        self.extraQueryItems = extraQueryItems
         self.body = body
     }
 
@@ -69,10 +80,9 @@ public struct Endpoint {
         components.scheme = "https"
         components.host = host.baseURL
         components.path = path
-        if !query.isEmpty {
-            components.queryItems = query.map {
-                URLQueryItem(name: $0.key, value: $0.value)
-            }
+        let items = query.map { URLQueryItem(name: $0.key, value: $0.value) } + extraQueryItems
+        if !items.isEmpty {
+            components.queryItems = items
         }
         guard let url = components.url else {
             return nil

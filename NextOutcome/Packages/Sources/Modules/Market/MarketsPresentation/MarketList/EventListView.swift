@@ -89,7 +89,11 @@ public struct EventListView: View {
             }
         } else {
             switch viewModel.state {
-            case .idle, .loading: StateView(.loading)
+            // Skeleton cards, not a spinner: this is the app's cold-start screen and the
+            // feed is a uniform run of `HomeCard`s, so the layout is known before the
+            // payload is. (The search path above keeps its spinner — that one re-fires per
+            // keystroke, where a shimmer strobes.)
+            case .idle, .loading: SkeletonView(.feedCard, count: 4)
             case .empty:          StateView(.empty)
             case .failed(let m):  StateView(.error(m))
             case .loaded:         feed

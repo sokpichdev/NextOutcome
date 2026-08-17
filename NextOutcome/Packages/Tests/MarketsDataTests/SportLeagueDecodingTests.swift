@@ -51,4 +51,44 @@ final class SportLeagueDecodingTests: XCTestCase {
         let mystery = try XCTUnwrap(decoded().last)
         XCTAssertNil(mystery.toDomain())
     }
+
+    // MARK: group resolution and summary merging
+
+    func test_toDomain_resolvesGroupFromTagMembership() throws {
+        // UFL is "1,100639,1186,105925" — 1186 is american-football, its group.
+        let ufl = try XCTUnwrap(decoded()[1].toDomain(summary: nil))
+        XCTAssertEqual(ufl.groupTagID, "1186")
+    }
+
+    func test_toDomain_esportsLeagueResolvesToEsportsGroup() throws {
+        // Esports IS in SportGroupCatalog.groups (tag 64) so its leagues can be identified.
+        // FetchSportsCatalogueUseCase filters that group out downstream, since the Esports
+        // hub owns the content — the exclusion has to be reachable in order to work.
+        let cs2 = try XCTUnwrap(decoded()[0].toDomain(summary: nil))
+        XCTAssertEqual(cs2.groupTagID, "64")
+    }
+
+    func test_toDomain_mergesSummaryActivity() throws {
+        let summary = SportsSummaryDTO.League(
+            name: "CS2", image: nil, activeEventCount: 42, hasLive: true,
+            eventDates: ["2026-08-16"], earliestOpenDate: "2026-08-16", volume: 6_926_121
+        )
+        let cs2 = try XCTUnwrap(decoded()[0].toDomain(summary: summary))
+
+        XCTAssertEqual(cs2.activeEventCount, 42)
+        XCTAssertTrue(cs2.hasLive)
+        XCTAssertEqual(cs2.volume, 6_926_121)
+        XCTAssertEqual(cs2.eventDates, ["2026-08-16"])
+    }
+
+    func test_toDomain_missingSummaryZeroesActivity() throws {
+        // Not every catalogue row has a summary row; a chip with no activity is simply
+        // filtered out of the nav later, so zeroes are the correct neutral value.
+        let cs2 = try XCTUnwrap(decoded()[0].toDomain(summary: nil))
+
+        XCTAssertEqual(cs2.activeEventCount, 0)
+        XCTAssertFalse(cs2.hasLive)
+        XCTAssertEqual(cs2.volume, 0)
+        XCTAssertTrue(cs2.eventDates.isEmpty)
+    }
 }

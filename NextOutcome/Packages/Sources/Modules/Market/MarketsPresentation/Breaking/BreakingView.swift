@@ -61,7 +61,7 @@ public struct BreakingView: View {
     private var moversContent: some View {
         switch viewModel.state {
         case .idle, .loading:
-            StateView(.loading).frame(height: 320)
+            SkeletonView(.row, count: 6, placement: .inline)
         case .empty:
             StateView(.empty).frame(height: 320)
         case .failed(let message):

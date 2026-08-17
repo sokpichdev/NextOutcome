@@ -70,7 +70,7 @@ public struct WorldCupHubView: View {
     private var tabContent: some View {
         switch viewModel.state {
         case .idle, .loading:
-            StateView(.loading).frame(minHeight: 200)
+            SkeletonView(.gameCard, count: 3, placement: .inline)
         case .failed(let message):
             StateView(.error(message)).frame(minHeight: 200)
         case .loaded:

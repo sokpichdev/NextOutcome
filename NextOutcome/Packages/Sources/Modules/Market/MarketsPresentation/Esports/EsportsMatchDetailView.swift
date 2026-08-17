@@ -212,7 +212,9 @@ public struct EsportsMatchDetailView: View {
                     Button("Retry") { Task { await chart.retry() } }
                 }
             case .idle, .loading:
-                Color.clear.frame(height: 200)
+                // Reserved height, same as the event detail chart — as a skeleton block so
+                // the space reads as pending rather than as a gap.
+                SkeletonView(.block(height: 200), placement: .inline)
             case .empty:
                 EmptyView()
             }

@@ -73,14 +73,10 @@ public struct EsportsLeaderboardView: View {
     private var content: some View {
         switch viewModel.state {
         case .loading:
-            VStack(spacing: DSLayout.spacingSmall) {
-                ForEach(0..<6, id: \.self) { _ in
-                    RoundedRectangle(cornerRadius: DSLayout.cardRadius)
-                        .fill(DSColor.surface)
-                        .frame(height: 64)
-                }
-            }
-            .redacted(reason: .placeholder)
+            // Was a stack of plain `surface` rectangles under `.redacted(.placeholder)` —
+            // which is a no-op on a filled `Shape`, so it never did anything. The shared
+            // component sketches the real row and actually shimmers.
+            SkeletonView(.row, count: 6, placement: .inline)
         case .empty:
             Text("No rankings for this period yet.")
                 .font(DSFont.subheadline)

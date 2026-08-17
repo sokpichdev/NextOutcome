@@ -12,23 +12,29 @@ public struct HomeCard: View {
     private let onTeamTap: ((TeamProfileTarget) -> Void)?
     /// Forwarded to `GameCard` for the `.game` case; see `GameCard.leagueSlug`.
     private let leagueSlug: String?
+    /// Forwarded to `GameCard` for the `.game` case; see `GameCard.result`.
+    private let result: GameResult?
 
     /// Creates the card.
     /// - Parameters:
     ///   - event: The event to display.
     ///   - kindOverride: Force a specific variant (e.g. `.hero` for a feed slot); otherwise
     ///     the kind is derived from the event via `HomeCardKind.classify`.
+    ///   - result: The live/final score for this event, when loaded. `nil` (the default)
+    ///     renders the card as not-yet-started — correct for feeds that don't load scores.
     ///   - onTeamTap: Forwarded to `GameCard` when this event renders as `.game`; `nil`
     ///     (the default) leaves team logos non-interactive.
     ///   - leagueSlug: Forwarded to `GameCard` when this event renders as `.game`.
     public init(
         event: Event,
         kindOverride: HomeCardKind? = nil,
+        result: GameResult? = nil,
         onTeamTap: ((TeamProfileTarget) -> Void)? = nil,
         leagueSlug: String? = nil
     ) {
         self.event = event
         self.kind = kindOverride ?? HomeCardKind.classify(event)
+        self.result = result
         self.onTeamTap = onTeamTap
         self.leagueSlug = leagueSlug
     }
@@ -37,7 +43,7 @@ public struct HomeCard: View {
         switch kind {
         case .liveUpDown:  LiveUpDownCard(event: event)
         case .news:        NewsCard(event: event)
-        case .game:        GameCard(event: event, result: nil, moneylines: event.markets, onTeamTap: onTeamTap, leagueSlug: leagueSlug)
+        case .game:        GameCard(event: event, result: result, moneylines: event.markets, onTeamTap: onTeamTap, leagueSlug: leagueSlug)
         case .multiOutcome: MultiOutcomeCard(event: event)
         case .hero:        HeroPromoCard(event: event)
         case .standard:    EventCard(event: event)

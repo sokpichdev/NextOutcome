@@ -22,13 +22,12 @@ public struct SportsHubView: View {
     private let worldCupViewModel: WorldCupHubViewModel
     /// The use case used to build a league detail screen's view model on demand.
     private let fetchAllEvents: FetchAllEventsUseCase
+    /// Loads a selected sport's games, paged — forwarded to the league detail screen.
+    private let fetchSportsGames: FetchSportsGamesUseCase
     /// Whether the Live tab's league search field is shown.
     @State private var isSearchActive = false
     /// The Live tab's league search text.
     @State private var searchQuery = ""
-    /// The league chip selected in the mode bar, if any. Non-nil replaces the Live/Futures
-    /// content with that league's detail, in place — no navigation push.
-    @State private var selectedLeague: SportsLeague?
     /// The team logo tapped in the Live tab, if any — drives the profile push.
     @State private var selectedTeam: TeamProfileTarget?
     /// Builds the profile view model when a team logo is tapped.
@@ -39,24 +38,38 @@ public struct SportsHubView: View {
     ///   - viewModel: The Sports hub view model.
     ///   - worldCupViewModel: The shared World Cup hub view model.
     ///   - fetchAllEvents: The use case for building league detail screens.
-    public init(viewModel: SportsHubViewModel, worldCupViewModel: WorldCupHubViewModel, fetchAllEvents: FetchAllEventsUseCase) {
+    public init(
+        viewModel: SportsHubViewModel,
+        worldCupViewModel: WorldCupHubViewModel,
+        fetchAllEvents: FetchAllEventsUseCase,
+        fetchSportsGames: FetchSportsGamesUseCase
+    ) {
         self._viewModel = State(initialValue: viewModel)
         self.worldCupViewModel = worldCupViewModel
         self.fetchAllEvents = fetchAllEvents
+        self.fetchSportsGames = fetchSportsGames
     }
 
     public var body: some View {
         VStack(spacing: 0) {
-            SportsModeBar(mode: $viewModel.mode, leagues: viewModel.leagues, selectedLeague: $selectedLeague)
+            SportsNavBar(
+                mode: $viewModel.mode,
+                groups: viewModel.navGroups,
+                selectedGroup: $viewModel.selectedGroup,
+                isShowingAllSports: $viewModel.isShowingAllSports
+            )
                 .padding(.vertical, DSLayout.spacingSmall)
-            if selectedLeague == nil { header }
-            if isSearchActive, selectedLeague == nil, viewModel.mode == .live { searchField }
+            if viewModel.selectedGroup == nil { header }
+            if isSearchActive, viewModel.selectedGroup == nil, viewModel.mode == .live { searchField }
             content
         }
         .background(DSColor.background)
         .environment(\.oddsFormat, viewModel.oddsFormat)
         .environment(\.showSpreadsAndTotals, viewModel.showSpreadsAndTotals)
         .task { await viewModel.loadIfNeeded() }
+        .sheet(isPresented: $viewModel.isShowingAllSports) {
+            AllSportsSheet(groups: viewModel.catalogue) { viewModel.selectedGroup = $0 }
+        }
     }
 
     /// The Odds Format menu icon: Odds Format plus Show Spreads + Totals (no sort — Volume/
@@ -137,12 +150,23 @@ public struct SportsHubView: View {
     /// entirely on their own.
     @ViewBuilder
     private var content: some View {
-        if let selectedLeague {
-            if selectedLeague.title == "World Cup" {
+        if let group = viewModel.selectedGroup {
+            // Case-insensitive substring match: the server labels this group "FIFA World Cup",
+            // not "World Cup", so an exact match would silently fall through to the generic
+            // league screen instead of the purpose-built World Cup hub.
+            if group.name.localizedCaseInsensitiveContains("world cup") {
                 WorldCupHubView(viewModel: worldCupViewModel)
             } else {
-                SportsLeagueDetailView(league: selectedLeague, fetchAllEvents: fetchAllEvents)
-                    .id(selectedLeague.id)
+                SportsLeagueDetailView(
+                    league: SportsLeague(
+                        id: group.navigationTagID,
+                        title: group.name,
+                        glyph: group.glyph
+                    ),
+                    fetchAllEvents: fetchAllEvents,
+                    fetchSportsGames: fetchSportsGames
+                )
+                .id(group.id)
             }
         } else {
             ownModeContent
@@ -163,7 +187,9 @@ public struct SportsHubView: View {
     private var ownModeContent: some View {
         switch viewModel.state {
         case .idle, .loading:
-            StateView(.loading).frame(maxHeight: .infinity)
+            // Both modes land as dated sections of fixture cards, so sketch that shape
+            // rather than spinning and reflowing into it.
+            SkeletonView(.gameCard, count: 4)
         case .failed(let message):
             StateView(.error(message)).frame(maxHeight: .infinity)
         case .loaded:
@@ -176,32 +202,63 @@ public struct SportsHubView: View {
 
     /// The Live tab: league sections of match cards, filtered by `searchQuery`.
     private var liveContent: some View {
-        let groups = viewModel.liveGroups.compactMap { group -> (league: SportsLeague, events: [Event])? in
-            guard !searchQuery.isEmpty else { return group }
-            let filtered = group.events.filter { $0.title.localizedCaseInsensitiveContains(searchQuery) }
-            return filtered.isEmpty ? nil : (group.league, filtered)
+        // Search filters what is *revealed*, not the whole loaded set — the feed pages in, so
+        // matches further down arrive as the reader scrolls, same as unfiltered browsing.
+        let groups = viewModel.visibleGroups.compactMap { section -> SportsFeedSection? in
+            guard !searchQuery.isEmpty else { return section }
+            let filtered = section.events.filter { $0.title.localizedCaseInsensitiveContains(searchQuery) }
+            return filtered.isEmpty ? nil : SportsFeedSection(id: section.id, title: section.title, events: filtered)
         }
+        let lastEventID = groups.last?.events.last?.id
         return ScrollView {
             if groups.isEmpty {
                 StateView(.empty).padding(.top, DSLayout.spacingXLarge)
             } else {
                 LazyVStack(alignment: .leading, spacing: DSLayout.spacingLarge) {
-                    ForEach(groups, id: \.league.id) { group in
+                    ForEach(groups) { group in
                         VStack(alignment: .leading, spacing: DSLayout.spacing) {
-                            Text(group.league.title.uppercased())
-                                .font(DSFont.caption.bold())
-                                .foregroundStyle(DSColor.textSecondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(group.title.uppercased())
+                                    .font(DSFont.caption.bold())
+                                    .foregroundStyle(DSColor.textSecondary)
+                                if let subtitle = group.subtitle {
+                                    Text(subtitle)
+                                        .font(DSFont.caption)
+                                        .foregroundStyle(DSColor.textSecondary.opacity(0.7))
+                                }
+                            }
                             ForEach(group.events) { event in
                                 NavigationLink(value: event) {
                                     HomeCard(
                                         event: event,
+                                        // The sectioner already guarantees every event here is
+                                        // a game, so render it as one. Left to classify itself,
+                                        // a sparse fixture (Setka Cup table tennis, say) falls
+                                        // through to the generic multi-outcome card and shows a
+                                        // duplicated title with $0 Vol instead of a scoreboard.
+                                        kindOverride: .game,
+                                        // Gamma ships the live clock on the event itself, so a
+                                        // card shows "2H · 60" on its first frame rather than
+                                        // waiting on the separate results call.
+                                        result: viewModel.results[event.id] ?? event.initialResult,
                                         onTeamTap: { selectedTeam = $0 },
-                                        leagueSlug: group.league.title.lowercased()
+                                        leagueSlug: viewModel.leagueSlug(for: event)
                                     )
                                 }
                                 .buttonStyle(.plain)
+                                // Infinite scroll, same trigger the main feed uses: the last
+                                // rendered card asks for the next batch as it comes into view.
+                                .onAppear {
+                                    guard event.id == lastEventID else { return }
+                                    Task { await viewModel.loadMore() }
+                                }
                             }
                         }
+                    }
+                    if viewModel.isLoadingMore {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, DSLayout.spacing)
                     }
                 }
                 .padding(.horizontal, DSLayout.margin)

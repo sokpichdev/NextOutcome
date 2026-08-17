@@ -259,7 +259,9 @@ public struct EventDetailView: View {
                 // Reserve the same height as the loaded chart so the `heroOffsetReader`
                 // marker (attached below `chartBlock`) stays put during the load
                 // transition instead of jumping once the chart lays out (Finding 1).
-                Color.clear.frame(height: 200)
+                // A skeleton block rather than `Color.clear` so the reserved space reads
+                // as pending content instead of as a gap.
+                SkeletonView(.block(height: 200), placement: .inline)
             case .empty:
                 EmptyView()
             }

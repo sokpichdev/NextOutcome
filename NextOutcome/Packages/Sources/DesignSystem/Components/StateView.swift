@@ -23,6 +23,12 @@ public enum ViewState {
 
 /// A generic placeholder view for loading, empty, and error states, so every
 /// screen doesn't need to hand-roll its own spinner/empty-state UI.
+///
+/// `.loading` here is a centred spinner, which is the right call for short inline
+/// waits, for content whose shape can't be predicted, and for anything re-fetched on
+/// every keystroke (a shimmer would strobe). When the incoming payload is a list of
+/// uniform rows or cards, reach for `SkeletonView` instead — the layout is already
+/// known, so there's no reason to spin and then reflow.
 public struct StateView: View {
     /// Which placeholder to render.
     let state: ViewState
