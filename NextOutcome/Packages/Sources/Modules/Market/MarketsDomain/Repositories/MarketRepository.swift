@@ -41,6 +41,19 @@ public protocol MarketRepository: Sendable {
     ///   - cursor: Keyset cursor, `nil` for the first page.
     ///   - leagueTagID: Narrows to one sport or league; `nil` for the whole feed.
     func fetchSportsGames(live: Bool, startingAfter: Date?, cursor: String?, leagueTagID: String?) async throws -> Page<Event>
+    /// One page of esports *matches* — the mirror of `fetchSportsGames`, scoped to the esports
+    /// tag instead of excluding it.
+    ///
+    /// Separate rather than a flag on `fetchSportsGames` because the two feeds are opposites,
+    /// not variants: one means "games that aren't esports", the other "games that are". The
+    /// server-side games filter is what keeps season futures off the wire, which is the whole
+    /// reason the Esports hub no longer downloads its tag in bulk.
+    /// - Parameters:
+    ///   - live: Ask for in-play matches only.
+    ///   - startingAfter: Lower bound on kickoff; also sorts by kickoff ascending.
+    ///   - cursor: Keyset cursor, `nil` for the first page.
+    ///   - leagueTagID: Narrows to one game title; `nil` for every game.
+    func fetchEsportsGames(live: Bool, startingAfter: Date?, cursor: String?, leagueTagID: String?) async throws -> Page<Event>
     /// Gamma's full league catalogue — every league Polymarket runs markets for, with its
     /// display name, key art, classification tag, sport group, and current activity.
     ///
@@ -98,6 +111,9 @@ public extension MarketRepository {
     func fetchLeagues(tagID: String) async throws -> [EsportsLeague] { [] }
     func fetchSportsCatalogue() async throws -> [SportLeague] { [] }
     func fetchSportsGames(live: Bool, startingAfter: Date?, cursor: String?, leagueTagID: String?) async throws -> Page<Event> {
+        Page(items: [], nextCursor: nil)
+    }
+    func fetchEsportsGames(live: Bool, startingAfter: Date?, cursor: String?, leagueTagID: String?) async throws -> Page<Event> {
         Page(items: [], nextCursor: nil)
     }
     func fetchFeaturedEvents(limit: Int) async throws -> [Event] { [] }

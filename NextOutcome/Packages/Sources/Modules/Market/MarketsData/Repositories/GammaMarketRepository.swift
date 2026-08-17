@@ -290,6 +290,22 @@ public struct GammaMarketRepository: MarketRepository {
         return Page(items: page.events.map(MarketMapper.event(from:)), nextCursor: page.nextCursor)
     }
 
+    /// Fetches one keyset page of esports matches, in-play or upcoming.
+    ///
+    /// Shares the `/events/keyset` shape with `fetchSportsGames`, so paging behaves identically
+    /// across both hubs — only the tag filters differ.
+    public func fetchEsportsGames(
+        live: Bool, startingAfter: Date?, cursor: String?, leagueTagID: String?
+    ) async throws -> Page<Event> {
+        let params = GammaEventQuery.esportsGamesParams(
+            live: live, startingAfter: startingAfter, cursor: cursor, leagueTagID: leagueTagID
+        )
+        let page: EventKeysetPageDTO = try await client.fetch(
+            Endpoint(host: .gamma, path: "/events/keyset", query: params.query, extraQueryItems: params.extraItems)
+        )
+        return Page(items: page.events.map(MarketMapper.event(from:)), nextCursor: page.nextCursor)
+    }
+
     /// Fetches Gamma's full league catalogue with activity merged in.
     ///
     /// Neither endpoint takes parameters, so scoping happens here. It isn't cached: rows
@@ -433,6 +449,46 @@ public enum GammaEventQuery {
             query["tag_match"] = "all"
             extraItems.append(URLQueryItem(name: "tag_id", value: leagueTagID))
         }
+        if live { query["live"] = "true" }
+        if let startingAfter {
+            query["start_time_min"] = ISO8601DateFormatter().string(from: startingAfter)
+            query["order"] = "startTime"
+            query["ascending"] = "true"
+        }
+        if let cursor, !cursor.isEmpty { query["after_cursor"] = cursor }
+        return (query, extraItems)
+    }
+
+    /// Builds the Esports hub's match query — the mirror image of `sportsGamesParams`.
+    ///
+    /// Same two-tag intersection, opposite side of it: the Sports feed excludes esports, this
+    /// one *is* esports, ANDed with the Games tag so futures ("LCK 2026 Season Winner") never
+    /// cross the wire. That intersection is what `EsportsCatalog.isMatch` used to do client-side
+    /// on a 500-event download — measured against the live API, 500 fetched events yielded 410
+    /// matches and 33 MB, of which 94% was market sub-objects the hub reads two fields from.
+    ///
+    /// Gamma ANDs tags by *repeating* `tag_id` (a comma list is rejected as an invalid integer),
+    /// so the second and any league tag come back as `extraItems` rather than dictionary keys.
+    ///
+    /// - Parameters:
+    ///   - live: When true, asks for in-play matches only. Omitted rather than sent as `false`,
+    ///     which would exclude in-play matches instead of simply not filtering on them.
+    ///   - startingAfter: Lower bound on kickoff, for the upcoming feed. Supplying it also
+    ///     switches the sort to kickoff order.
+    ///   - cursor: The keyset cursor, or `nil`/empty for the first page.
+    ///   - leagueTagID: Narrows to one game title (CS2, LoL), for the tile row's filter.
+    /// - Returns: The dictionary parameters plus the items that must repeat `tag_id`.
+    static func esportsGamesParams(
+        live: Bool, startingAfter: Date?, cursor: String?, leagueTagID: String? = nil
+    ) -> (query: [String: String], extraItems: [URLQueryItem]) {
+        var query: [String: String] = [
+            "tag_id": esportsTagID,
+            "tag_match": "all",
+            "closed": "false",
+            "limit": "\(keysetPageSize)",
+        ]
+        var extraItems = [URLQueryItem(name: "tag_id", value: gamesTagID)]
+        if let leagueTagID { extraItems.append(URLQueryItem(name: "tag_id", value: leagueTagID)) }
         if live { query["live"] = "true" }
         if let startingAfter {
             query["start_time_min"] = ISO8601DateFormatter().string(from: startingAfter)
