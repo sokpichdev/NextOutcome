@@ -33,6 +33,7 @@ struct MoverCandidateRow: View {
                         Text("\(MarketFormatting.compactUSD(market.volume)) Vol.")
                             .font(DSFont.caption)
                             .foregroundStyle(DSColor.textSecondary)
+                            .rollingNumber(market.volume)
                     }
                     Spacer()
                     if let yes = market.yesOutcome {

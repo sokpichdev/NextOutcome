@@ -96,6 +96,7 @@ struct EsportsHeroCard: View {
             Text("\(MarketFormatting.compactUSD(event.volume)) Vol")
                 .font(DSFont.caption)
                 .foregroundStyle(DSColor.textSecondary)
+                .rollingNumber(event.volume)
             if let league = info.league {
                 Text(league.name)
                     .font(DSFont.caption)

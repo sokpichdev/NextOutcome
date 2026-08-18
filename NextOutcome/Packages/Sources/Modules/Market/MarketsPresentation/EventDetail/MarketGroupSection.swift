@@ -117,6 +117,7 @@ public struct MarketGroupSection: View {
                     Text("\(MarketFormatting.compactUSD(market.volume)) Vol.")
                         .font(DSFont.caption)
                         .foregroundStyle(DSColor.textSecondary)
+                        .rollingNumber(market.volume)
                 }
                 Spacer()
                 if let winner = resolvedOutcome(market) {

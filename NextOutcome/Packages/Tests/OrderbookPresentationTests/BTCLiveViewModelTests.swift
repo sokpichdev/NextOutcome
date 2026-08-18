@@ -148,6 +148,7 @@ final class BTCLiveViewModelTests: XCTestCase {
         repository: FakeOrderbookRepository,
         windowEnd: Date,
         symbol: String = "BTC",
+        windowInterval: TimeInterval = 300,
         spotRepository: FakeCryptoSpotPriceRepository = FakeCryptoSpotPriceRepository(),
         spotStreamer: FakeCryptoSpotPriceStreaming = FakeCryptoSpotPriceStreaming()
     ) -> BTCLiveViewModel {
@@ -156,6 +157,7 @@ final class BTCLiveViewModelTests: XCTestCase {
             eventID: "event-1",
             windowEnd: windowEnd,
             symbol: symbol,
+            windowInterval: windowInterval,
             fetchHistory: FetchPriceHistoryUseCase(repository: repository),
             fetchServerTime: FetchServerTimeUseCase(repository: repository),
             fetchRecentTrades: FetchRecentTradesUseCase(repository: repository),
@@ -224,6 +226,68 @@ final class BTCLiveViewModelTests: XCTestCase {
             "priceToBeat must stay pinned to the window open even when the server-time anchor reaches windowEnd"
         )
         XCTAssertEqual(vm.priceToBeat, first)
+    }
+
+    /// Regression test for the hardcoded 5-minute window: the chart card used to be
+    /// labelled "BTC 5m" no matter which market opened it, so tapping "ETH Up or Down
+    /// Daily" produced a Bitcoin five-minute heading over an Ethereum daily chart.
+    @MainActor
+    func test_chartTitle_followsTheAssetAndCadenceItWasOpenedWith() {
+        let repository = FakeOrderbookRepository()
+        let windowEnd = Date(timeIntervalSince1970: 1_000_000)
+
+        XCTAssertEqual(makeVM(repository: repository, windowEnd: windowEnd).chartTitle, "BTC 5m")
+        XCTAssertEqual(
+            makeVM(repository: repository, windowEnd: windowEnd, symbol: "ETH", windowInterval: 86_400).chartTitle,
+            "ETH Daily"
+        )
+        XCTAssertEqual(
+            makeVM(repository: repository, windowEnd: windowEnd, symbol: "SOL", windowInterval: 3_600).chartTitle,
+            "SOL 1h"
+        )
+    }
+
+    /// Regression test for the crushed candle chart: `candleWidth` is the width of one
+    /// candle, which is only the same as `windowInterval` for the 5-minute series. The
+    /// chart scales its visible x-domain by `candleWidth * visibleCandleCount`, so reading
+    /// the betting window there laid a daily market's 22 hours of 15-minute candles out
+    /// across 24 days — every candle stacked on the plot's left edge, no x-axis labels.
+    @MainActor
+    func test_candleWidth_isTheCandleIntervalNotTheBettingWindow() {
+        let repository = FakeOrderbookRepository()
+        let windowEnd = Date(timeIntervalSince1970: 1_000_000)
+
+        let fiveMinute = makeVM(repository: repository, windowEnd: windowEnd)
+        XCTAssertEqual(fiveMinute.candleWidth, 300)
+        XCTAssertEqual(fiveMinute.candleWidth, fiveMinute.windowInterval)
+
+        let daily = makeVM(repository: repository, windowEnd: windowEnd, symbol: "ETH", windowInterval: 86_400)
+        XCTAssertEqual(daily.candleWidth, 900, "a daily market charts 15-minute candles, not one 24-hour candle")
+
+        let hourly = makeVM(repository: repository, windowEnd: windowEnd, symbol: "SOL", windowInterval: 3_600)
+        XCTAssertEqual(hourly.candleWidth, 900)
+    }
+
+    /// The window length isn't only cosmetic — the window's *open* is `windowEnd` minus it,
+    /// and that's what picks the price to beat. A daily market left on the 5-minute default
+    /// took its price to beat from the final five minutes of a 24-hour window.
+    @MainActor
+    func test_priceToBeat_usesTheInjectedWindowLength() async {
+        let windowEnd = Date(timeIntervalSince1970: 1_000_000)
+        let repository = FakeOrderbookRepository()
+        repository.points = [
+            PriceHistoryPoint(date: windowEnd.addingTimeInterval(-86_400), price: 0.31), // daily open
+            PriceHistoryPoint(date: windowEnd.addingTimeInterval(-300), price: 0.77),    // 5m open
+        ]
+        repository.serverNow = windowEnd.addingTimeInterval(-10)
+
+        let daily = makeVM(repository: repository, windowEnd: windowEnd, symbol: "ETH", windowInterval: 86_400)
+        await daily.retry()
+        XCTAssertEqual(daily.priceToBeat, 0.31)
+
+        let fiveMinute = makeVM(repository: repository, windowEnd: windowEnd)
+        await fiveMinute.retry()
+        XCTAssertEqual(fiveMinute.priceToBeat, 0.77)
     }
 
     /// Regression test for the teardown leak: calling `stop()` while the initial

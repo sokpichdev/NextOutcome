@@ -72,6 +72,7 @@ public struct EventCard: View {
                     Text("\(MarketFormatting.compactUSD(event.volume)) vol")
                         .font(DSFont.caption)
                         .foregroundStyle(DSColor.textSecondary)
+                        .rollingNumber(event.volume)
                     Spacer()
                     Text("\(event.markets.count) market\(event.markets.count == 1 ? "" : "s")")
                         .font(DSFont.caption)

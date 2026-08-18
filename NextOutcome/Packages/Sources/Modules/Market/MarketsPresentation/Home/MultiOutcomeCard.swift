@@ -68,6 +68,7 @@ public struct MultiOutcomeCard: View {
                 HStack {
                     Text("\(MarketFormatting.compactUSD(event.volume)) Vol.")
                         .font(DSFont.caption).foregroundStyle(DSColor.textSecondary)
+                        .rollingNumber(event.volume)
                     Spacer()
                     Image(systemName: "square.and.arrow.up")
                     Image(systemName: "gift")

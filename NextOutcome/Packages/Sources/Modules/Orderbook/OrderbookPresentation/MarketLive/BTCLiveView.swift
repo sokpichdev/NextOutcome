@@ -64,7 +64,10 @@ public struct BTCLiveView: View {
         DSCard {
             VStack(alignment: .leading, spacing: DSLayout.spacing) {
                 HStack {
-                    Text("BTC 5m")
+                    // The real asset and cadence. Hardcoding "BTC 5m" here labelled every
+                    // market this screen opens — "ETH Up or Down Daily" included — as a
+                    // Bitcoin 5-minute chart.
+                    Text(viewModel.chartTitle)
                         .font(DSFont.headline)
                         .foregroundStyle(DSColor.textPrimary)
                     Spacer()
@@ -257,11 +260,13 @@ public struct BTCLiveView: View {
     }
 
     /// How many candles fit in the chart frame at once; older candles scroll in from the
-    /// left. 24 five-minute candles ≈ two hours on screen, matching the web's default zoom.
+    /// left. A count rather than a duration, so it holds for every cadence: 24 five-minute
+    /// candles ≈ two hours on screen (matching the web's default zoom), 24 fifteen-minute
+    /// candles ≈ six.
     private static let visibleCandleCount = 24
 
-    /// The candlestick chart: a wick (high–low) and body (open–close) per 5-minute
-    /// candle, plus a dashed price-to-beat line and the live current-price line.
+    /// The candlestick chart: a wick (high–low) and body (open–close) per candle, plus a
+    /// dashed price-to-beat line and the live current-price line.
     /// Green when the candle closed up, red when down.
     ///
     /// Scrolls horizontally through the seeded history (several hours; see
@@ -300,7 +305,10 @@ public struct BTCLiveView: View {
 
     private var candleChartBody: some View {
         let candles = viewModel.candles
-        let interval = viewModel.windowInterval
+        // The width of a *candle*, not of the betting window. They coincide only for the
+        // 5-minute series; sizing the axis by the window spread a daily market's 22 hours
+        // of 15-minute candles across a 24-day domain, stacking them all on the left edge.
+        let interval = viewModel.candleWidth
         let visibleSpan = interval * Double(Self.visibleCandleCount)
         // The stabilised band from the view model: it only moves when the price actually
         // leaves it, so an ordinary tick can't rescale the chart. `dollarDomain` remains

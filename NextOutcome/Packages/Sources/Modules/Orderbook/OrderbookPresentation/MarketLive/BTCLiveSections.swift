@@ -41,6 +41,7 @@ struct BTCLiveHeaderSection: View {
                     Text(viewModel.countdown)
                         .font(DSFont.price)
                         .foregroundStyle(viewModel.isCountdownUrgent ? DSColor.negative : DSColor.textPrimary)
+                        .rollingCountdown(viewModel.remainingSeconds)
                 }
             }
             Spacer()
@@ -53,6 +54,9 @@ struct BTCLiveHeaderSection: View {
                         Text(LiveFormat.usd(target))
                             .font(DSFont.priceSmall)
                             .foregroundStyle(DSColor.textPrimary)
+                            // The window's open, re-polled every 5s rather than streamed,
+                            // so it gets the ordinary roll.
+                            .rollingNumber(target)
                     }
                 }
                 if let current = viewModel.currentPrice {
@@ -65,11 +69,14 @@ struct BTCLiveHeaderSection: View {
                                 Text(LiveFormat.delta(delta))
                                     .font(DSFont.caption)
                                     .foregroundStyle(delta >= 0 ? DSColor.positive : DSColor.negative)
+                                    .rollingNumber(delta, animation: DSAnimation.liveNumber)
                             }
                         }
+                        // Socket-fed: several ticks a second, so it takes the fast roll.
                         Text(LiveFormat.usd(current))
                             .font(DSFont.priceSmall)
                             .foregroundStyle(DSColor.textPrimary)
+                            .rollingNumber(current, animation: DSAnimation.liveNumber)
                     }
                 }
             }
@@ -123,11 +130,13 @@ struct BTCLiveQuickBetSection: View {
                 PriceButton(
                     title: "Up",
                     price: LiveFormat.centsButton(viewModel.upCents),
+                    rolling: viewModel.upCents.map(Double.init),
                     style: .yes
                 ) { viewModel.quickBet(.up) }
                 PriceButton(
                     title: "Down",
                     price: LiveFormat.centsButton(viewModel.downCents),
+                    rolling: viewModel.downCents.map(Double.init),
                     style: .no
                 ) { viewModel.quickBet(.down) }
             }

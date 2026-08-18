@@ -24,6 +24,8 @@ public struct PriceButton: View {
     private let title: String
     /// The formatted price shown on the trailing (or centered) side, e.g. "62¢".
     private let price: String
+    /// The number behind `price`, when this button's price moves while it's on screen.
+    private let rolling: Double?
     /// Which visual style to render.
     private let style: Style
     /// Called when the button is tapped.
@@ -35,11 +37,22 @@ public struct PriceButton: View {
     /// - Parameters:
     ///   - title: The outcome label to display.
     ///   - price: The formatted price to display.
+    ///   - rolling: The number behind `price`, for a live button whose price updates in
+    ///     place — supplying it rolls the digits on each change. Leave `nil` on the static
+    ///     rows (a sports card's moneyline), where the price only changes with the data
+    ///     the whole row was rebuilt from.
     ///   - style: The visual style to use.
     ///   - action: Called when tapped.
-    public init(title: String, price: String, style: Style, action: @escaping () -> Void) {
+    public init(
+        title: String,
+        price: String,
+        rolling: Double? = nil,
+        style: Style,
+        action: @escaping () -> Void
+    ) {
         self.title = title
         self.price = price
+        self.rolling = rolling
         self.style = style
         self.action = action
     }
@@ -74,7 +87,7 @@ public struct PriceButton: View {
             // Centred "COL 18¢" — matches the sports card's equal-thirds buttons.
             HStack(spacing: DSLayout.spacingXSmall) {
                 Text(title).font(DSFont.caption.bold())
-                Text(price).font(DSFont.priceSmall.bold())
+                priceText(DSFont.priceSmall.bold())
             }
             .lineLimit(1)
             .minimumScaleFactor(0.8)
@@ -83,8 +96,20 @@ public struct PriceButton: View {
             HStack(spacing: DSLayout.spacingXSmall) {
                 Text(title).font(DSFont.subheadline.bold())
                 Spacer(minLength: DSLayout.spacingXSmall)
-                Text(price).font(DSFont.priceSmall)
+                priceText(DSFont.priceSmall)
             }
+        }
+    }
+
+    /// The price label, rolling its digits when the caller supplied the number behind it.
+    /// - Parameter font: The type style for this button's layout.
+    @ViewBuilder
+    private func priceText(_ font: Font) -> some View {
+        let text = Text(price).font(font)
+        if let rolling {
+            text.rollingNumber(rolling, animation: DSAnimation.liveNumber)
+        } else {
+            text
         }
     }
 

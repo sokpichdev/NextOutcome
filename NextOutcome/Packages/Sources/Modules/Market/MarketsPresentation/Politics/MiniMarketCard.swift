@@ -36,6 +36,7 @@ struct MiniMarketCard: View {
                 Text("\(MarketFormatting.compactUSD(event.volume)) Vol.")
                     .font(DSFont.caption)
                     .foregroundStyle(DSColor.textSecondary)
+                    .rollingNumber(event.volume)
                 Text(event.title.trimmingCharacters(in: .whitespaces))
                     .font(DSFont.headline)
                     .foregroundStyle(DSColor.textPrimary)
