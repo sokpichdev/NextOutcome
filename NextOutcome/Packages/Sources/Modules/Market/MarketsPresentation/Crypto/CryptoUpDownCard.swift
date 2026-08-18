@@ -57,17 +57,31 @@ public struct CryptoUpDownCard: View {
                             Text(cardTitle).font(DSFont.headline)
                                 .foregroundStyle(DSColor.textPrimary).lineLimit(1)
                         }
-                        HStack {
-                            Text("Up").frame(maxWidth: .infinity)
-                                .font(DSFont.headline).foregroundStyle(.white)
-                                .padding(.vertical, 14)
-                                .background(DSGradient.positive)
-                                .clipShape(RoundedRectangle(cornerRadius: DSLayout.pillRadius))
-                            Text("Down").frame(maxWidth: .infinity)
-                                .font(DSFont.headline).foregroundStyle(.white)
-                                .padding(.vertical, 14)
-                                .background(DSGradient.negative)
-                                .clipShape(RoundedRectangle(cornerRadius: DSLayout.pillRadius))
+                        HStack(spacing: DSLayout.spacing) {
+                            Text("Up")
+                                .font(DSFont.headline)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, DSLayout.spacing)
+                                .dsRaised(
+                                    face: DSColor.positive,
+                                    lip: DSLip.tint(DSColor.positive),
+                                    cornerRadius: DSLayout.cardRadius,
+                                    depth: DSDepth.medium,
+                                    isPressed: false
+                                )
+                            Text("Down")
+                                .font(DSFont.headline)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, DSLayout.spacing)
+                                .dsRaised(
+                                    face: DSColor.negative,
+                                    lip: DSLip.tint(DSColor.negative),
+                                    cornerRadius: DSLayout.cardRadius,
+                                    depth: DSDepth.medium,
+                                    isPressed: false
+                                )
                         }
                         Label("LIVE · \(Self.coinLabel(for: event))", systemImage: "circle.fill")
                             .font(DSFont.caption).foregroundStyle(DSColor.negative)
