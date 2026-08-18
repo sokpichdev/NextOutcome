@@ -84,6 +84,48 @@ final class CryptoUITests: XCTestCase {
                       "Candles mode must survive the history load and scroll-back")
     }
 
+    /// TC-083: the bet controls are pinned to the bottom of the live screen, so a market
+    /// with minutes to run can be traded without scrolling back up past the trades ticker.
+    @MainActor
+    func testBetControlsStayPinnedWhileScrolling() throws {
+        let app = XCUIApplication.launched(preselecting: "crypto", tagID: "21")
+
+        let card = app.staticTexts
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", "Up or Down"))
+            .firstMatch
+        assertAppears(card, timeout: UIWait.firstLoad,
+                      "Crypto hub should pin the live Up/Down card")
+        card.tap()
+
+        // The side selectors carry an accessibility label of "Up, 24¢" / "Up, --".
+        let upButton = app.buttons
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "Up,"))
+            .firstMatch
+        assertAppears(upButton, timeout: UIWait.load,
+                      "The live screen should show its Up selector")
+        XCTAssertTrue(upButton.waitForHittable(timeout: UIWait.ui),
+                      "The Up selector should be tappable on entry")
+
+        // Frames, not visibility: this screen is short enough that a scrolling bet row can
+        // still be on screen at the bottom of the content, so "is it visible" would pass
+        // whether or not it is pinned. A pinned row's frame doesn't move; a scrolling one's
+        // does, by exactly what the content scrolled.
+        let betRowBefore = upButton.frame
+        // Scrolled far enough, the title leaves the screen entirely, and a missing element
+        // reports a zero frame — which is still "moved", so this reads either way.
+        let header = app.staticTexts["BTC Up or Down 5m"]
+        let headerBefore = header.exists ? header.frame.minY : 0
+
+        for _ in 1...4 { app.swipeUp() }
+
+        let headerAfter = header.exists ? header.frame.minY : 0
+        XCTAssertNotEqual(headerBefore, headerAfter, accuracy: 1,
+                          "Precondition: the screen's content must actually have scrolled")
+        XCTAssertEqual(upButton.frame.minY, betRowBefore.minY, accuracy: 1,
+                       "The bet controls must stay put while the content scrolls under them")
+        attachScreenshot(of: app, named: "BTC live — bet bar pinned after scroll")
+    }
+
     /// TC-082: once a window closes, "Next window →" must actually leave the closed
     /// screen and land back on the hub (regression: the pop used to be wired to the
     /// hub's own `dismiss`, which is a no-op at the stack root, so the button did

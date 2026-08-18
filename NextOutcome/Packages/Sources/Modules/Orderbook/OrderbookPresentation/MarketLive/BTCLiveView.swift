@@ -47,16 +47,57 @@ public struct BTCLiveView: View {
                 // candle chart. See `BTCLiveSections.swift`.
                 BTCLiveHeaderSection(viewModel: viewModel)
                 chartCard
-                BTCLiveQuickBetSection(viewModel: viewModel, onNextWindow: onNextWindow)
                 BTCLiveTradesTicker(viewModel: viewModel)
             }
             .padding(DSLayout.spacing)
         }
         .background(DSColor.background.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) { betBar }
         .hidesTabBar()
         .onAppear { viewModel.start() }
         .onDisappear { viewModel.stop() }
     }
+
+    /// The bet controls, pinned to the bottom of the screen rather than scrolling with the
+    /// content.
+    ///
+    /// These windows run for five minutes, and the trades ticker below the chart is long
+    /// enough to carry a scrolling bet row off-screen — so the tap that places the bet was
+    /// reachable only by scrolling back. As a `safeAreaInset` rather than an overlay, the
+    /// scroll view also insets its own content by the bar's height, so the last trade can
+    /// still be scrolled clear of it.
+    ///
+    /// The bar keeps the settled state too (`BTCLiveQuickBetSection` swaps in "Next window
+    /// →" once the window closes), so the primary action always lives in the same place.
+    private var betBar: some View {
+        BTCLiveQuickBetSection(viewModel: viewModel, onNextWindow: onNextWindow)
+            .padding(.horizontal, DSLayout.spacing)
+            .padding(.vertical, DSLayout.spacing)
+            // Only the *backing* ignores the bottom safe area, so the bar reaches the
+            // physical bottom edge — no strip of page background left under it — while the
+            // buttons themselves stay above the home indicator rather than sliding under it.
+            //
+            // Translucent, so the content visibly passes under the bar instead of hitting a
+            // slab bolted across the bottom of the screen. Rounded on its top corners only:
+            // it runs to the bottom edge now, so curving those too would leave two lit
+            // slivers of background in the corners.
+            .background {
+                Self.betBarShape
+                    .fill(.ultraThinMaterial)
+                    // The hairline follows the same shape, so it curves with the corners
+                    // instead of running straight past them.
+                    .overlay(Self.betBarShape.stroke(DSColor.separator, lineWidth: 0.5))
+                    .ignoresSafeArea(edges: .bottom)
+            }
+    }
+
+    /// The bet bar's outline: a small radius on the leading and trailing top corners.
+    private static let betBarShape = UnevenRoundedRectangle(
+        topLeadingRadius: DSLayout.chipRadius,
+        bottomLeadingRadius: 0,
+        bottomTrailingRadius: 0,
+        topTrailingRadius: DSLayout.chipRadius
+    )
 
     // MARK: Chart
 
