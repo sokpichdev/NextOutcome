@@ -116,6 +116,7 @@ struct EsportsMatchCard: View {
     private var footer: some View {
         HStack(spacing: DSLayout.spacingSmall) {
             Text("\(MarketFormatting.compactUSD(event.volume)) Vol.")
+                .rollingNumber(event.volume)
             if let start = event.gameStartTime {
                 Text("·")
                 Text(start, format: .dateTime.hour().minute())

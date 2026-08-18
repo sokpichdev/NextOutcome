@@ -112,9 +112,10 @@ public struct MoversDetailView: View {
     private var listingSection: some View {
         if let eventID = viewModel.event?.id {
             VStack(alignment: .leading, spacing: 0) {
-                Text(volumeText)
+                Text("\(MarketFormatting.compactUSD(volume)) Vol.")
                     .font(DSFont.caption)
                     .foregroundStyle(DSColor.textSecondary)
+                    .rollingNumber(volume)
                     .padding(.bottom, DSLayout.spacingSmall)
                 ForEach(Array(viewModel.listingMarkets.enumerated()), id: \.element.id) { index, market in
                     MoverCandidateRow(market: market, eventID: eventID) { side in
@@ -136,9 +137,9 @@ public struct MoversDetailView: View {
         }
     }
 
-    /// "$358K Vol." line built from the parent event's total volume.
-    private var volumeText: String {
-        let volume = viewModel.event?.volume ?? viewModel.mover.volume24h
-        return "\(MarketFormatting.compactUSD(volume)) Vol."
+    /// The total volume behind the "$358K Vol." line: the parent event's, falling back to
+    /// the mover's 24-hour figure until the event loads.
+    private var volume: Decimal {
+        viewModel.event?.volume ?? viewModel.mover.volume24h
     }
 }

@@ -220,8 +220,8 @@ public struct MarketDetailView: View {
     private var stats: some View {
         DSCard {
             VStack(alignment: .leading, spacing: DSLayout.spacing) {
-                statRow("Volume", MarketFormatting.compactUSD(market.volume))
-                statRow("Liquidity", MarketFormatting.compactUSD(market.liquidity))
+                statRow("Volume", MarketFormatting.compactUSD(market.volume), rolling: market.volume)
+                statRow("Liquidity", MarketFormatting.compactUSD(market.liquidity), rolling: market.liquidity)
                 if let countdown = MarketFormatting.countdown(to: market.endDate) {
                     statRow("Status", countdown)
                 }
@@ -233,15 +233,26 @@ public struct MarketDetailView: View {
     /// - Parameters:
     ///   - label: The row's label.
     ///   - value: The row's formatted value.
-    private func statRow(_ label: String, _ value: String) -> some View {
+    ///   - rolling: The number behind `value`, for rows showing one. Supplying it rolls the
+    ///     digits when the figure changes on refresh; `nil` (the "Status" row's countdown)
+    ///     just swaps the text.
+    @ViewBuilder
+    private func statRow(_ label: String, _ value: String, rolling: Decimal? = nil) -> some View {
+        let text = Text(value)
+            .font(DSFont.subheadline)
+            .foregroundStyle(DSColor.textPrimary)
         HStack {
             Text(label)
                 .font(DSFont.subheadline)
                 .foregroundStyle(DSColor.textSecondary)
             Spacer()
-            Text(value)
-                .font(DSFont.subheadline)
-                .foregroundStyle(DSColor.textPrimary)
+            // Only the numeric rows get the roll — and with it monospaced digits, which
+            // would otherwise restyle the "Status" countdown for no reason.
+            if let rolling {
+                text.rollingNumber(rolling)
+            } else {
+                text
+            }
         }
     }
 }

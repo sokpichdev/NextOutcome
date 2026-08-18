@@ -167,6 +167,7 @@ public struct EsportsMatchDetailView: View {
             Text("\(MarketFormatting.compactUSD(viewModel.event.volume)) Vol")
                 .font(DSFont.caption)
                 .foregroundStyle(DSColor.textSecondary)
+                .rollingNumber(viewModel.event.volume)
             if let league = viewModel.league {
                 Text(league.name)
                     .font(DSFont.caption)
