@@ -89,6 +89,7 @@ public struct EsportsMatchDetailView: View {
             .padding(.top, DSLayout.spacing)
         }
         .background(DSColor.background)
+        .hidesTabBar()
         .detailToolbar(title: "Esports", actions: [.rules, .discuss, .bookmark, .link],
                        onAction: handleToolbarAction)
         // Market rows push a single market; the hub's stack doesn't register this itself.

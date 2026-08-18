@@ -40,6 +40,7 @@ public struct PoliticsHubView: View {
             .padding(.vertical, DSLayout.spacing)
         }
         .background(DSColor.background)
+        .hidesTabBar()
         // No `.navigationDestination(for: Event.self)` here: this view is always pushed
         // inside `EventListView`'s `NavigationStack` (via the "2026 Midterms Predictions"
         // promo card), which already registers that destination. A second registration in

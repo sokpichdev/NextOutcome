@@ -53,6 +53,7 @@ public struct BTCLiveView: View {
             .padding(DSLayout.spacing)
         }
         .background(DSColor.background.ignoresSafeArea())
+        .hidesTabBar()
         .onAppear { viewModel.start() }
         .onDisappear { viewModel.stop() }
     }

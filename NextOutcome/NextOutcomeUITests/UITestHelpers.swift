@@ -132,6 +132,25 @@ extension XCUIApplication {
     }
 }
 
+extension XCUIElement {
+
+    /// Waits for this element to become tappable, not merely present.
+    ///
+    /// `waitForExistence` returns as soon as the element is in the tree, which for a
+    /// toolbar button can be a frame or two before it is laid out and hit-testable —
+    /// long enough for a tap to land on whatever is underneath it.
+    /// - Parameter timeout: How long to wait.
+    /// - Returns: Whether it became hittable in time.
+    func waitForHittable(timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if exists && isHittable { return true }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        return exists && isHittable
+    }
+}
+
 extension XCTestCase {
 
     /// Attaches a named, always-kept screenshot of the app to the test report.

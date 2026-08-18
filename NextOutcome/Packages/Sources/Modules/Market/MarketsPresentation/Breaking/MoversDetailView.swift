@@ -52,6 +52,7 @@ public struct MoversDetailView: View {
             .padding(.top, DSLayout.spacing)
         }
         .background(DSColor.background)
+        .hidesTabBar()
         .detailToolbar(
             title: viewModel.mover.eventTitle, iconURL: viewModel.mover.imageURL,
             actions: [.rules, .discuss, .bookmark, .link], onAction: handleHeaderAction
