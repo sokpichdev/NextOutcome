@@ -151,9 +151,9 @@ public struct EsportsHubView: View {
                         liveCount: viewModel.liveCount(for: league),
                         isSelected: viewModel.selectedLeague == league
                     ) {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            viewModel.selectedLeague = viewModel.selectedLeague == league ? nil : league
-                        }
+                        // A refetch, not a local filter — the Games list is paged, so the
+                        // filter has to be a query. The skeleton covers the round trip.
+                        Task { await viewModel.selectLeague(league) }
                     }
                 }
             }
@@ -175,6 +175,7 @@ public struct EsportsHubView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
         } else {
+            let lastEventID = viewModel.visibleMatches.last?.id
             LazyVStack(spacing: DSLayout.spacing) {
                 ForEach(viewModel.visibleMatches) { event in
                     NavigationLink(value: event) {
@@ -185,6 +186,17 @@ public struct EsportsHubView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    // Infinite scroll, same trigger the Sports hub and the main feed use: the
+                    // last rendered card asks for the next batch as it comes into view.
+                    .onAppear {
+                        guard event.id == lastEventID else { return }
+                        Task { await viewModel.loadMore() }
+                    }
+                }
+                if viewModel.isLoadingMore {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, DSLayout.spacing)
                 }
             }
         }

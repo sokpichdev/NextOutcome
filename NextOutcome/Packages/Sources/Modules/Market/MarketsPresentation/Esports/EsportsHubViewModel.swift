@@ -29,21 +29,31 @@ public final class EsportsHubViewModel {
     public private(set) var state: State = .idle
     /// The selected top-level tab.
     public var mode: Mode = .esports
-    /// The selected game filter for the Games list, or `nil` for every game.
-    public var selectedLeague: EsportsLeague?
+    /// The selected game filter for the Games list, or `nil` for every game. Set through
+    /// `selectLeague(_:)`, which refetches — the filter is a server-side query now, not a
+    /// predicate over whatever happens to be paged in.
+    public private(set) var selectedLeague: EsportsLeague?
 
     /// Team-vs-team match events, live first, then soonest kickoff.
     public private(set) var matches: [Event] = []
     /// The game catalogue from Gamma `/sports`, in catalogue order.
     public private(set) var leagues: [EsportsLeague] = []
-    /// The leagues that have at least one loaded match, ordered live-count then match-count
-    /// descending — the tile row.
+    /// The leagues worth a tile, ordered live-count then match-count descending — the tile row.
     public private(set) var visibleLeagues: [EsportsLeague] = []
     /// Which league each match belongs to, keyed by event id. Built once per data change so
     /// the tile row and every card avoid an O(matches × leagues) scan on each redraw.
     private var leagueByEventID: [String: EsportsLeague] = [:]
     /// Live match counts per league id, for the tile badges.
     private var liveCountByLeagueID: [String: Int] = [:]
+    /// Ids the server returned from the in-play query, so the hub knows a match is live the
+    /// moment it arrives rather than one score poll later.
+    private var liveMatchIDs: Set<String> = []
+    /// The keyset cursor for the next page of upcoming matches, or `nil` once exhausted.
+    private var nextCursor: String?
+    /// Whether another page of upcoming matches exists.
+    public var hasMore: Bool { nextCursor != nil }
+    /// Whether a `loadMore()` fetch is in flight — drives the list's footer spinner.
+    public private(set) var isLoadingMore = false
     /// Live/final results keyed by event id, from `/events/results`.
     public private(set) var results: [String: GameResult] = [:]
     /// Recent trades keyed by event id, for the hero cards' live-trades ticker. Only hero
@@ -55,13 +65,16 @@ public final class EsportsHubViewModel {
     /// When the hub's data was last refreshed.
     public private(set) var lastUpdated: Date?
 
-    /// The tag id `loadIfNeeded` last fetched, once known.
+    /// The tag id `loadIfNeeded` last loaded successfully, once known.
     private var loadedTagID: String?
+    /// Whether a load has ever been attempted, successfully or not — what pull-to-refresh
+    /// gates on, so the error state's own instruction works.
+    private var hasAttemptedLoad = false
     /// The results/price polling loop, while the hub is visible.
     private var pollTask: Task<Void, Never>?
 
-    /// Loads every event under the esports tag.
-    private let fetchAllEvents: FetchAllEventsUseCase
+    /// Loads one page of esports matches — in-play or upcoming, futures already excluded.
+    private let fetchEsportsGames: FetchEsportsGamesUseCase
     /// Loads the game catalogue behind the tile row.
     private let fetchLeagues: FetchEsportsLeaguesUseCase
     /// Loads live scores for a batch of match events.
@@ -83,7 +96,7 @@ public final class EsportsHubViewModel {
 
     /// Creates the view model.
     /// - Parameters:
-    ///   - fetchAllEvents: Loads the esports tag's events, unpaginated.
+    ///   - fetchEsportsGames: Loads a page of esports matches, in-play or upcoming.
     ///   - fetchLeagues: Loads the game catalogue behind the tile row.
     ///   - fetchGameResults: Loads live scores for match events.
     ///   - fetchTrades: Loads recent trades for the hero cards' ticker.
@@ -94,7 +107,7 @@ public final class EsportsHubViewModel {
     ///   - now: Supplies the current time. Defaults to `Date()`.
     ///   - pollInterval: Seconds between live-result refreshes. Defaults to 20.
     public init(
-        fetchAllEvents: FetchAllEventsUseCase,
+        fetchEsportsGames: FetchEsportsGamesUseCase,
         fetchLeagues: FetchEsportsLeaguesUseCase,
         fetchGameResults: FetchGameResultsUseCase,
         fetchTrades: FetchActivityTradesUseCase,
@@ -103,7 +116,7 @@ public final class EsportsHubViewModel {
         now: @escaping () -> Date = { Date() },
         pollInterval: TimeInterval = 20
     ) {
-        self.fetchAllEvents = fetchAllEvents
+        self.fetchEsportsGames = fetchEsportsGames
         self.fetchLeagues = fetchLeagues
         self.fetchGameResults = fetchGameResults
         self.fetchTrades = fetchTrades
@@ -115,20 +128,33 @@ public final class EsportsHubViewModel {
 
     // MARK: - Derived collections
 
-    /// Hero carousel pages: matches whose result says the game is live, falling back to
-    /// the next few upcoming matches when nothing is live yet.
+    /// Whether a match is in play: the score feed's answer when it has one, otherwise the
+    /// server's — the in-play query only returns matches that are live, so a freshly-loaded
+    /// hub can fill its hero carousel before the first `/events/results` poll lands.
+    private func isLive(_ event: Event) -> Bool {
+        Self.isLive(event.id, results: results, liveIDs: liveMatchIDs)
+    }
+
+    /// The liveness rule, free of the actor so `sortedMatches` can share it.
+    nonisolated private static func isLive(
+        _ eventID: String, results: [String: GameResult], liveIDs: Set<String>
+    ) -> Bool {
+        results[eventID]?.live ?? liveIDs.contains(eventID)
+    }
+
+    /// Hero carousel pages: the matches that are in play, falling back to the next few
+    /// upcoming matches when nothing is live yet.
     public var heroMatches: [Event] {
-        let live = matches.filter { results[$0.id]?.live == true }
+        let live = matches.filter(isLive)
         if !live.isEmpty { return live }
         // Nothing live: feature the next few matches that haven't already finished.
         return Array(matches.filter { results[$0.id]?.ended != true }.prefix(3))
     }
 
-    /// The Games list after the `selectedLeague` filter.
-    public var visibleMatches: [Event] {
-        guard let selectedLeague else { return matches }
-        return matches.filter { leagueByEventID[$0.id] == selectedLeague }
-    }
+    /// The Games list. The `selectedLeague` filter is applied server-side (see
+    /// `selectLeague(_:)`), so everything loaded already belongs to the selection — filtering
+    /// again here would only hide matches whose league tag the catalogue doesn't name.
+    public var visibleMatches: [Event] { matches }
 
     /// How many of a league's matches are currently live, for the tile badges.
     public func liveCount(for league: EsportsLeague) -> Int {
@@ -147,6 +173,16 @@ public final class EsportsHubViewModel {
     /// with no markets at all (PUBG, EA Sports FC, StarCraft), and a permanently dead tile is
     /// worse than a shorter row. Web ships a fixed twelve including two such tiles; this row
     /// instead tracks what's actually tradeable right now.
+    ///
+    /// "Tradeable" is read from the catalogue's own `activeEventCount`, not from the loaded
+    /// matches, and that distinction became load-bearing when the Games list started paging:
+    /// counting a paged sample would show three tiles on open and grow the row as the reader
+    /// scrolled. `/sports/summary` already answers this for every game at once. Loaded matches
+    /// still qualify a league on their own, so a game the summary hasn't caught up with — or a
+    /// test with no activity data — keeps its tile.
+    ///
+    /// Live counts stay sample-derived and stay correct, because the in-play query is not
+    /// paged: it returns every esports match currently in play in one request.
     private func rebuildLeagueIndex() {
         leagueByEventID = [:]
         for match in matches {
@@ -154,25 +190,30 @@ public final class EsportsHubViewModel {
         }
 
         var live: [String: Int] = [:]
-        var total: [String: Int] = [:]
+        var loaded: [String: Int] = [:]
         for match in matches {
             guard let league = leagueByEventID[match.id] else { continue }
-            total[league.id, default: 0] += 1
-            if results[match.id]?.live == true { live[league.id, default: 0] += 1 }
+            loaded[league.id, default: 0] += 1
+            if isLive(match) { live[league.id, default: 0] += 1 }
         }
         liveCountByLeagueID = live
 
+        // The catalogue's count and the loaded sample can each know something the other
+        // doesn't, so a league's weight is whichever is larger.
+        func weight(_ league: EsportsLeague) -> Int {
+            max(league.activeEventCount, loaded[league.id] ?? 0)
+        }
+
         visibleLeagues = leagues
-            .filter { (total[$0.id] ?? 0) > 0 }
+            .filter { weight($0) > 0 }
             .sorted { a, b in
                 let liveA = live[a.id] ?? 0, liveB = live[b.id] ?? 0
                 if liveA != liveB { return liveA > liveB }
-                let totalA = total[a.id] ?? 0, totalB = total[b.id] ?? 0
-                if totalA != totalB { return totalA > totalB }
+                if weight(a) != weight(b) { return weight(a) > weight(b) }
                 return a.name < b.name
             }
 
-        // A filter on a league that just lost its last match would silently empty the list.
+        // A filter pinned to a league that has left the row would silently empty the list.
         if let selected = selectedLeague, !visibleLeagues.contains(selected) {
             selectedLeague = nil
         }
@@ -180,64 +221,155 @@ public final class EsportsHubViewModel {
 
     // MARK: - Loading
 
-    /// Fetches the esports tag's events on first appearance, once the tag id is known
-    /// (resolved at runtime by `HubTabsViewModel`, like the Crypto hub).
+    /// Loads the hub on first appearance, once the tag id is known (resolved at runtime by
+    /// `HubTabsViewModel`, like the Crypto hub).
+    ///
+    /// The id is the load-once key rather than a query parameter: the match query scopes
+    /// itself to the esports tag server-side, the same constant the catalogue fetch uses.
     public func loadIfNeeded(tagID: String) async {
         guard loadedTagID != tagID else { return }
-        await load(tagID: tagID, showLoading: true)
+        hasAttemptedLoad = true
+        await load(showLoading: true)
+        // Recorded only on success, so a hub that failed its first load tries again when the
+        // reader comes back to the tab rather than sitting on the error until they pull.
+        if state == .loaded { loadedTagID = tagID }
     }
 
-    /// Re-fetches using the last-loaded tag id (pull-to-refresh). No-op before first load.
-    public func refresh() async {
-        guard let tagID = loadedTagID else { return }
-        await load(tagID: tagID, showLoading: false)
-    }
-
-    /// Fetches and classifies the tag's events, then loads results for near-term matches.
+    /// Re-fetches from the first page (pull-to-refresh). No-op before the first attempt.
     ///
-    /// The league catalogue is fetched in parallel and its failure is non-fatal: without it
-    /// the tile row and the cards' game captions are absent, but the hero, the Games list and
-    /// live scores all still work. Failing the whole hub over a cosmetic catalogue would be
-    /// the wrong trade, and it's why there's no hardcoded fallback list — that would be the
-    /// very thing this replaced, quietly drifting out of date.
-    private func load(tagID: String, showLoading: Bool) async {
+    /// Gated on having *attempted* a load, not having completed one: the failure state tells
+    /// the reader to pull to refresh, so pulling after a failure has to actually refetch.
+    public func refresh() async {
+        guard hasAttemptedLoad else { return }
+        await load(showLoading: false)
+    }
+
+    /// Loads the catalogue, every in-play match, and the first page of upcoming matches — all
+    /// three concurrently — then fills in scores for what arrived.
+    ///
+    /// Two match queries rather than one, for the reason the Sports hub found: the upcoming
+    /// query is bounded by kickoff, so a match already under way cannot appear in it. Asking
+    /// for in-play separately also means the query is *unpaged in practice* — a handful of
+    /// esports matches are ever live at once — so the hero carousel and the tile badges see
+    /// the complete live set no matter how little of the upcoming feed has been scrolled.
+    ///
+    /// The league catalogue's failure is non-fatal: without it the tile row and the cards'
+    /// game captions are absent, but the hero, the Games list and live scores all still work.
+    /// Failing the whole hub over a cosmetic catalogue would be the wrong trade, and it's why
+    /// there's no hardcoded fallback list — that would be the very thing this replaced,
+    /// quietly drifting out of date.
+    private func load(showLoading: Bool) async {
         if showLoading { state = .loading }
-        async let catalogue = try? fetchLeagues.execute()
-        do {
-            let events = try await fetchAllEvents.execute(tagID: tagID, status: .active)
-            leagues = await catalogue ?? leagues
-            matches = Self.sortedMatches(events.filter(EsportsCatalog.isMatch), results: results, now: now())
-            rebuildLeagueIndex()
-            loadedTagID = tagID
-            state = .loaded
-            lastUpdated = now()
-            await refreshResults()
-        } catch {
-            if isCancellation(error) {
+        nextCursor = nil
+        let reference = now()
+        let leagueTagID = selectedLeague?.primaryTagID
+
+        async let catalogueTask = try? fetchLeagues.execute()
+        async let liveTask = try? fetchEsportsGames.execute(
+            live: true, startingAfter: nil, cursor: nil, leagueTagID: leagueTagID
+        )
+        async let upcomingTask = try? fetchEsportsGames.execute(
+            live: false, startingAfter: reference, cursor: nil, leagueTagID: leagueTagID
+        )
+
+        // Bind before defaulting — `await x ?? []` binds as `await (x ?? [])`, which reads the
+        // unresolved value rather than awaiting it.
+        let loadedCatalogue = await catalogueTask
+        leagues = loadedCatalogue ?? leagues
+        let livePage = await liveTask
+        let upcomingPage = await upcomingTask
+
+        // Both queries down is the only outright failure; one surviving still fills the hub.
+        // A cancelled task (the reader left the tab) is not a failure and must not flash an
+        // error — `.task` cancels on disappear, and both fetches come back nil when it does.
+        guard livePage != nil || upcomingPage != nil else {
+            if Task.isCancelled {
                 state = matches.isEmpty ? .idle : .loaded
             } else {
                 state = matches.isEmpty ? .failed("Couldn't load Esports. Pull to refresh.") : .loaded
             }
+            return
         }
+
+        let liveEvents = livePage?.items ?? []
+        liveMatchIDs = Set(liveEvents.map(\.id))
+        nextCursor = upcomingPage?.nextCursor
+        matches = Self.sortedMatches(
+            Self.matchesOnly(liveEvents + (upcomingPage?.items ?? [])),
+            results: results, liveIDs: liveMatchIDs, now: reference
+        )
+        rebuildLeagueIndex()
+        state = .loaded
+        lastUpdated = reference
+        await refreshResults()
+    }
+
+    /// Loads the next page of upcoming matches onto the end of the Games list.
+    ///
+    /// Only the upcoming query pages. "Live now" is a complete, bounded head that refreshes
+    /// with the poll rather than being re-asked on every scroll step.
+    public func loadMore() async {
+        guard hasMore, !isLoadingMore, state == .loaded else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+
+        guard let page = try? await fetchEsportsGames.execute(
+            live: false, startingAfter: now(), cursor: nextCursor,
+            leagueTagID: selectedLeague?.primaryTagID
+        ) else { return }
+        nextCursor = page.nextCursor
+        guard !page.items.isEmpty else { return }
+
+        matches = Self.sortedMatches(
+            Self.matchesOnly(matches + page.items),
+            results: results, liveIDs: liveMatchIDs, now: now()
+        )
+        rebuildLeagueIndex()
+        // Scores for the new page only; what's already on screen keeps the ones it has.
+        await refreshResults(for: page.items)
+    }
+
+    /// Toggles the tile row's game filter and reloads scoped to it.
+    ///
+    /// This is a refetch, not a predicate, because the Games list is paged: filtering the
+    /// loaded sample would show whichever handful of a game's matches happened to be in the
+    /// first page and call it the whole list.
+    /// - Parameter league: The game to filter to, or the currently-selected one to clear it.
+    public func selectLeague(_ league: EsportsLeague?) async {
+        let next = (league == selectedLeague) ? nil : league
+        guard next != selectedLeague else { return }
+        selectedLeague = next
+        await load(showLoading: true)
     }
 
     /// Fetches `/events/results` for matches near their start time (±6 h window keeps the
     /// batch small), then re-sorts so newly-live matches float to the top.
     public func refreshResults() async {
+        await refreshResults(for: matches)
+    }
+
+    /// The same refresh, narrowed to a subset — what `loadMore()` uses so a new page gets its
+    /// scores without re-asking for every page already on screen.
+    /// - Parameter candidates: The matches to consider; those far from kickoff are skipped.
+    private func refreshResults(for candidates: [Event]) async {
         let window: TimeInterval = 6 * 3600
         let reference = now()
-        let nearTerm = matches.filter { match in
+        let nearTerm = candidates.filter { match in
             guard let start = match.gameStartTime else { return true }
             return abs(start.timeIntervalSince(reference)) <= window
         }
         guard !nearTerm.isEmpty else { return }
         guard let fetched = try? await fetchGameResults.execute(eventIDs: nearTerm.map(\.id)) else { return }
         results.merge(fetched) { _, new in new }
-        matches = Self.sortedMatches(matches, results: results, now: reference)
+        matches = Self.sortedMatches(matches, results: results, liveIDs: liveMatchIDs, now: reference)
         rebuildLeagueIndex()
         syncSocketSubscriptions()
-        await refreshHeroTrades()
-        await refreshLiveStreams()
+        // Trades and broadcast probes are independent per match and independent of each
+        // other, so they all go at once. Run in sequence — as they were — the hero cards
+        // waited on up to ten round trips one after another before the first ticker appeared.
+        async let trades: Void = refreshHeroTrades()
+        async let streams: Void = refreshLiveStreams()
+        _ = await (trades, streams)
     }
 
     // MARK: - Websocket score updates
@@ -295,7 +427,7 @@ public final class EsportsHubViewModel {
         )
         guard updated != existing else { return }
         results[eventID] = updated
-        matches = Self.sortedMatches(matches, results: results, now: now())
+        matches = Self.sortedMatches(matches, results: results, liveIDs: liveMatchIDs, now: now())
         rebuildLeagueIndex()
     }
 
@@ -309,11 +441,11 @@ public final class EsportsHubViewModel {
     /// `/events/results` says the match is live and the URL names the video, the round trip
     /// is both unreliable and redundant, so it's skipped entirely.
     private func refreshLiveStreams() async {
-        let heroes = heroMatches   // snapshot: the probe loop awaits, and the set can re-sort
+        let heroes = heroMatches   // snapshot: the probes await, and the set can re-sort
         var resolved: [String: EsportsStream] = [:]
 
         // Free path — no network, so every hero gets it however deep in the carousel.
-        for match in heroes where results[match.id]?.live == true {
+        for match in heroes where isLive(match) {
             guard let source = match.resolutionSource, !source.isEmpty,
                   let stream = EsportsStream.embeddable(from: source) else { continue }
             resolved[match.id] = stream
@@ -322,11 +454,25 @@ public final class EsportsHubViewModel {
         // Costly path — one page fetch each, so it stays capped to the heroes a user meets
         // first. Before the free path existed this cap applied to *every* embed, which meant
         // a live match sitting 10th in a 12-match carousel could never show a player at all.
+        // The five run concurrently: they're independent page fetches, and awaiting them in
+        // turn made the fifth hero's player wait on the four in front of it.
         if let liveStreamProber {
-            for match in heroes.prefix(5) where resolved[match.id] == nil {
-                guard let source = match.resolutionSource, !source.isEmpty else { continue }
-                resolved[match.id] = await liveStreamProber.liveStream(for: source)
+            let unresolved = heroes.prefix(5).compactMap { match -> (id: String, source: String)? in
+                guard resolved[match.id] == nil,
+                      let source = match.resolutionSource, !source.isEmpty else { return nil }
+                return (match.id, source)
             }
+            let probed = await withTaskGroup(of: (String, EsportsStream?).self) { group in
+                for hero in unresolved {
+                    group.addTask { (hero.id, await liveStreamProber.liveStream(for: hero.source)) }
+                }
+                var found: [String: EsportsStream] = [:]
+                for await (id, stream) in group {
+                    if let stream { found[id] = stream }
+                }
+                return found
+            }
+            resolved.merge(probed) { _, new in new }
         }
 
         // Assigned wholesale so a broadcast that ends — or a match that leaves the hero set —
@@ -338,14 +484,30 @@ public final class EsportsHubViewModel {
     public func liveStream(for event: Event) -> EsportsStream? { liveStreams[event.id] }
 
     /// Fetches recent trades for each hero match's moneyline market, feeding the ticker.
+    ///
+    /// Concurrently, and merged rather than assigned: a match whose fetch fails keeps the
+    /// trades it already had instead of blanking its ticker.
     private func refreshHeroTrades() async {
-        for match in heroMatches.prefix(5) {
+        let wanted = heroMatches.prefix(5).compactMap { match -> (id: String, conditionId: String)? in
             guard let conditionId = match.markets.first(where: { !$0.conditionId.isEmpty })?.conditionId
-            else { continue }
-            if let trades = try? await fetchTrades.execute(conditionId: conditionId), !trades.isEmpty {
-                heroTrades[match.id] = Array(trades.prefix(10))
-            }
+            else { return nil }
+            return (match.id, conditionId)
         }
+        guard !wanted.isEmpty else { return }
+
+        let fetchTrades = self.fetchTrades
+        let fetched = await withTaskGroup(of: (String, [ActivityTrade]).self) { group in
+            for hero in wanted {
+                group.addTask {
+                    let trades = (try? await fetchTrades.execute(conditionId: hero.conditionId)) ?? []
+                    return (hero.id, Array(trades.prefix(10)))
+                }
+            }
+            var found: [String: [ActivityTrade]] = [:]
+            for await (id, trades) in group where !trades.isEmpty { found[id] = trades }
+            return found
+        }
+        heroTrades.merge(fetched) { _, new in new }
     }
 
     /// The hero ticker's trades for an event, newest first.
@@ -381,12 +543,29 @@ public final class EsportsHubViewModel {
 
     // MARK: - Helpers
 
+    /// Keeps only team-vs-team matches, and only one copy of each.
+    ///
+    /// The query already asks the server for the Games tag, so this drops nothing on a normal
+    /// response — it's kept because the classification is cheap over a page and the Games list
+    /// showing a season future would be a visible bug, where an extra predicate is not.
+    ///
+    /// Deduplication earns its place for a sharper reason: the in-play and upcoming queries are
+    /// separate requests against a feed that moves between them, so a match that goes live
+    /// mid-load genuinely lands in both. Live is fetched first, so first-wins keeps the copy
+    /// the hub already knows is in play.
+    static func matchesOnly(_ events: [Event]) -> [Event] {
+        var seen: Set<String> = []
+        return events.filter { EsportsCatalog.isMatch($0) && seen.insert($0.id).inserted }
+    }
+
     /// Live matches first, finished matches last, and by kickoff time (soonest first)
     /// then highest volume within each band.
-    static func sortedMatches(_ matches: [Event], results: [String: GameResult], now: Date) -> [Event] {
+    static func sortedMatches(
+        _ matches: [Event], results: [String: GameResult], liveIDs: Set<String>, now: Date
+    ) -> [Event] {
         matches.sorted { a, b in
-            let aLive = results[a.id]?.live == true
-            let bLive = results[b.id]?.live == true
+            let aLive = isLive(a.id, results: results, liveIDs: liveIDs)
+            let bLive = isLive(b.id, results: results, liveIDs: liveIDs)
             if aLive != bLive { return aLive }
             let aEnded = results[a.id]?.ended == true
             let bEnded = results[b.id]?.ended == true
@@ -398,13 +577,6 @@ public final class EsportsHubViewModel {
             default: return a.volume24hr > b.volume24hr
             }
         }
-    }
-
-    /// Whether `error` is a benign task/URL cancellation rather than a real failure.
-    private func isCancellation(_ error: Error) -> Bool {
-        if error is CancellationError { return true }
-        if (error as? URLError)?.code == .cancelled { return true }
-        return false
     }
 }
 

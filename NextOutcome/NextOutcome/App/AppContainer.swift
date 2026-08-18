@@ -137,7 +137,7 @@ final class AppContainer {
     /// - Returns: A view model wired to fetch the tag's events, live scores, and trades.
     func makeEsportsHubViewModel() -> EsportsHubViewModel {
         EsportsHubViewModel(
-            fetchAllEvents: FetchAllEventsUseCase(repository: repository),
+            fetchEsportsGames: FetchEsportsGamesUseCase(repository: repository),
             fetchLeagues: FetchEsportsLeaguesUseCase(repository: repository),
             fetchGameResults: FetchGameResultsUseCase(repository: repository),
             fetchTrades: FetchActivityTradesUseCase(repository: repository),
