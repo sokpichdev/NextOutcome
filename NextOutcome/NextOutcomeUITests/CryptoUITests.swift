@@ -126,13 +126,12 @@ final class CryptoUITests: XCTestCase {
         attachScreenshot(of: app, named: "BTC live — bet bar pinned after scroll")
     }
 
-    /// TC-082: once a window closes, "Next window →" must actually leave the closed
-    /// screen and land back on the hub (regression: the pop used to be wired to the
-    /// hub's own `dismiss`, which is a no-op at the stack root, so the button did
-    /// nothing). Waits out the remainder of the live 5-minute window, so this test can
+    /// TC-082: once a window closes, "Next window →" must advance in place to the next window
+    /// on the live screen (so the user does not have to pop back and re-enter).
+    /// Waits out the remainder of the live 5-minute window, so this test can
     /// take up to ~5.5 minutes — keep it out of any quick smoke run.
     @MainActor
-    func testNextWindowButtonReturnsToHub() throws {
+    func testNextWindowButtonAdvancesToNewWindow() throws {
         let app = XCUIApplication.launched(preselecting: "crypto", tagID: "21")
 
         let card = app.staticTexts
@@ -151,13 +150,11 @@ final class CryptoUITests: XCTestCase {
         attachScreenshot(of: app, named: "BTC live — window closed")
         nextWindow.tap()
 
-        // The chip's label carries the live market count ("1 Hour, 7"), so match on
-        // the prefix rather than the exact string.
-        let hourChip = app.buttons
-            .matching(NSPredicate(format: "label BEGINSWITH %@", "1 Hour"))
-            .firstMatch
-        assertAppears(hourChip, timeout: UIWait.ui,
-                      "Next window must pop back to the Crypto hub")
-        attachScreenshot(of: app, named: "Hub after Next window")
+        // Advancing to the next window refreshes the live screen in place, restoring
+        // active bet controls ("Up" / "Down") for the new live window.
+        let upButton = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Up")).firstMatch
+        assertAppears(upButton, timeout: UIWait.ui,
+                      "Next window must refresh to the new live window in place")
+        attachScreenshot(of: app, named: "BTC live — advanced to next window")
     }
 }

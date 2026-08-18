@@ -40,19 +40,11 @@ public struct CryptoUpDownCard: View {
     /// isn't navigable) only if the event has no markets or no "Up" outcome — shouldn't
     /// happen for a `.upDown`-classified event in practice, since `CryptoMarketKind`
     /// already checks for Up/Down outcomes before classifying an event this way.
+    ///
+    /// Built by the target itself, so a window opened from this card and one the live
+    /// screen advances into can't disagree about the symbol, cadence or title.
     private var navigationTarget: CryptoUpDownNavigationTarget? {
-        guard let market, let upOutcome else { return nil }
-        return CryptoUpDownNavigationTarget(
-            assetID: upOutcome.id, eventID: event.id,
-            windowEnd: market.endDate ?? .distantFuture,
-            symbol: Self.coinSymbol(for: event),
-            windowInterval: Self.windowInterval(for: event),
-            // The same series name the card shows, for the same reason: the per-window
-            // event title is stale the moment the window rolls.
-            title: cardTitle,
-            iconURL: event.imageURL,
-            market: market
-        )
+        CryptoUpDownNavigationTarget(event: event)
     }
 
     public var body: some View {
@@ -129,31 +121,4 @@ public struct CryptoUpDownCard: View {
         return "Crypto"
     }
 
-    /// Ticker symbols for `polymarket.com/api/crypto/*` (the real dollar spot-price
-    /// feed), matched against `event.tags` the same way `coinLabel` is. This screen
-    /// isn't BTC-only, so the symbol sent to that feed must reflect the actual event.
-    private static let coinSymbols: [String: String] = [
-        "bitcoin": "BTC", "ethereum": "ETH", "solana": "SOL",
-        "xrp": "XRP", "dogecoin": "DOGE", "bnb": "BNB",
-    ]
-
-    /// The coin ticker symbol for the spot-price feed, derived from the event's tags.
-    /// Falls back to "BTC" only as a last resort (shouldn't happen for a
-    /// `.upDown`-classified event, which always carries a known coin tag in practice).
-    private static func coinSymbol(for event: Event) -> String {
-        for tag in event.tags {
-            if let symbol = coinSymbols[tag.slug.lowercased()] { return symbol }
-        }
-        return "BTC"
-    }
-
-    /// How long this event's betting window runs, from the cadence its series slug encodes.
-    ///
-    /// The destination derives the window *open* — and with it the price to beat, the
-    /// spot-price range and the chart's title — from `windowEnd` minus this, so a daily
-    /// market handed the 5-minute default charts the last five minutes of a 24-hour window.
-    /// Falls back to 5 minutes for a series with no recognizable cadence.
-    private static func windowInterval(for event: Event) -> TimeInterval {
-        RecurrenceCadence(seriesSlug: event.recurrence)?.windowSeconds ?? 300
-    }
 }

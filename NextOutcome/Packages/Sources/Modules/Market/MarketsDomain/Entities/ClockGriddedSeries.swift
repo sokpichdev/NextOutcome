@@ -38,6 +38,28 @@ public struct ClockGriddedSeries: Sendable, Equatable {
         self.windowSeconds = max(1, windowSeconds)
     }
 
+    /// Recovers the series from one of its windows, e.g. `"btc-updown-5m-1787069400"` at
+    /// 300s ⇒ the `btc-updown-5m` series.
+    ///
+    /// This is how a screen showing a single window asks for whichever window of the *same*
+    /// series is live now: the alternative — naming a series up front — pins every caller to
+    /// `bitcoinUpDown5m`, so an ETH daily window would advance into a BTC 5-minute one.
+    ///
+    /// `nil` when the slug isn't a window slug: the trailing `-<epoch>` must be present and
+    /// must leave a prefix behind once removed.
+    /// - Parameters:
+    ///   - windowSlug: A single window's slug, as Gamma serves it.
+    ///   - windowSeconds: The window length, which the caller already knows from the
+    ///     event's cadence — it isn't recoverable from the slug alone.
+    public init?(windowSlug: String, windowSeconds: Int) {
+        guard let separator = windowSlug.lastIndex(of: "-") else { return nil }
+        let epoch = windowSlug[windowSlug.index(after: separator)...]
+        guard !epoch.isEmpty, epoch.allSatisfy(\.isNumber) else { return nil }
+        let prefix = String(windowSlug[windowSlug.startIndex..<separator])
+        guard !prefix.isEmpty else { return nil }
+        self.init(slugPrefix: prefix, windowSeconds: windowSeconds)
+    }
+
     /// Bitcoin's 5-minute Up/Down series — the card `polymarket.com/crypto` leads with.
     public static let bitcoinUpDown5m = ClockGriddedSeries(slugPrefix: "btc-updown-5m", windowSeconds: 300)
 
