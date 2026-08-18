@@ -183,14 +183,19 @@ struct BTCLiveQuickBetSection: View {
         if viewModel.hasSettled {
             Button(action: { onNextWindow?() }) {
                 Text(onNextWindow == nil ? "This window has closed" : "Next window →")
-                    .font(DSFont.subheadline.bold())
+                    .font(DSFont.headline)
+                    .foregroundStyle(onNextWindow == nil ? DSColor.textSecondary : DSColor.accent)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, DSLayout.spacingMedium)
+                    .padding(.vertical, DSLayout.spacing)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(onNextWindow == nil ? DSColor.textSecondary : DSColor.accent)
-            .background(DSColor.surfaceElevated)
-            .clipShape(RoundedRectangle(cornerRadius: DSLayout.cardRadius))
+            .buttonStyle(
+                DSRaisedButtonStyle(
+                    face: DSColor.surfaceElevated,
+                    lip: DSLip.surface,
+                    cornerRadius: DSLayout.cardRadius,
+                    depth: DSDepth.medium
+                )
+            )
             .disabled(onNextWindow == nil)
         } else {
             VStack(spacing: DSLayout.spacing) {
