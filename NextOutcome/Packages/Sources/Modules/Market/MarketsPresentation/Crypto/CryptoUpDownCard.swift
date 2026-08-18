@@ -45,7 +45,9 @@ public struct CryptoUpDownCard: View {
         return CryptoUpDownNavigationTarget(
             assetID: upOutcome.id, eventID: event.id,
             windowEnd: market.endDate ?? .distantFuture,
-            symbol: Self.coinSymbol(for: event), market: market
+            symbol: Self.coinSymbol(for: event),
+            windowInterval: Self.windowInterval(for: event),
+            market: market
         )
     }
 
@@ -139,5 +141,15 @@ public struct CryptoUpDownCard: View {
             if let symbol = coinSymbols[tag.slug.lowercased()] { return symbol }
         }
         return "BTC"
+    }
+
+    /// How long this event's betting window runs, from the cadence its series slug encodes.
+    ///
+    /// The destination derives the window *open* — and with it the price to beat, the
+    /// spot-price range and the chart's title — from `windowEnd` minus this, so a daily
+    /// market handed the 5-minute default charts the last five minutes of a 24-hour window.
+    /// Falls back to 5 minutes for a series with no recognizable cadence.
+    private static func windowInterval(for event: Event) -> TimeInterval {
+        RecurrenceCadence(seriesSlug: event.recurrence)?.windowSeconds ?? 300
     }
 }

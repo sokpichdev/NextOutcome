@@ -290,6 +290,7 @@ final class AppContainer {
                 eventID: context.eventID,
                 windowEnd: context.windowEnd,
                 symbol: context.symbol,
+                windowInterval: context.windowInterval,
                 fetchHistory: FetchPriceHistoryUseCase(repository: orderbookRepository),
                 fetchServerTime: FetchServerTimeUseCase(repository: orderbookRepository),
                 fetchRecentTrades: FetchRecentTradesUseCase(repository: orderbookRepository),

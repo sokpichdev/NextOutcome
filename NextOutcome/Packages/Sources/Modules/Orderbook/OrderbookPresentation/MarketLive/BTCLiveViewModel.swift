@@ -51,8 +51,29 @@ public final class BTCLiveViewModel {
     /// The latest order book, used for the live Up/Down cents.
     public private(set) var book: OrderBook?
 
-    /// The rolling window used to pick the price-to-beat (5 minutes).
-    public let windowInterval: TimeInterval = 300
+    /// The betting window's length, used to derive its open (`windowEnd - windowInterval`)
+    /// and therefore the price to beat, the spot-price range, the candle width and the
+    /// chart's title. Supplied by the caller: this screen opens for every Up/Down cadence,
+    /// so assuming 5 minutes charted a BTC 5m window under an ETH daily market's header.
+    public let windowInterval: TimeInterval
+
+    /// The chart card's title: the asset and its cadence, e.g. "BTC 5m" or "ETH Daily".
+    public var chartTitle: String { "\(symbol) \(Self.cadenceLabel(windowInterval))" }
+
+    /// The cadence half of `chartTitle`, for the window lengths Polymarket actually runs.
+    /// Anything else falls back to a rounded minute/hour count rather than a wrong label.
+    static func cadenceLabel(_ interval: TimeInterval) -> String {
+        switch interval {
+        case 300: return "5m"
+        case 900: return "15m"
+        case 3_600: return "1h"
+        case 14_400: return "4h"
+        case 86_400: return "Daily"
+        case 604_800: return "Weekly"
+        case ..<3_600: return "\(Int((interval / 60).rounded()))m"
+        default: return "\(Int((interval / 3_600).rounded()))h"
+        }
+    }
 
     /// The "Up" outcome token being charted/traded.
     private let assetID: String
@@ -119,8 +140,9 @@ public final class BTCLiveViewModel {
     /// - Parameters:
     ///   - assetID: The "Up" outcome token.
     ///   - eventID: The event id for the trades ticker.
-    ///   - windowEnd: When the 5-minute window closes.
+    ///   - windowEnd: When the window closes.
     ///   - symbol: The underlying crypto asset's ticker symbol (e.g. "BTC", "ETH").
+    ///   - windowInterval: How long the window runs, in seconds (defaults to the 5m series).
     ///   - fetchHistory: Loads the price series.
     ///   - fetchServerTime: Fetches authoritative server time (once).
     ///   - fetchRecentTrades: Polls recent trades.
@@ -134,6 +156,7 @@ public final class BTCLiveViewModel {
         eventID: String,
         windowEnd: Date,
         symbol: String,
+        windowInterval: TimeInterval = 300,
         fetchHistory: FetchPriceHistoryUseCase,
         fetchServerTime: FetchServerTimeUseCase,
         fetchRecentTrades: FetchRecentTradesUseCase,
@@ -147,6 +170,7 @@ public final class BTCLiveViewModel {
         self.eventID = eventID
         self.windowEnd = windowEnd
         self.symbol = symbol
+        self.windowInterval = windowInterval
         self.fetchHistory = fetchHistory
         self.fetchServerTime = fetchServerTime
         self.fetchRecentTrades = fetchRecentTrades
@@ -161,20 +185,23 @@ public final class BTCLiveViewModel {
 
     /// Dollar OHLC candles for the "Candles" chart mode, oldest first.
     ///
-    /// **One candle per betting window** (5 minutes here), matching the web: the primary
+    /// **One candle per `candleInterval`**, matching the web: the primary
     /// source is the chainlink-candles feed, which serves real multi-hour history and
     /// pages arbitrarily far back (`loadMoreCandles`). The newest candle is the window
     /// currently forming; live RTDS ticks fold into it in place (close tracks the tick,
     /// high/low stretch, colour flips as close crosses open) — see `streamSpotPrice`.
     ///
     /// Until the feed's seed page arrives — or if it fails outright — this falls back to
-    /// bucketing the window-scoped spot series, which can only ever produce the current
-    /// window's single forming candle (that feed returns nothing outside the window, so
-    /// asking it for two hours still yields ~300s of samples).
+    /// bucketing the window-scoped spot series, which can never reach further back than the
+    /// window itself (that feed returns nothing outside it, so asking for two hours of a
+    /// 5-minute market still yields ~300s of samples).
+    ///
+    /// The fallback buckets at `candleInterval`, the same width the feed serves, so the two
+    /// sources can't disagree about where a candle starts when the seed page lands.
     public var candles: [Candle] {
         if !candleSeries.isEmpty { return candleSeries }
         guard case let .loaded(points) = spotState, !points.isEmpty else { return [] }
-        return Self.bucket(points.sorted { $0.date < $1.date }, interval: windowInterval)
+        return Self.bucket(points.sorted { $0.date < $1.date }, interval: candleInterval.seconds)
     }
 
     /// The stabilised dollar y-range for the candle chart, or `nil` before any candles
@@ -221,6 +248,15 @@ public final class BTCLiveViewModel {
     private var candleInterval: CandleInterval {
         windowInterval >= 900 ? .fifteenMinute : .fiveMinute
     }
+
+    /// How wide one candle in `candles` is, in seconds — what the chart's x-axis must be
+    /// scaled by.
+    ///
+    /// Emphatically **not** `windowInterval`: the two are only equal for the 5-minute
+    /// series. A daily market's candles are 15 minutes wide, not 24 hours, so a chart that
+    /// sized its visible domain by the betting window laid 22 hours of history out across
+    /// 24 *days* and crushed every candle into the left edge of the plot.
+    public var candleWidth: TimeInterval { candleInterval.seconds }
 
     /// Groups a price series into fixed-width buckets, one candle each.
     ///

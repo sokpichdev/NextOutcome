@@ -24,17 +24,14 @@ import MarketsDomain
 /// it for the pinned BTC card and not obviously worth ~39 requests for the whole list.
 /// See `docs/polymarket-crypto-hub-gaps.md` §5(c).
 enum RecurringWindowCollapse {
-    /// Slug suffixes that mark a *recurring window* series.
-    ///
-    /// Matching on the suffix is deliberate. `Event.recurrence` is `series[0].slug`, which for
-    /// esports is a category series (`league-of-legends`) rather than a repeating window —
-    /// collapsing on the mere presence of a series would erase the Esports hub.
-    static let cadenceSuffixes = ["-5m", "-15m", "-hourly", "-4h", "-daily"]
-
     /// Whether a series slug denotes a recurring window series.
+    ///
+    /// `RecurrenceCadence` matches on the slug's suffix, which is what makes this safe:
+    /// `Event.recurrence` is `series[0].slug`, and for esports that's a category series
+    /// (`league-of-legends`) rather than a repeating window — collapsing on the mere
+    /// presence of a series would erase the Esports hub.
     static func isCadenceSeries(_ slug: String?) -> Bool {
-        guard let slug else { return false }
-        return cadenceSuffixes.contains { slug.hasSuffix($0) }
+        RecurrenceCadence(seriesSlug: slug) != nil
     }
 
     /// Keeps one window per cadence series — the earliest that hasn't closed at `now` —

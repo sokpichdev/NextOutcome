@@ -5,26 +5,38 @@
 
 import SwiftUI
 
-/// Parameters needed to open the BTC 5-minute live screen for a resolved event.
+/// Parameters needed to open the crypto Up/Down live screen for a resolved event.
 public struct BTCLiveContext: Sendable {
     /// The CLOB token id for the "Up" outcome.
     public let assetID: String     // CLOB token id for the "Up" outcome
     /// The Gamma event id, used by the recent-trades ticker.
     public let eventID: String     // gamma event id (for the /trades ticker)
-    /// When the current 5-minute window closes (drives the countdown).
-    public let windowEnd: Date     // when the 5-minute window closes
+    /// When the current window closes (drives the countdown).
+    public let windowEnd: Date
     /// The underlying crypto asset's ticker symbol (e.g. "BTC", "ETH"), used to query
     /// the real dollar spot-price feed. This screen isn't BTC-only — the Crypto hub
     /// opens it for any Up/Down coin — so this must reflect the actual event's asset,
     /// not be assumed.
     public let symbol: String
+    /// How long the window runs, in seconds. Like `symbol`, this must reflect the actual
+    /// event: the hub opens this screen for every Up/Down cadence (5m through daily), and
+    /// the window open — the price to beat, the spot-price range, the chart title — is
+    /// `windowEnd` minus this. Defaults to the 5-minute series.
+    public let windowInterval: TimeInterval
 
-    /// Creates the context needed to open the BTC live screen.
-    public init(assetID: String, eventID: String, windowEnd: Date, symbol: String) {
+    /// Creates the context needed to open the live screen.
+    public init(
+        assetID: String,
+        eventID: String,
+        windowEnd: Date,
+        symbol: String,
+        windowInterval: TimeInterval = 300
+    ) {
         self.assetID = assetID
         self.eventID = eventID
         self.windowEnd = windowEnd
         self.symbol = symbol
+        self.windowInterval = windowInterval
     }
 }
 

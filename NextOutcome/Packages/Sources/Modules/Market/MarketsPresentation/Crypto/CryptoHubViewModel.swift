@@ -230,17 +230,16 @@ public final class CryptoHubViewModel {
         }
     }
 
-    /// Matches a timeframe bucket against an event's `recurrence` slug suffix (e.g.
-    /// `"btc-up-or-down-5m"` → `.fiveMin`). `nil` recurrence or an unrecognized suffix
-    /// (including `"-4h"`/`"-daily"`, which have no bucket in this row) never matches a
-    /// specific bucket.
+    /// Matches a timeframe bucket against the cadence an event's `recurrence` slug encodes
+    /// (e.g. `"btc-up-or-down-5m"` → `.fiveMin`). `nil` recurrence or a cadence with no
+    /// chip in this row (`-4h`, `-daily`, both behind "More") never matches a bucket.
     private func matches(timeframe: Timeframe, recurrence: String?) -> Bool {
-        guard let recurrence else { return false }
-        switch timeframe {
-        case .all: return true
-        case .fiveMin: return recurrence.hasSuffix("-5m")
-        case .fifteenMin: return recurrence.hasSuffix("-15m")
-        case .hourly: return recurrence.hasSuffix("-hourly")
+        guard timeframe != .all else { return true }
+        switch RecurrenceCadence(seriesSlug: recurrence) {
+        case .fiveMinute: return timeframe == .fiveMin
+        case .fifteenMinute: return timeframe == .fifteenMin
+        case .hourly: return timeframe == .hourly
+        case .fourHour, .daily, nil: return false
         }
     }
 
