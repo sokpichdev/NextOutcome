@@ -47,6 +47,10 @@ public struct CryptoUpDownCard: View {
             windowEnd: market.endDate ?? .distantFuture,
             symbol: Self.coinSymbol(for: event),
             windowInterval: Self.windowInterval(for: event),
+            // The same series name the card shows, for the same reason: the per-window
+            // event title is stale the moment the window rolls.
+            title: cardTitle,
+            iconURL: event.imageURL,
             market: market
         )
     }

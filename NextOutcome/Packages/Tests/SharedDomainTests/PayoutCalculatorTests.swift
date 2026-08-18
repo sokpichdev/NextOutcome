@@ -4,7 +4,7 @@
 //
 
 import XCTest
-@testable import TradingDomain
+@testable import SharedDomain
 
 final class PayoutCalculatorTests: XCTestCase {
     func testTenDollarsAtFiftyCents() {

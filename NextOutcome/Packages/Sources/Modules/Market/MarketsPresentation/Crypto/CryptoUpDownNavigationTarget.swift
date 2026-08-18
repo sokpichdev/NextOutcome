@@ -21,6 +21,11 @@ public struct CryptoUpDownNavigationTarget: Hashable {
     /// window open (and therefore the price to beat, the spot-price range and the chart's
     /// title) from `windowEnd` minus this — so a wrong value shows the wrong market.
     public let windowInterval: TimeInterval
+    /// The series name for the live screen's header, e.g. "BTC Up or Down 5m". Carried
+    /// here because it lives on the `Event`, which the Orderbook slice can't see.
+    public let title: String
+    /// The market's icon (the coin logo) for that header.
+    public let iconURL: URL?
     /// The underlying market, needed to open a `TradeSheet` on quick-bet.
     public let market: Market
 
@@ -31,6 +36,8 @@ public struct CryptoUpDownNavigationTarget: Hashable {
         windowEnd: Date,
         symbol: String,
         windowInterval: TimeInterval,
+        title: String,
+        iconURL: URL?,
         market: Market
     ) {
         self.assetID = assetID
@@ -38,6 +45,8 @@ public struct CryptoUpDownNavigationTarget: Hashable {
         self.windowEnd = windowEnd
         self.symbol = symbol
         self.windowInterval = windowInterval
+        self.title = title
+        self.iconURL = iconURL
         self.market = market
     }
 
@@ -45,6 +54,7 @@ public struct CryptoUpDownNavigationTarget: Hashable {
     public var liveContext: BTCLiveContext {
         BTCLiveContext(
             assetID: assetID, eventID: eventID, windowEnd: windowEnd,
+            title: title, iconURL: iconURL,
             symbol: symbol, windowInterval: windowInterval
         )
     }

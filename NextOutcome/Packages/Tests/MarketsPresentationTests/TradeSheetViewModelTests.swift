@@ -37,6 +37,29 @@ final class TradeSheetViewModelTests: XCTestCase {
         TradeSheetViewModel(market: makeMarket(), side: .yes, submitter: StubTradeSubmitter())
     }
 
+    /// The crypto live screen's $5/$25/$100 tiles are what place the bet, so the sheet
+    /// they open must already hold that stake — the user only confirms.
+    func test_initialDollars_prefillsTheAmount() {
+        let vm = TradeSheetViewModel(
+            market: makeMarket(), side: .yes, submitter: StubTradeSubmitter(), initialDollars: 25
+        )
+
+        XCTAssertEqual(vm.amountDisplay, "$25.00")
+        XCTAssertEqual(vm.amountUSD, 25)
+    }
+
+    /// A pre-filled amount is still editable: the keypad appends to it rather than
+    /// starting from scratch.
+    func test_prefilledAmount_staysEditable() {
+        let vm = TradeSheetViewModel(
+            market: makeMarket(), side: .yes, submitter: StubTradeSubmitter(), initialDollars: 5
+        )
+
+        vm.backspace()
+
+        XCTAssertEqual(vm.amountDisplay, "$0.50")
+    }
+
     func test_amountDisplay_showsCents() {
         let vm = makeVM()
 

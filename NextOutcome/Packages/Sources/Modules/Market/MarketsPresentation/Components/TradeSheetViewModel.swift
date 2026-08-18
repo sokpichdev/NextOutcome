@@ -5,6 +5,7 @@
 
 import Foundation
 import MarketsDomain
+import SharedDomain
 import TradingDomain
 
 /// What the user tapped to open the trade sheet: a market + the side (Yes/No) they
@@ -14,16 +15,22 @@ public struct TradeSheetContext: Identifiable {
     public let market: Market
     /// The side (Yes/No) the user tapped.
     public let side: Side
+    /// A whole-dollar stake the sheet should open already holding, when the tap that
+    /// opened it named an amount — the crypto live screen's $5/$25/$100 tiles. `nil`
+    /// everywhere the user still has to type one.
+    public let initialDollars: Int?
 
     /// Creates the context that presents the trade sheet.
-    public init(market: Market, side: Side) {
+    public init(market: Market, side: Side, initialDollars: Int? = nil) {
         self.market = market
         self.side = side
+        self.initialDollars = initialDollars
     }
 
-    /// A stable identity combining market and side, so `.sheet(item:)` re-presents when
-    /// either changes.
-    public var id: String { "\(market.id)-\(side)" }
+    /// A stable identity combining market, side and any preset stake, so `.sheet(item:)`
+    /// re-presents when any of them changes — tapping $25 after $5 must reopen the sheet
+    /// on the new amount rather than reuse the old one.
+    public var id: String { "\(market.id)-\(side)-\(initialDollars.map(String.init) ?? "")" }
 }
 
 /// Drives the mock trade sheet: digit-keypad amount entry, live "to win" payout via
@@ -62,10 +69,16 @@ public final class TradeSheetViewModel {
     ///   - market: The market to trade.
     ///   - side: The initial Yes/No side.
     ///   - submitter: The (simulated) trade submitter.
-    public init(market: Market, side: Side, submitter: TradeSubmitting) {
+    ///   - initialDollars: A whole-dollar stake to open with, when the caller already
+    ///     named one (the crypto live screen's amount tiles). It seeds the keypad rather
+    ///     than locking it: backspace and further digits work on it as normal.
+    public init(market: Market, side: Side, submitter: TradeSubmitting, initialDollars: Int? = nil) {
         self.market = market
         self.side = side
         self.submitter = submitter
+        if let initialDollars {
+            amountCents = min(Self.maxAmountCents, max(0, initialDollars) * 100)
+        }
     }
 
     /// The selected side's outcome. Read through `binaryOutcomes` so a market whose sides

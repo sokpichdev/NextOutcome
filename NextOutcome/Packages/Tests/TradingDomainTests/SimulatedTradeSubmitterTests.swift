@@ -5,6 +5,7 @@
 
 import XCTest
 @testable import TradingDomain
+import SharedDomain
 
 final class SimulatedTradeSubmitterTests: XCTestCase {
     func test_simulatedSubmitter_returnsSimulatedReceipt() async throws {

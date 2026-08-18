@@ -57,8 +57,15 @@ public struct CryptoHubView: View {
                 // exactly what made "Next window →" do nothing.
                 LiveWindowDestination { pop in
                     BTCLiveView(
-                        viewModel: btcLiveFactory(target.liveContext) { side in
-                            tradeContext = TradeSheetContext(market: target.market, side: side == .up ? .yes : .no)
+                        viewModel: btcLiveFactory(target.liveContext) { side, dollars in
+                            // The amount tile is what places the bet on the live screen,
+                            // so the sheet opens already holding its stake — the user only
+                            // confirms.
+                            tradeContext = TradeSheetContext(
+                                market: target.market,
+                                side: side == .up ? .yes : .no,
+                                initialDollars: dollars
+                            )
                         },
                         // Pop back to the hub, whose pinned card follows the live window on
                         // the grid boundary — so returning lands on the current one. The
@@ -74,7 +81,14 @@ public struct CryptoHubView: View {
         }
         .sheet(isPresented: $showsMoreSheet) { CryptoMoreSheetPlaceholder() }
         .sheet(item: $tradeContext) { context in
-            TradeSheet(viewModel: TradeSheetViewModel(market: context.market, side: context.side, submitter: tradeSubmitter))
+            TradeSheet(
+                viewModel: TradeSheetViewModel(
+                    market: context.market,
+                    side: context.side,
+                    submitter: tradeSubmitter,
+                    initialDollars: context.initialDollars
+                )
+            )
         }
         .task {
             if let tagID { await viewModel.loadIfNeeded(tagID: tagID) }
