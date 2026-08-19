@@ -117,6 +117,9 @@ public final class BTCLiveViewModel {
     private let fetchServerTime: FetchServerTimeUseCase
     /// Use case that polls recent trades.
     private let fetchRecentTrades: FetchRecentTradesUseCase
+    /// How often the socket-fed feeds may republish into `@Observable` state.
+    /// See `LiveFeedRate.display`.
+    private let updateInterval: Duration
     /// Use case that streams the live book.
     private let observeBook: ObserveOrderBookUseCase
     /// Use case that streams the live dollar spot-price series: seeds via REST, then folds
@@ -179,6 +182,9 @@ public final class BTCLiveViewModel {
     ///   - observeSpotPrice: Streams the live dollar spot-price series (seed + socket).
     ///   - fetchPriceWindow: Polls the window's dollar open/close snapshot.
     ///   - fetchCandles: Pages the real OHLC candle history.
+    ///   - updateInterval: How often the live feeds may republish into SwiftUI. Pass
+    ///     `.zero` to disable throttling — tests drive the feeds through cooperative
+    ///     scheduling and can't wait out a wall-clock cooldown.
     ///   - onQuickBet: Called with the selected side and stake when an amount tile is tapped.
     public init(
         assetID: String,
@@ -195,6 +201,7 @@ public final class BTCLiveViewModel {
         observeSpotPrice: ObserveCryptoSpotPriceUseCase,
         fetchPriceWindow: FetchCryptoPriceWindowUseCase,
         fetchCandles: FetchCryptoCandlesUseCase,
+        updateInterval: Duration = LiveFeedRate.display,
         onQuickBet: @escaping @MainActor (BetSide, Int) -> Void
     ) {
         self.assetID = assetID
@@ -211,6 +218,7 @@ public final class BTCLiveViewModel {
         self.observeSpotPrice = observeSpotPrice
         self.fetchPriceWindow = fetchPriceWindow
         self.fetchCandles = fetchCandles
+        self.updateInterval = updateInterval
         self.onQuickBet = onQuickBet
     }
 
@@ -231,7 +239,24 @@ public final class BTCLiveViewModel {
     ///
     /// The fallback buckets at `candleInterval`, the same width the feed serves, so the two
     /// sources can't disagree about where a candle starts when the seed page lands.
-    public var candles: [Candle] {
+    ///
+    /// Stored rather than computed: the chart body reads this on every render, and the
+    /// fallback path sorts and buckets the whole spot series — an O(n log n) pass that ran
+    /// per frame, per tick, and again inside `refreshCandleDomain`. `refreshCandles()`
+    /// recomputes it exactly when its inputs change.
+    public private(set) var candles: [Candle] = []
+
+    /// Re-derives `candles` from whichever source is currently authoritative.
+    ///
+    /// Assigns only on change: `@Observable` republishes on every setter call, so an
+    /// unguarded write re-rendered the chart even for a tick that moved nothing.
+    private func refreshCandles() {
+        let series = derivedCandles()
+        if candles != series { candles = series }
+    }
+
+    /// The candle series for the current state, feed-backed if the seed page has landed.
+    private func derivedCandles() -> [Candle] {
         if !candleSeries.isEmpty { return candleSeries }
         guard case let .loaded(points) = spotState, !points.isEmpty else { return [] }
         return Self.bucket(points.sorted { $0.date < $1.date }, interval: candleInterval.seconds)
@@ -252,23 +277,58 @@ public final class BTCLiveViewModel {
     /// How many candles fit in the visible chart frame at once. Sized to match the web's default zoom.
     public static let visibleCandleCount = 24
 
-    /// Re-derives `candleDomain` from the recent visible candle series, current price, and price to beat.
+    /// The slice of history the chart is currently showing, as the view's scroll position
+    /// and pinch zoom last reported it. `nil` until the chart appears, and while it is
+    /// `nil` the domain fits the newest `visibleCandleCount` candles.
+    private var visibleCandleRange: ClosedRange<Date>?
+
+    /// Whether the visible slice still includes the forming candle at the right-hand edge.
+    /// Only then do the live price and the window's open belong in the y-range: scrolled
+    /// hours back, folding today's price into a historical band flattens those candles.
+    private var isViewingLiveEdge = true
+
+    /// Tells the model which slice of history the chart is showing, so the y-range can
+    /// re-fit when the user scrolls back into hours that traded at a different level.
     ///
-    /// Using the recent visible window rather than the entire multi-hour archive keeps the
+    /// Called from the chart's scroll and zoom handlers rather than computed in its body:
+    /// fitting the range means filtering the whole archive, and doing that inline ran it on
+    /// every frame *and* let every tick nudge the domain, which resizes the axis gutter,
+    /// which resizes the plot, which slides every candle sideways.
+    /// - Parameters:
+    ///   - range: The time span currently on screen.
+    ///   - includesLiveEdge: Whether the newest, still-forming candle is in view.
+    public func updateVisibleCandleRange(_ range: ClosedRange<Date>, includesLiveEdge: Bool) {
+        guard visibleCandleRange != range || isViewingLiveEdge != includesLiveEdge else { return }
+        visibleCandleRange = range
+        isViewingLiveEdge = includesLiveEdge
+        refreshCandleDomain()
+    }
+
+    /// Re-derives `candleDomain` from the visible candle slice, current price, and price to beat.
+    ///
+    /// Using the visible window rather than the entire multi-hour archive keeps the
     /// dynamic Y-range compact, allowing individual candles to render with prominent vertical
     /// height and clear wicks/bodies instead of flattening into tiny slivers.
     ///
     /// Publishes only when the band actually moved, so a tick that lands inside the
     /// existing band costs the chart nothing at all.
+    ///
+    /// Refreshes `candles` on the way through: the two share every input, and the domain is
+    /// derived from the series, so re-deriving them together keeps them from disagreeing.
     private func refreshCandleDomain() {
+        refreshCandles()
         let series = candles
         guard !series.isEmpty else { return }
-        let recent = series.suffix(Self.visibleCandleCount)
+        let visible = visibleCandleRange.map { range in
+            series.filter { range.contains($0.start) }
+        } ?? []
+        let recent = visible.isEmpty ? Array(series.suffix(Self.visibleCandleCount)) : visible
         var lo = recent.map { Self.double($0.low) }.min() ?? 0
         var hi = recent.map { Self.double($0.high) }.max() ?? 1
 
-        // Fold in the live spot price so ticks at extremes dynamically adapt the scale.
-        if let current = currentPrice {
+        // Fold in the live spot price so ticks at extremes dynamically adapt the scale —
+        // but only while the live edge is on screen (see `isViewingLiveEdge`).
+        if isViewingLiveEdge, let current = currentPrice {
             let value = Self.double(current)
             lo = Swift.min(lo, value)
             hi = Swift.max(hi, value)
@@ -280,7 +340,7 @@ public final class BTCLiveViewModel {
         // falls back to the *probability* series (0…1) before the window poll lands, and
         // folding a 0.42 into a $63,000 axis collapses the candles into a hairline at the
         // top of the frame. A zero open is likewise not a real price.
-        if let open = priceWindow?.openPrice, open > 0 {
+        if isViewingLiveEdge, let open = priceWindow?.openPrice, open > 0 {
             let value = Self.double(open)
             lo = Swift.min(lo, value)
             hi = Swift.max(hi, value)
@@ -638,8 +698,11 @@ public final class BTCLiveViewModel {
     /// Consumes the live book stream, updating `book` on each new snapshot and appending
     /// a fresh sample to the "Chance" probability series so that chart mode stays live too
     /// (this is the only feed for `state`; there's no separate re-fetch of price history).
+    /// Throttled to `LiveFeedRate.display`: `execute` yields a *fully reconciled* book per
+    /// socket frame, so dropping intermediates during a burst loses nothing — the next
+    /// snapshot already contains every change the skipped ones carried.
     private func streamBook() async {
-        for await book in observeBook.execute(assetID: assetID) {
+        for await book in observeBook.execute(assetID: assetID).throttled(for: updateInterval) {
             self.book = book
             appendChancePoint(from: book)
         }
@@ -674,11 +737,16 @@ public final class BTCLiveViewModel {
     /// The use case seeds with the REST history (so the chart isn't blank on entry) and then
     /// folds live RTDS ticks in, so `currentPrice` follows the market in real time instead of
     /// lagging up to 5s behind a poll.
+    ///
+    /// Throttled to `LiveFeedRate.display`: each emission is the whole series, so a skipped
+    /// one is strictly contained in the next. Untangled, RTDS bursts pushed 50+ series a
+    /// second through `@Observable`, and every one of them re-ran the candle fold, the
+    /// domain hysteresis and the header's roll animations.
     private func streamSpotPrice() async {
         let eventStart = windowEnd.addingTimeInterval(-windowInterval)
         for await points in observeSpotPrice.execute(
             symbol: symbol, eventStart: eventStart, eventEnd: windowEnd
-        ) {
+        ).throttled(for: updateInterval) {
             if Task.isCancelled { return }
             spotState = points.isEmpty ? .empty : .loaded(points)
             // Keep the forming candle live. Only once the seed page exists: folding into

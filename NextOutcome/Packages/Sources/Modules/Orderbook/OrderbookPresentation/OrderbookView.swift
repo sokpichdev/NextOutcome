@@ -156,6 +156,10 @@ public struct OrderbookView: View {
         let maxCumulative = shown.map(\.cumulative).max() ?? 1
         return shown.map { level in
             DepthLevel(
+                // The unrounded price, not the formatted one: two adjacent levels on a
+                // fine-tick market both format to "62.0¢", and duplicate ids in a `ForEach`
+                // are exactly as bad for diffing as fresh ones.
+                id: "\(level.price)",
                 price: cents(level.price),
                 size: compact(level.size),
                 fraction: fraction(level.cumulative, of: maxCumulative)

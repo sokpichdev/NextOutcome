@@ -62,7 +62,10 @@ final class AppContainer {
         self.repository = GammaMarketRepository(client: client)
         self.orderbookRepository = ClobOrderbookRepository(client: client)
         self.cryptoSpotPriceRepository = PolymarketCryptoPriceRepository(client: client)
-        self.marketStream = MarketSocket()
+        // Wrapped so the live crypto screen's two consumers of the same token — the header's
+        // quick-bet cents and the depth ladder below it — share one WebSocket instead of
+        // opening (and decoding) two identical ones.
+        self.marketStream = SharedMarketStream(upstream: MarketSocket())
         self.cryptoPriceStream = RTDSSocket()
         self.portfolioRepository = DataPortfolioRepository(client: client)
         self.geoblockService = GeoblockClient(client: client)

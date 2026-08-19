@@ -168,6 +168,10 @@ final class BTCLiveViewModelTests: XCTestCase {
             observeSpotPrice: ObserveCryptoSpotPriceUseCase(repository: spotRepository, stream: spotStreamer),
             fetchPriceWindow: FetchCryptoPriceWindowUseCase(repository: spotRepository),
             fetchCandles: FetchCryptoCandlesUseCase(repository: spotRepository),
+            // Unthrottled: these tests drive the feeds with `Task.yield()` loops, which
+            // advance cooperative scheduling but not the wall clock the throttle waits on.
+            // The throttle itself is covered by `AsyncThrottleTests`.
+            updateInterval: .zero,
             onQuickBet: onQuickBet
         )
     }
@@ -647,6 +651,77 @@ final class BTCLiveViewModelTests: XCTestCase {
         XCTAssertEqual(vm.candleDomain, settled, "an in-band tick must not move the y-domain")
         XCTAssertTrue(settled!.contains(63_000), "the band must still show the series' low")
         XCTAssertTrue(settled!.contains(64_000), "the band must still show the series' high")
+    }
+
+    /// Scrolling back into hours that traded at a different level must re-fit the band to
+    /// that slice — the whole point of moving the fit out of the chart body was to keep this
+    /// behaviour while paying for it only when the viewport actually moves.
+    @MainActor
+    func test_visibleRangeScrolledBackRefitsTheDomainToThatSlice() async {
+        let windowEnd = Date(timeIntervalSince1970: 999_900)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: windowEnd.addingTimeInterval(-60), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        let lastStart = Date(timeIntervalSince1970: 999_600)
+        // Two eras: the older half traded near 50,000, the newer half near 63,000.
+        let old = spreadCandlePage(
+            endingAt: lastStart.addingTimeInterval(-300 * 5), count: 5, low: 50_000, high: 51_000
+        )
+        let recent = spreadCandlePage(endingAt: lastStart, count: 5, low: 63_000, high: 64_000)
+        spotRepository.candlePages = [old + recent]
+
+        let vm = makeVM(
+            repository: repository, windowEnd: windowEnd, spotRepository: spotRepository
+        )
+        vm.start()
+        for _ in 0..<200 { await Task.yield() }
+
+        // Scrolled all the way back to the old era, live edge off screen.
+        vm.updateVisibleCandleRange(
+            old.first!.start...old.last!.start, includesLiveEdge: false
+        )
+        let scrolledBack = vm.candleDomain
+        vm.stop()
+
+        XCTAssertNotNil(scrolledBack)
+        XCTAssertTrue(scrolledBack!.contains(50_000), "the historical slice must be in frame")
+        XCTAssertTrue(scrolledBack!.contains(51_000))
+        XCTAssertFalse(
+            scrolledBack!.contains(63_500),
+            "today's prices must not stretch a band fitted to history"
+        )
+    }
+
+    /// Re-reporting the same viewport must be free: the chart's scroll handler fires on
+    /// every frame of a drag, and a domain that republished each time would put the
+    /// per-frame refit straight back.
+    @MainActor
+    func test_repeatedVisibleRangeReportsDoNotMoveTheDomain() async {
+        let windowEnd = Date(timeIntervalSince1970: 999_900)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: windowEnd.addingTimeInterval(-60), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        let lastStart = Date(timeIntervalSince1970: 999_600)
+        spotRepository.candlePages = [
+            spreadCandlePage(endingAt: lastStart, count: 5, low: 63_000, high: 64_000)
+        ]
+
+        let vm = makeVM(
+            repository: repository, windowEnd: windowEnd, spotRepository: spotRepository
+        )
+        vm.start()
+        for _ in 0..<200 { await Task.yield() }
+
+        let range = lastStart.addingTimeInterval(-1_200)...lastStart.addingTimeInterval(300)
+        vm.updateVisibleCandleRange(range, includesLiveEdge: true)
+        let settled = vm.candleDomain
+        for _ in 0..<10 { vm.updateVisibleCandleRange(range, includesLiveEdge: true) }
+        vm.stop()
+
+        XCTAssertNotNil(settled)
+        XCTAssertEqual(vm.candleDomain, settled)
     }
 
     /// The band is stable, not frozen: a price that genuinely escapes it must widen it,
