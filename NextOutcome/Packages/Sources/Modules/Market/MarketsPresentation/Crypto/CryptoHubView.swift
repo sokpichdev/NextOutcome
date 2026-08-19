@@ -393,17 +393,6 @@ private struct LiveWindowDestination: View {
                         }
                         await hubViewModel.loadLiveWindow()
                     }
-                },
-                footer: {
-                    if let socialStripFactory {
-                        SocialStripView(
-                            viewModel: socialStripFactory(
-                                eventID: currentTarget.eventID,
-                                conditionId: currentTarget.market.conditionId,
-                                markets: [currentTarget.market]
-                            )
-                        )
-                    }
                 }
             )
             .id(currentTarget.eventID)
@@ -418,23 +407,20 @@ private struct LiveWindowDestination: View {
                         .padding(DSLayout.margin)
                 }
                 .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
                 .background(DSColor.background)
             }
             .sheet(isPresented: $showsDiscussSheet) {
-                ScrollView {
-                    if let socialStripFactory {
-                        SocialStripView(
-                            viewModel: socialStripFactory(
-                                eventID: currentTarget.eventID,
-                                conditionId: currentTarget.market.conditionId,
-                                markets: [currentTarget.market]
-                            )
-                        )
-                        .padding(DSLayout.margin)
-                    }
+                if let socialStripFactory {
+                    SocialStripSheet(
+                        viewModel: socialStripFactory(
+                            eventID: currentTarget.eventID,
+                            conditionId: currentTarget.market.conditionId,
+                            markets: [currentTarget.market]
+                        ),
+                        title: currentTarget.market.groupItemTitle ?? currentTarget.market.question
+                    )
                 }
-                .presentationDetents([.medium, .large])
-                .background(DSColor.background)
             }
         }
     }
