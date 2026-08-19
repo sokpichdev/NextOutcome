@@ -51,30 +51,22 @@ public struct CryptoHubView: View {
             MarketDetailView(market: $0.market, eventID: $0.eventID)
         }
         .navigationDestination(for: CryptoUpDownNavigationTarget.self) { target in
-            if let btcLiveFactory {
-                // The pop must come from *inside* the pushed screen: this hub is the
-                // stack's root, so its own `dismiss` is a no-op — reading it out here is
-                // exactly what made "Next window →" do nothing.
-                LiveWindowDestination { pop in
-                    BTCLiveView(
-                        viewModel: btcLiveFactory(target.liveContext) { side in
-                            tradeContext = TradeSheetContext(market: target.market, side: side == .up ? .yes : .no)
-                        },
-                        // Pop back to the hub, whose pinned card follows the live window on
-                        // the grid boundary — so returning lands on the current one. The
-                        // refresh runs in the background rather than gating the pop: a slow
-                        // request otherwise leaves the tap looking dead.
-                        onNextWindow: {
-                            Task { await viewModel.loadLiveWindow() }
-                            pop()
-                        }
-                    )
-                }
-            }
+            LiveWindowDestination(
+                target: target,
+                hubViewModel: viewModel,
+                tradeContext: $tradeContext
+            )
         }
         .sheet(isPresented: $showsMoreSheet) { CryptoMoreSheetPlaceholder() }
         .sheet(item: $tradeContext) { context in
-            TradeSheet(viewModel: TradeSheetViewModel(market: context.market, side: context.side, submitter: tradeSubmitter))
+            TradeSheet(
+                viewModel: TradeSheetViewModel(
+                    market: context.market,
+                    side: context.side,
+                    submitter: tradeSubmitter,
+                    initialDollars: context.initialDollars
+                )
+            )
         }
         .task {
             if let tagID { await viewModel.loadIfNeeded(tagID: tagID) }
@@ -349,19 +341,59 @@ public struct CryptoHubView: View {
     }
 }
 
-/// Hosts a pushed live-window screen and hands it a working "pop back" closure.
+/// Hosts a pushed live-window screen, advancing in place when "Next window →" is tapped.
 ///
-/// `dismiss` has to be read from a view that is *itself* the pushed destination —
-/// `CryptoHubView` is the stack's root, so its `dismiss` silently does nothing. This
-/// wrapper exists purely to give the destination its own environment to read.
-private struct LiveWindowDestination<Content: View>: View {
-    /// Pops this pushed screen off the navigation stack.
+/// Reads `dismiss` from inside the pushed destination — `CryptoHubView` is the stack's
+/// root, so its own `dismiss` is a no-op. When a window settles and "Next window →" is tapped,
+/// this host resolves the next window in the same series via `hubViewModel.nextWindow(after:)`
+/// and updates `currentTarget` in place so the user stays on the live screen without having
+/// to pop back to the hub. If no next window is available yet, it falls back to popping back.
+private struct LiveWindowDestination: View {
     @Environment(\.dismiss) private var dismiss
-    /// Builds the pushed screen, given a closure that pops back to the hub.
-    let content: (_ pop: @escaping () -> Void) -> Content
+    @Environment(\.btcLiveFactory) private var btcLiveFactory
+
+    let hubViewModel: CryptoHubViewModel
+    @Binding var tradeContext: TradeSheetContext?
+
+    @State private var currentTarget: CryptoUpDownNavigationTarget
+    @State private var isAdvancing = false
+
+    init(
+        target: CryptoUpDownNavigationTarget,
+        hubViewModel: CryptoHubViewModel,
+        tradeContext: Binding<TradeSheetContext?>
+    ) {
+        self.hubViewModel = hubViewModel
+        self._tradeContext = tradeContext
+        self._currentTarget = State(initialValue: target)
+    }
 
     var body: some View {
-        content { dismiss() }
+        if let btcLiveFactory {
+            BTCLiveView(
+                viewModel: btcLiveFactory(currentTarget.liveContext) { side, dollars in
+                    tradeContext = TradeSheetContext(
+                        market: currentTarget.market,
+                        side: side == .up ? .yes : .no,
+                        initialDollars: dollars
+                    )
+                },
+                onNextWindow: {
+                    guard !isAdvancing else { return }
+                    isAdvancing = true
+                    Task {
+                        defer { isAdvancing = false }
+                        if let next = await hubViewModel.nextWindow(after: currentTarget) {
+                            currentTarget = next
+                        } else {
+                            dismiss()
+                        }
+                        await hubViewModel.loadLiveWindow()
+                    }
+                }
+            )
+            .id(currentTarget.eventID)
+        }
     }
 }
 

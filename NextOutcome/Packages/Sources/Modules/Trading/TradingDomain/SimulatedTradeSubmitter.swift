@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import SharedDomain
 
 /// Sends no order and persists nothing. Waits ~300ms (to feel like a real round-trip)
 /// then returns a simulated receipt computed via `PayoutCalculator`. This is the only

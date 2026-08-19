@@ -94,7 +94,9 @@ let package = Package(
         // Trading feature (isolated; wallet signing stays stubbed pending security review)
         .target(
             name: "TradingDomain",
-            dependencies: [],
+            // SharedDomain carries `PayoutCalculator`, which the crypto live screen quotes
+            // too — see its doc comment for why the math lives in the shared kernel.
+            dependencies: ["SharedDomain"],
             path: "Sources/Modules/Trading/TradingDomain"
         ),
         .target(
@@ -155,7 +157,8 @@ let package = Package(
             name: "PortfolioPresentationTests",
             dependencies: ["PortfolioPresentation", "PortfolioDomain", "SharedDomain"]
         ),
-        .testTarget(name: "TradingDomainTests",   dependencies: ["TradingDomain"]),
+        .testTarget(name: "SharedDomainTests",    dependencies: ["SharedDomain"]),
+        .testTarget(name: "TradingDomainTests",   dependencies: ["TradingDomain", "SharedDomain"]),
         .testTarget(
             name: "TradingDataTests",
             dependencies: ["TradingData", "TradingDomain", "Networking"]

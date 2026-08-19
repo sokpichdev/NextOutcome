@@ -174,6 +174,7 @@ public struct EventDetailView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .hidesTabBar()
         .animation(.easeInOut(duration: 0.15), value: showsStickyHeader)
         .sheet(item: $tradeContext) { context in
             TradeSheet(viewModel: TradeSheetViewModel(market: context.market, side: context.side, submitter: tradeSubmitter))

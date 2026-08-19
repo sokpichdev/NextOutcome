@@ -26,6 +26,7 @@ public struct LeaderboardView: View {
             content
         }
         .background(DSColor.background)
+        .hidesTabBar()
         .navigationTitle("Leaderboard")
         .task { if case .loading = viewModel.state { await viewModel.load() } }
     }

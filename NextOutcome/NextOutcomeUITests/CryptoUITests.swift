@@ -84,13 +84,54 @@ final class CryptoUITests: XCTestCase {
                       "Candles mode must survive the history load and scroll-back")
     }
 
-    /// TC-082: once a window closes, "Next window →" must actually leave the closed
-    /// screen and land back on the hub (regression: the pop used to be wired to the
-    /// hub's own `dismiss`, which is a no-op at the stack root, so the button did
-    /// nothing). Waits out the remainder of the live 5-minute window, so this test can
+    /// TC-083: the bet controls are pinned to the bottom of the live screen, so a market
+    /// with minutes to run can be traded without scrolling back up past the trades ticker.
+    @MainActor
+    func testBetControlsStayPinnedWhileScrolling() throws {
+        let app = XCUIApplication.launched(preselecting: "crypto", tagID: "21")
+
+        let card = app.staticTexts
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", "Up or Down"))
+            .firstMatch
+        assertAppears(card, timeout: UIWait.firstLoad,
+                      "Crypto hub should pin the live Up/Down card")
+        card.tap()
+
+        // The side selectors carry an accessibility label of "Up, 24¢" / "Up, --".
+        let upButton = app.buttons
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "Up,"))
+            .firstMatch
+        assertAppears(upButton, timeout: UIWait.load,
+                      "The live screen should show its Up selector")
+        XCTAssertTrue(upButton.waitForHittable(timeout: UIWait.ui),
+                      "The Up selector should be tappable on entry")
+
+        // Frames, not visibility: this screen is short enough that a scrolling bet row can
+        // still be on screen at the bottom of the content, so "is it visible" would pass
+        // whether or not it is pinned. A pinned row's frame doesn't move; a scrolling one's
+        // does, by exactly what the content scrolled.
+        let betRowBefore = upButton.frame
+        // Scrolled far enough, the title leaves the screen entirely, and a missing element
+        // reports a zero frame — which is still "moved", so this reads either way.
+        let header = app.staticTexts["BTC Up or Down 5m"]
+        let headerBefore = header.exists ? header.frame.minY : 0
+
+        for _ in 1...4 { app.swipeUp() }
+
+        let headerAfter = header.exists ? header.frame.minY : 0
+        XCTAssertNotEqual(headerBefore, headerAfter, accuracy: 1,
+                          "Precondition: the screen's content must actually have scrolled")
+        XCTAssertEqual(upButton.frame.minY, betRowBefore.minY, accuracy: 1,
+                       "The bet controls must stay put while the content scrolls under them")
+        attachScreenshot(of: app, named: "BTC live — bet bar pinned after scroll")
+    }
+
+    /// TC-082: once a window closes, "Next window →" must advance in place to the next window
+    /// on the live screen (so the user does not have to pop back and re-enter).
+    /// Waits out the remainder of the live 5-minute window, so this test can
     /// take up to ~5.5 minutes — keep it out of any quick smoke run.
     @MainActor
-    func testNextWindowButtonReturnsToHub() throws {
+    func testNextWindowButtonAdvancesToNewWindow() throws {
         let app = XCUIApplication.launched(preselecting: "crypto", tagID: "21")
 
         let card = app.staticTexts
@@ -109,13 +150,11 @@ final class CryptoUITests: XCTestCase {
         attachScreenshot(of: app, named: "BTC live — window closed")
         nextWindow.tap()
 
-        // The chip's label carries the live market count ("1 Hour, 7"), so match on
-        // the prefix rather than the exact string.
-        let hourChip = app.buttons
-            .matching(NSPredicate(format: "label BEGINSWITH %@", "1 Hour"))
-            .firstMatch
-        assertAppears(hourChip, timeout: UIWait.ui,
-                      "Next window must pop back to the Crypto hub")
-        attachScreenshot(of: app, named: "Hub after Next window")
+        // Advancing to the next window refreshes the live screen in place, restoring
+        // active bet controls ("Up" / "Down") for the new live window.
+        let upButton = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Up")).firstMatch
+        assertAppears(upButton, timeout: UIWait.ui,
+                      "Next window must refresh to the new live window in place")
+        attachScreenshot(of: app, named: "BTC live — advanced to next window")
     }
 }

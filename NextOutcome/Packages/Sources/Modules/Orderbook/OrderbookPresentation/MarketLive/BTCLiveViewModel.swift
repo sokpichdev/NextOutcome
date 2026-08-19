@@ -10,6 +10,22 @@ import OrderbookDomain
 import SharedDomain
 import DesignSystem
 
+/// One block of the header's split countdown — a two-digit value and the unit under it,
+/// e.g. `01` / `MIN`. The web renders the clock as two of these rather than one `1:33`
+/// string, and the split is what lets each block roll its own digits.
+public struct CountdownUnit: Equatable, Sendable {
+    /// The zero-padded two-digit value, e.g. `"01"`.
+    public let value: String
+    /// The unit label under it: `"HRS"`, `"MIN"` or `"SECS"`.
+    public let label: String
+
+    /// Creates a countdown block.
+    public init(value: String, label: String) {
+        self.value = value
+        self.label = label
+    }
+}
+
 /// Drives the BTC 5-minute live screen: OHLC/line chart, price-to-beat, a server-clock
 /// countdown, live quick-bet cents, and a recent-trades ticker.
 ///
@@ -23,7 +39,7 @@ public final class BTCLiveViewModel {
     /// prices; `.chance` is the CLOB contract-probability series (0…1).
     public enum ChartMode: Sendable { case price, chance, candles }
     /// Which side a quick-bet tap represents.
-    public enum BetSide: Sendable { case up, down }
+    public enum BetSide: Sendable, Equatable { case up, down }
 
     /// The contract-probability series (0…1) backing the "Chance" chart mode, kept live
     /// by appending the order book's midpoint as new snapshots arrive (see `streamBook`).
@@ -50,6 +66,16 @@ public final class BTCLiveViewModel {
     public private(set) var recentTrades: [RecentTrade] = []
     /// The latest order book, used for the live Up/Down cents.
     public private(set) var book: OrderBook?
+    /// The side the amount tiles quote and bet on. Opens on Up, like the web: the tiles
+    /// always show a payout, so there is no unselected state to design around.
+    public private(set) var selectedSide: BetSide = .up
+
+    /// The market's own name, e.g. "BTC Up or Down 5m" — the header's headline. Passed in
+    /// rather than derived: the series title belongs to the Markets slice's `Event`, which
+    /// this screen deliberately doesn't import.
+    public let title: String
+    /// The market's icon (the coin logo), shown beside `title`.
+    public let iconURL: URL?
 
     /// The betting window's length, used to derive its open (`windowEnd - windowInterval`)
     /// and therefore the price to beat, the spot-price range, the candle width and the
@@ -101,8 +127,9 @@ public final class BTCLiveViewModel {
     private let fetchPriceWindow: FetchCryptoPriceWindowUseCase
     /// Use case that pages the real OHLC candle history (the chainlink-candles feed).
     private let fetchCandles: FetchCryptoCandlesUseCase
-    /// Callback invoked when the user taps Up/Down (host opens the trade flow).
-    private let onQuickBet: @MainActor (BetSide) -> Void
+    /// Callback invoked when the user taps an amount tile: the selected side plus the
+    /// whole-dollar stake, which the host carries into its trade flow.
+    private let onQuickBet: @MainActor (BetSide, Int) -> Void
 
     /// Drives the once-per-second countdown refresh.
     private var tickTask: Task<Void, Never>?
@@ -141,6 +168,8 @@ public final class BTCLiveViewModel {
     ///   - assetID: The "Up" outcome token.
     ///   - eventID: The event id for the trades ticker.
     ///   - windowEnd: When the window closes.
+    ///   - title: The market's name for the header, e.g. "BTC Up or Down 5m".
+    ///   - iconURL: The market's icon (coin logo) for the header.
     ///   - symbol: The underlying crypto asset's ticker symbol (e.g. "BTC", "ETH").
     ///   - windowInterval: How long the window runs, in seconds (defaults to the 5m series).
     ///   - fetchHistory: Loads the price series.
@@ -150,11 +179,13 @@ public final class BTCLiveViewModel {
     ///   - observeSpotPrice: Streams the live dollar spot-price series (seed + socket).
     ///   - fetchPriceWindow: Polls the window's dollar open/close snapshot.
     ///   - fetchCandles: Pages the real OHLC candle history.
-    ///   - onQuickBet: Called when the user taps Up/Down.
+    ///   - onQuickBet: Called with the selected side and stake when an amount tile is tapped.
     public init(
         assetID: String,
         eventID: String,
         windowEnd: Date,
+        title: String,
+        iconURL: URL?,
         symbol: String,
         windowInterval: TimeInterval = 300,
         fetchHistory: FetchPriceHistoryUseCase,
@@ -164,11 +195,13 @@ public final class BTCLiveViewModel {
         observeSpotPrice: ObserveCryptoSpotPriceUseCase,
         fetchPriceWindow: FetchCryptoPriceWindowUseCase,
         fetchCandles: FetchCryptoCandlesUseCase,
-        onQuickBet: @escaping @MainActor (BetSide) -> Void
+        onQuickBet: @escaping @MainActor (BetSide, Int) -> Void
     ) {
         self.assetID = assetID
         self.eventID = eventID
         self.windowEnd = windowEnd
+        self.title = title
+        self.iconURL = iconURL
         self.symbol = symbol
         self.windowInterval = windowInterval
         self.fetchHistory = fetchHistory
@@ -339,6 +372,106 @@ public final class BTCLiveViewModel {
     /// applied in the view via a DS token — this flag only carries the intent.
     public var isCountdownUrgent: Bool { remainingSeconds > 0 && remainingSeconds < 60 }
 
+    /// The countdown as the header's two blocks, e.g. `01 MIN` / `30 SECS`.
+    public var countdownUnits: [CountdownUnit] { Self.countdownUnits(remainingSeconds: remainingSeconds) }
+
+    /// Splits a remaining duration into its two most significant blocks.
+    ///
+    /// Minutes and seconds under an hour, hours and minutes above — a daily window has
+    /// twenty-odd hours left, and "1320 MIN" is a number, not a countdown. Values are
+    /// zero-padded to two digits so the blocks never change width as they tick.
+    /// - Parameter remainingSeconds: Seconds left in the window; negatives clamp to zero.
+    public nonisolated static func countdownUnits(remainingSeconds: Int) -> [CountdownUnit] {
+        let total = max(0, remainingSeconds)
+        if total >= 3_600 {
+            return [
+                CountdownUnit(value: pad(total / 3_600), label: "HRS"),
+                CountdownUnit(value: pad((total % 3_600) / 60), label: "MIN")
+            ]
+        }
+        return [
+            CountdownUnit(value: pad(total / 60), label: "MIN"),
+            CountdownUnit(value: pad(total % 60), label: "SECS")
+        ]
+    }
+
+    /// Zero-pads a countdown value to two digits (three-digit hour counts pass through
+    /// rather than truncate — a weekly window runs to 168 HRS).
+    private nonisolated static func pad(_ value: Int) -> String { String(format: "%02d", value) }
+
+    /// The window's clock range under the title, e.g. "Aug 18, 8:25–8:30 AM".
+    public var windowRange: String {
+        Self.windowRange(start: windowEnd.addingTimeInterval(-windowInterval), end: windowEnd)
+    }
+
+    /// Formats a window's open and close as one range label.
+    ///
+    /// Shows the date once and the meridiem once where it's unambiguous ("Aug 18,
+    /// 8:25–8:30 AM"), and spells both ends out when the window crosses noon or midnight.
+    /// Rendered in the device's own time zone rather than the web's ET, matching every
+    /// other date in the app.
+    ///
+    /// The formatters are pinned to `en_US_POSIX`: this is a fixed-shape label whose parts
+    /// get sliced back apart to drop the repeated meridiem, which a locale-dependent time
+    /// format (24-hour, meridiem-first) would break.
+    /// - Parameters:
+    ///   - start: When the window opened.
+    ///   - end: When it closes.
+    ///   - timeZone: The zone to read both instants in; defaults to the device's.
+    public nonisolated static func windowRange(start: Date, end: Date, timeZone: TimeZone = .current) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let day = rangeFormatter("MMM d", timeZone)
+        let time = rangeFormatter("h:mm a", timeZone)
+
+        // A window that crosses midnight needs both dates spelled out.
+        guard calendar.isDate(start, inSameDayAs: end) else {
+            return "\(day.string(from: start)), \(time.string(from: start))–\(day.string(from: end)), \(time.string(from: end))"
+        }
+        let startTime = time.string(from: start)
+        let endTime = time.string(from: end)
+        // Same meridiem on both ends: print it once, on the end, as the web does.
+        if let meridiem = startTime.split(separator: " ").last, endTime.hasSuffix(meridiem) {
+            let startWithoutMeridiem = startTime.dropLast(meridiem.count + 1)
+            return "\(day.string(from: start)), \(startWithoutMeridiem)–\(endTime)"
+        }
+        return "\(day.string(from: start)), \(startTime)–\(endTime)"
+    }
+
+    /// A fixed-format date formatter for `windowRange`'s parts.
+    private nonisolated static func rangeFormatter(_ format: String, _ timeZone: TimeZone) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = format
+        return formatter
+    }
+
+    /// The live cents for whichever side the amount tiles are quoting.
+    public var selectedCents: Int? {
+        switch selectedSide {
+        case .up: return upCents
+        case .down: return downCents
+        }
+    }
+
+    /// What a stake would pay out on the selected side, or `nil` before a book arrives —
+    /// the tile then shows the stake alone rather than a made-up payout.
+    /// - Parameter dollars: The tile's whole-dollar stake.
+    public func potentialWin(dollars: Int) -> Decimal? {
+        guard let selectedCents else { return nil }
+        return Self.potentialWin(dollars: dollars, cents: selectedCents)
+    }
+
+    /// `shares = stake / price`, each share settling at $1 — the same `PayoutCalculator`
+    /// the trade sheet quotes, so the tile and the sheet it opens can't disagree.
+    /// - Parameters:
+    ///   - dollars: The whole-dollar stake.
+    ///   - cents: The side's price in cents (1…99).
+    public nonisolated static func potentialWin(dollars: Int, cents: Int) -> Decimal {
+        PayoutCalculator.potential(amountUSD: Decimal(dollars), priceCents: Decimal(cents)).payoutUSD
+    }
+
     /// How a closed window turned out.
     public enum Settlement: Equatable {
         /// The price finished above where it started.
@@ -411,10 +544,19 @@ public final class BTCLiveViewModel {
         await load()
     }
 
-    /// Forwards an Up/Down tap to the host via the `onQuickBet` callback.
-    /// - Parameter side: Which side the user tapped.
-    public func quickBet(_ side: BetSide) {
-        onQuickBet(side)
+    /// Picks the side the amount tiles quote and bet on. Selecting alone places nothing —
+    /// the tile does that — so this is safe to fire on every tap.
+    /// - Parameter side: The side the user tapped.
+    public func select(_ side: BetSide) {
+        guard selectedSide != side else { return }
+        selectedSide = side
+    }
+
+    /// Forwards an amount tile's tap to the host, which opens its trade flow on the
+    /// selected side with this stake already entered.
+    /// - Parameter dollars: The tile's whole-dollar stake.
+    public func placeBet(dollars: Int) {
+        onQuickBet(selectedSide, dollars)
     }
 
     // MARK: Loading

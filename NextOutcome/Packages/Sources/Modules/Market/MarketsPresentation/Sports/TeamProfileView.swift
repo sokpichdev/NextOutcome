@@ -31,6 +31,7 @@ public struct TeamProfileView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(DSColor.background)
+        .hidesTabBar()
         .task { await viewModel.loadIfNeeded() }
     }
 

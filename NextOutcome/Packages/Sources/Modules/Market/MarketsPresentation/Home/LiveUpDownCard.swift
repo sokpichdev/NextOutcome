@@ -36,11 +36,37 @@ public struct LiveUpDownCard: View {
                         Text(event.seriesTitle ?? event.title).font(DSFont.headline)
                             .foregroundStyle(DSColor.textPrimary).lineLimit(1)
                     }
-                    HStack {
-                        NavigationLink(value: navigationTarget) { Text("Up").frame(maxWidth: .infinity) }
-                            .buttonStyle(DSBuyYesButtonStyle())
-                        NavigationLink(value: navigationTarget) { Text("Down").frame(maxWidth: .infinity) }
-                            .buttonStyle(DSBuyNoButtonStyle())
+                    HStack(spacing: DSLayout.spacing) {
+                        NavigationLink(value: navigationTarget) {
+                            Text("Up")
+                                .font(DSFont.headline)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, DSLayout.spacing)
+                        }
+                        .buttonStyle(
+                            DSRaisedButtonStyle(
+                                face: DSColor.positive,
+                                lip: DSLip.tint(DSColor.positive),
+                                cornerRadius: DSLayout.cardRadius,
+                                depth: DSDepth.medium
+                            )
+                        )
+                        NavigationLink(value: navigationTarget) {
+                            Text("Down")
+                                .font(DSFont.headline)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, DSLayout.spacing)
+                        }
+                        .buttonStyle(
+                            DSRaisedButtonStyle(
+                                face: DSColor.negative,
+                                lip: DSLip.tint(DSColor.negative),
+                                cornerRadius: DSLayout.cardRadius,
+                                depth: DSDepth.medium
+                            )
+                        )
                     }
                     Label("LIVE · Bitcoin", systemImage: "circle.fill")
                         .font(DSFont.caption).foregroundStyle(DSColor.negative)

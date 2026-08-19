@@ -150,12 +150,15 @@ final class BTCLiveViewModelTests: XCTestCase {
         symbol: String = "BTC",
         windowInterval: TimeInterval = 300,
         spotRepository: FakeCryptoSpotPriceRepository = FakeCryptoSpotPriceRepository(),
-        spotStreamer: FakeCryptoSpotPriceStreaming = FakeCryptoSpotPriceStreaming()
+        spotStreamer: FakeCryptoSpotPriceStreaming = FakeCryptoSpotPriceStreaming(),
+        onQuickBet: @escaping @MainActor (BTCLiveViewModel.BetSide, Int) -> Void = { _, _ in }
     ) -> BTCLiveViewModel {
         BTCLiveViewModel(
             assetID: "asset-1",
             eventID: "event-1",
             windowEnd: windowEnd,
+            title: "BTC Up or Down 5m",
+            iconURL: nil,
             symbol: symbol,
             windowInterval: windowInterval,
             fetchHistory: FetchPriceHistoryUseCase(repository: repository),
@@ -165,7 +168,7 @@ final class BTCLiveViewModelTests: XCTestCase {
             observeSpotPrice: ObserveCryptoSpotPriceUseCase(repository: spotRepository, stream: spotStreamer),
             fetchPriceWindow: FetchCryptoPriceWindowUseCase(repository: spotRepository),
             fetchCandles: FetchCryptoCandlesUseCase(repository: spotRepository),
-            onQuickBet: { _ in }
+            onQuickBet: onQuickBet
         )
     }
 
@@ -732,5 +735,48 @@ final class BTCLiveViewModelTests: XCTestCase {
         vm.refreshCountdown()
 
         XCTAssertFalse(notified, "an unchanged countdown must not invalidate observers")
+    }
+
+    // MARK: - Quick bet
+
+    /// Up is the side the screen opens on, matching web — the amount tiles below always
+    /// quote *some* side, so there is no unselected state.
+    @MainActor
+    func test_selectedSide_defaultsToUp() {
+        let vm = makeVM(repository: FakeOrderbookRepository(), windowEnd: Date())
+        XCTAssertEqual(vm.selectedSide, .up)
+    }
+
+    @MainActor
+    func test_select_switchesTheSideTheAmountTilesQuote() {
+        let vm = makeVM(repository: FakeOrderbookRepository(), windowEnd: Date())
+        vm.select(.down)
+        XCTAssertEqual(vm.selectedSide, .down)
+    }
+
+    /// The amount tile is what places the bet now, so it must carry both the selected side
+    /// and the tapped amount out to the host's trade sheet.
+    @MainActor
+    func test_placeBet_forwardsSelectedSideAndAmount() {
+        var received: (side: BTCLiveViewModel.BetSide, dollars: Int)?
+        let vm = makeVM(
+            repository: FakeOrderbookRepository(),
+            windowEnd: Date(),
+            onQuickBet: { side, dollars in received = (side, dollars) }
+        )
+
+        vm.select(.down)
+        vm.placeBet(dollars: 25)
+
+        XCTAssertEqual(received?.side, .down)
+        XCTAssertEqual(received?.dollars, 25)
+    }
+
+    /// Before a book arrives there is no price to win against, so the tile shows the stake
+    /// alone rather than a made-up payout.
+    @MainActor
+    func test_potentialWin_withoutABook_isNil() {
+        let vm = makeVM(repository: FakeOrderbookRepository(), windowEnd: Date())
+        XCTAssertNil(vm.potentialWin(dollars: 25))
     }
 }

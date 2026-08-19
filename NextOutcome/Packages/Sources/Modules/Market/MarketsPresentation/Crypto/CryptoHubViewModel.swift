@@ -102,6 +102,27 @@ public final class CryptoHubViewModel {
         liveWindow = await fetchLiveWindow.execute(series: liveSeries, now: now())
     }
 
+    /// The window that is live now in the same series as `target` — what the live screen
+    /// advances into when its own window settles.
+    ///
+    /// The series comes from the window on screen, not from `liveSeries`: that one is the
+    /// hub's pinned BTC 5-minute card, so using it here would advance an ETH daily window
+    /// into a Bitcoin 5-minute one.
+    ///
+    /// `nil` means "not yet", never an error — the grid may not have rolled when the tap
+    /// landed, and Gamma occasionally can't serve a brand-new window for a second or two.
+    /// The caller keeps its button so the user can try again.
+    /// - Parameter target: The window currently on screen.
+    /// - Returns: A target for the next window, or `nil` if there isn't one to move to.
+    public func nextWindow(after target: CryptoUpDownNavigationTarget) async -> CryptoUpDownNavigationTarget? {
+        guard let series = target.series else { return nil }
+        guard let event = await fetchLiveWindow.execute(series: series, now: now()) else { return nil }
+        // Tapped a moment before the boundary: the live window is still the one on screen,
+        // and "advancing" into it would look like a refresh that did nothing.
+        guard event.id != target.eventID else { return nil }
+        return CryptoUpDownNavigationTarget(event: event)
+    }
+
     /// When the current window closes and the pinned card should be re-fetched.
     ///
     /// Scheduling on the boundary keeps the card aligned with the grid; a fixed-interval

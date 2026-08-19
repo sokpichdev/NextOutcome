@@ -289,6 +289,8 @@ final class AppContainer {
                 assetID: context.assetID,
                 eventID: context.eventID,
                 windowEnd: context.windowEnd,
+                title: context.title,
+                iconURL: context.iconURL,
                 symbol: context.symbol,
                 windowInterval: context.windowInterval,
                 fetchHistory: FetchPriceHistoryUseCase(repository: orderbookRepository),

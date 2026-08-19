@@ -77,6 +77,7 @@ public struct MarketDetailView: View {
             .padding(.top, DSLayout.spacing)
         }
         .background(DSColor.background)
+        .hidesTabBar()
         .detailToolbar(
             title: market.question, iconURL: market.imageURL,
             actions: [.rules, .code, .bookmark, .link], onAction: handleHeaderAction

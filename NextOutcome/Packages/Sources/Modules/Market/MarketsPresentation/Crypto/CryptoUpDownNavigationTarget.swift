@@ -21,6 +21,11 @@ public struct CryptoUpDownNavigationTarget: Hashable {
     /// window open (and therefore the price to beat, the spot-price range and the chart's
     /// title) from `windowEnd` minus this — so a wrong value shows the wrong market.
     public let windowInterval: TimeInterval
+    /// The series name for the live screen's header, e.g. "BTC Up or Down 5m". Carried
+    /// here because it lives on the `Event`, which the Orderbook slice can't see.
+    public let title: String
+    /// The market's icon (the coin logo) for that header.
+    public let iconURL: URL?
     /// The underlying market, needed to open a `TradeSheet` on quick-bet.
     public let market: Market
 
@@ -31,6 +36,8 @@ public struct CryptoUpDownNavigationTarget: Hashable {
         windowEnd: Date,
         symbol: String,
         windowInterval: TimeInterval,
+        title: String,
+        iconURL: URL?,
         market: Market
     ) {
         self.assetID = assetID
@@ -38,13 +45,77 @@ public struct CryptoUpDownNavigationTarget: Hashable {
         self.windowEnd = windowEnd
         self.symbol = symbol
         self.windowInterval = windowInterval
+        self.title = title
+        self.iconURL = iconURL
         self.market = market
+    }
+
+    /// Builds the target for an Up/Down window event, or `nil` when the event has no
+    /// market or no "Up" outcome — there is then nothing to chart or trade, so there is
+    /// nothing to push.
+    ///
+    /// Lives here rather than in `CryptoUpDownCard` because the card is no longer the only
+    /// way a window is opened: advancing a settled window to the next one builds a target
+    /// from a freshly fetched event, and the two must agree on every field.
+    /// - Parameter event: The window event, as Gamma serves it.
+    public init?(event: Event) {
+        guard let market = event.markets.first,
+              let up = market.outcomes.first(where: { $0.title.lowercased() == "up" })
+        else { return nil }
+        self.init(
+            assetID: up.id,
+            eventID: event.id,
+            windowEnd: market.endDate ?? .distantFuture,
+            symbol: Self.coinSymbol(for: event),
+            windowInterval: Self.windowInterval(for: event),
+            // The series name, not the per-window event title ("Bitcoin Up or Down -
+            // August 3, 10:15AM-10:20AM ET"), which is stale the moment the window rolls.
+            title: event.seriesTitle ?? event.title,
+            iconURL: event.imageURL,
+            market: market
+        )
+    }
+
+    /// The series this window belongs to, recovered from its own slug, so "what is live
+    /// now?" can be asked about *this* coin and cadence rather than a hardcoded series.
+    /// `nil` for an event whose slug isn't a grid slug (a one-off market).
+    public var series: ClockGriddedSeries? {
+        ClockGriddedSeries(windowSlug: market.slug, windowSeconds: Int(windowInterval))
+    }
+
+    /// Ticker symbols for `polymarket.com/api/crypto/*` (the real dollar spot-price feed),
+    /// matched against `event.tags`. This screen isn't BTC-only, so the symbol sent to that
+    /// feed must reflect the actual event.
+    private static let coinSymbols: [String: String] = [
+        "bitcoin": "BTC", "ethereum": "ETH", "solana": "SOL",
+        "xrp": "XRP", "dogecoin": "DOGE", "bnb": "BNB",
+    ]
+
+    /// The coin ticker symbol for the spot-price feed, derived from the event's tags.
+    /// Falls back to "BTC" only as a last resort (shouldn't happen for a `.upDown`-classified
+    /// event, which always carries a known coin tag in practice).
+    static func coinSymbol(for event: Event) -> String {
+        for tag in event.tags {
+            if let symbol = coinSymbols[tag.slug.lowercased()] { return symbol }
+        }
+        return "BTC"
+    }
+
+    /// How long this event's betting window runs, from the cadence its series slug encodes.
+    ///
+    /// The destination derives the window *open* — and with it the price to beat, the
+    /// spot-price range and the chart's title — from `windowEnd` minus this, so a daily
+    /// market handed the 5-minute default charts the last five minutes of a 24-hour window.
+    /// Falls back to 5 minutes for a series with no recognizable cadence.
+    static func windowInterval(for event: Event) -> TimeInterval {
+        RecurrenceCadence(seriesSlug: event.recurrence)?.windowSeconds ?? 300
     }
 
     /// The `BTCLiveContext` this target carries, for building the live view model.
     public var liveContext: BTCLiveContext {
         BTCLiveContext(
             assetID: assetID, eventID: eventID, windowEnd: windowEnd,
+            title: title, iconURL: iconURL,
             symbol: symbol, windowInterval: windowInterval
         )
     }

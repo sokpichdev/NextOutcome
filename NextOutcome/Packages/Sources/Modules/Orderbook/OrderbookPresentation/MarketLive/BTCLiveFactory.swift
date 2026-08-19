@@ -13,6 +13,12 @@ public struct BTCLiveContext: Sendable {
     public let eventID: String     // gamma event id (for the /trades ticker)
     /// When the current window closes (drives the countdown).
     public let windowEnd: Date
+    /// The market's name for the header, e.g. "BTC Up or Down 5m". Supplied by the caller
+    /// because the series title lives on the Markets slice's `Event`, which this screen
+    /// deliberately doesn't import.
+    public let title: String
+    /// The market's icon (the coin logo) for the header.
+    public let iconURL: URL?
     /// The underlying crypto asset's ticker symbol (e.g. "BTC", "ETH"), used to query
     /// the real dollar spot-price feed. This screen isn't BTC-only — the Crypto hub
     /// opens it for any Up/Down coin — so this must reflect the actual event's asset,
@@ -29,29 +35,33 @@ public struct BTCLiveContext: Sendable {
         assetID: String,
         eventID: String,
         windowEnd: Date,
+        title: String,
+        iconURL: URL?,
         symbol: String,
         windowInterval: TimeInterval = 300
     ) {
         self.assetID = assetID
         self.eventID = eventID
         self.windowEnd = windowEnd
+        self.title = title
+        self.iconURL = iconURL
         self.symbol = symbol
         self.windowInterval = windowInterval
     }
 }
 
 /// App-provided builder for a `BTCLiveViewModel`, so feature screens can open the live
-/// BTC screen without importing the Data layer. `onQuickBet` forwards Up/Down taps to
-/// the host's trade-sheet / order-flow entry point.
+/// BTC screen without importing the Data layer. `onQuickBet` forwards an amount tile's
+/// (side, stake) to the host's trade-sheet / order-flow entry point.
 public struct BTCLiveViewModelFactory: Sendable {
     /// The closure (supplied by `AppContainer`) that builds the view model from a context
     /// and a quick-bet callback.
-    private let make: @Sendable @MainActor (BTCLiveContext, @escaping @MainActor (BTCLiveViewModel.BetSide) -> Void) -> BTCLiveViewModel
+    private let make: @Sendable @MainActor (BTCLiveContext, @escaping @MainActor (BTCLiveViewModel.BetSide, Int) -> Void) -> BTCLiveViewModel
 
     /// Wraps a builder closure.
     /// - Parameter make: Builds a `BTCLiveViewModel` from a context and quick-bet handler.
     public init(
-        _ make: @escaping @Sendable @MainActor (BTCLiveContext, @escaping @MainActor (BTCLiveViewModel.BetSide) -> Void) -> BTCLiveViewModel
+        _ make: @escaping @Sendable @MainActor (BTCLiveContext, @escaping @MainActor (BTCLiveViewModel.BetSide, Int) -> Void) -> BTCLiveViewModel
     ) {
         self.make = make
     }
@@ -59,12 +69,13 @@ public struct BTCLiveViewModelFactory: Sendable {
     /// Calls the factory like a function: `factory(context, onQuickBet:)`.
     /// - Parameters:
     ///   - context: The resolved event details (asset, event, window end).
-    ///   - onQuickBet: Called when the user taps Up/Down; the host opens its trade flow.
+    ///   - onQuickBet: Called with the selected side and stake when an amount tile is
+    ///     tapped; the host opens its trade flow already holding that amount.
     /// - Returns: A ready-to-use `BTCLiveViewModel`.
     @MainActor
     public func callAsFunction(
         _ context: BTCLiveContext,
-        onQuickBet: @escaping @MainActor (BTCLiveViewModel.BetSide) -> Void
+        onQuickBet: @escaping @MainActor (BTCLiveViewModel.BetSide, Int) -> Void
     ) -> BTCLiveViewModel {
         make(context, onQuickBet)
     }
