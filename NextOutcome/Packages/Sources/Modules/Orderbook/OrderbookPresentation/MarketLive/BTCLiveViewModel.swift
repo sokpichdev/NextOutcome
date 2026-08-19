@@ -249,15 +249,31 @@ public final class BTCLiveViewModel {
     /// The hysteresis state behind `candleDomain`.
     private var candleScale = CandleChartScale()
 
-    /// Re-derives `candleDomain` from the current series and the price to beat.
+    /// How many candles fit in the visible chart frame at once. Sized to match the web's default zoom.
+    public static let visibleCandleCount = 24
+
+    /// Re-derives `candleDomain` from the recent visible candle series, current price, and price to beat.
+    ///
+    /// Using the recent visible window rather than the entire multi-hour archive keeps the
+    /// dynamic Y-range compact, allowing individual candles to render with prominent vertical
+    /// height and clear wicks/bodies instead of flattening into tiny slivers.
     ///
     /// Publishes only when the band actually moved, so a tick that lands inside the
     /// existing band costs the chart nothing at all.
     private func refreshCandleDomain() {
         let series = candles
         guard !series.isEmpty else { return }
-        var lo = series.map { Self.double($0.low) }.min() ?? 0
-        var hi = series.map { Self.double($0.high) }.max() ?? 1
+        let recent = series.suffix(Self.visibleCandleCount)
+        var lo = recent.map { Self.double($0.low) }.min() ?? 0
+        var hi = recent.map { Self.double($0.high) }.max() ?? 1
+
+        // Fold in the live spot price so ticks at extremes dynamically adapt the scale.
+        if let current = currentPrice {
+            let value = Self.double(current)
+            lo = Swift.min(lo, value)
+            hi = Swift.max(hi, value)
+        }
+
         // Fold in the target so the price-to-beat line can never sit off-screen.
         //
         // Deliberately the server's dollar open rather than `priceToBeat`: that property

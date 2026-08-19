@@ -30,9 +30,10 @@ struct CandleChartScale: Equatable, Sendable {
     /// Loose enough that ordinary intra-window movement never triggers a re-fit.
     static let shrinkThreshold = 0.55
     /// Head-room added above and below the raw extremes before quantising.
-    static let padding = 0.08
+    /// Kept compact (4%) so candle bodies and wicks maximize their vertical height in the chart frame.
+    static let padding = 0.04
     /// Roughly how many quantisation steps should span the band. Three axis marks read
-    /// comfortably against six steps.
+    /// comfortably against six steps while keeping the dynamic range compact.
     static let targetSteps = 6.0
 
     /// Folds fresh extremes into the band.

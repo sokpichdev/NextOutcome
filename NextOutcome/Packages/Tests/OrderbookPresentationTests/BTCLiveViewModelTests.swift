@@ -709,6 +709,49 @@ final class BTCLiveViewModelTests: XCTestCase {
         XCTAssertTrue(vm.candleDomain!.contains(64_000))
     }
 
+    /// Regression test for dynamic value range scaling: when older historical candles have
+    /// a large price swing (e.g. 50,000 to 70,000) hours ago, the dynamic candle domain
+    /// must scale to the recent visible window (e.g. 63,800 to 63,900) rather than the whole
+    /// archive. This keeps the Y-range compact so visible candles are rendered with prominent height.
+    @MainActor
+    func test_candleDomain_usesRecentVisibleCandles_notEntireMultiHourArchive() async {
+        let windowEnd = Date(timeIntervalSince1970: 1_000_000)
+        let repository = FakeOrderbookRepository()
+        repository.points = [PriceHistoryPoint(date: windowEnd.addingTimeInterval(-60), price: 0.5)]
+
+        let spotRepository = FakeCryptoSpotPriceRepository()
+        let lastStart = Date(timeIntervalSince1970: 999_600)
+        // 50 candles: the oldest 26 have extreme low/high (50,000 to 70,000), while the recent
+        // 24 candles are tightly bounded around 63,800...63,900.
+        var allCandles: [Candle] = []
+        for i in (0..<50).reversed() {
+            let start = lastStart.addingTimeInterval(-300 * Double(i))
+            let isOld = i >= BTCLiveViewModel.visibleCandleCount
+            let low: Decimal = isOld ? 50_000 : 63_800
+            let high: Decimal = isOld ? 70_000 : 63_900
+            allCandles.append(Candle(open: low, high: high, low: low, close: high, start: start))
+        }
+        spotRepository.candlePages = [allCandles]
+        spotRepository.window = CryptoPriceWindow(
+            openPrice: 63_850, closePrice: nil, timestamp: windowEnd, completed: false
+        )
+
+        let vm = makeVM(repository: repository, windowEnd: windowEnd, spotRepository: spotRepository)
+        vm.start()
+        for _ in 0..<200 { await Task.yield() }
+        vm.stop()
+
+        guard let domain = vm.candleDomain else {
+            XCTFail("candleDomain should be populated")
+            return
+        }
+        // Domain span should be compact (around recent ~100-200 span) and NOT 20,000+
+        let span = domain.upperBound - domain.lowerBound
+        XCTAssertLessThan(span, 1_000, "domain span should be sized to recent candles, not historical 20,000 range")
+        XCTAssertTrue(domain.contains(63_800))
+        XCTAssertTrue(domain.contains(63_900))
+    }
+
     /// `@Observable` republishes on every setter call, so an unguarded countdown write
     /// invalidated the whole screen — candle chart included — once a second even when the
     /// value was identical. Only a genuine second change may notify.

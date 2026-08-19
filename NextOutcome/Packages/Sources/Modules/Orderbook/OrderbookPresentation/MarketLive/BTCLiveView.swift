@@ -18,9 +18,15 @@ public struct BTCLiveView: View {
     @State private var viewModel: BTCLiveViewModel
 
     /// The candle chart's opening scroll position, captured once the first series lands.
-    /// Held in `@State` rather than recomputed per body pass so `chartScrollPosition`'s
-    /// "initial" value is genuinely initial — see `candleChartBody`.
     @State private var initialAnchor: Date?
+
+    /// The current horizontal scroll position (left edge of chart viewport).
+    @State private var scrollPosition: Date?
+
+    /// The current number of visible candles on screen (controlled by pinch zoom).
+    /// Clamped between 8 (zoomed in close-up) and 60 (zoomed out wide overview).
+    @State private var visibleCandleCount: Double = Double(BTCLiveViewModel.visibleCandleCount)
+    @State private var baseVisibleCandleCount: Double = Double(BTCLiveViewModel.visibleCandleCount)
 
     /// Moves the user on once this window has closed. `nil` leaves the closed state as a
     /// dead end with an explanatory label rather than a button that goes nowhere.
@@ -302,10 +308,8 @@ public struct BTCLiveView: View {
     }
 
     /// How many candles fit in the chart frame at once; older candles scroll in from the
-    /// left. A count rather than a duration, so it holds for every cadence: 24 five-minute
-    /// candles ≈ two hours on screen (matching the web's default zoom), 24 fifteen-minute
-    /// candles ≈ six.
-    private static let visibleCandleCount = 24
+    /// left. Sourced from `BTCLiveViewModel.visibleCandleCount`.
+    private static var visibleCandleCount: Int { BTCLiveViewModel.visibleCandleCount }
 
     /// The candlestick chart: a wick (high–low) and body (open–close) per candle, plus a
     /// dashed price-to-beat line and the live current-price line.
@@ -347,31 +351,22 @@ public struct BTCLiveView: View {
 
     private var candleChartBody: some View {
         let candles = viewModel.candles
-        // The width of a *candle*, not of the betting window. They coincide only for the
-        // 5-minute series; sizing the axis by the window spread a daily market's 22 hours
-        // of 15-minute candles across a 24-day domain, stacking them all on the left edge.
         let interval = viewModel.candleWidth
-        let visibleSpan = interval * Double(Self.visibleCandleCount)
-        // The stabilised band from the view model: it only moves when the price actually
-        // leaves it, so an ordinary tick can't rescale the chart. `dollarDomain` remains
-        // the fallback for the brief pre-seed window (and for the two line charts).
-        let domain = viewModel.candleDomain ?? dollarDomain(
-            low: candles.map { doubleValue($0.low) }.min(),
-            high: candles.map { doubleValue($0.high) }.max()
-        )
-        // The x-domain, stated explicitly and carried one whole interval past the newest
-        // candle. Left to infer it, Swift Charts ends the domain at `last.start` — and
-        // because a `RectangleMark` is *centred* on its x value, the newest candle then
-        // straddles the plot's right edge and gets sliced in half. The extra interval is
-        // the same one `trailingAnchor` already assumes, so the two now agree.
+        let visibleSpan = interval * visibleCandleCount
         let lastStart = candles.last?.start ?? .now
         let xDomain = (candles.first?.start ?? lastStart)...lastStart.addingTimeInterval(interval)
-        // The left edge that puts the newest candle at the right edge of the frame.
         let trailingAnchor = lastStart.addingTimeInterval(interval - visibleSpan)
-        // A body thin enough to leave gaps between the visible candles, but never a hairline.
-        let bodyWidth = max(3.0, min(14.0, 260.0 / Double(Self.visibleCandleCount)))
-        // Open == close would give a zero-height rectangle, which draws nothing. Floor the
-        // body to a sliver of the visible range so a flat candle still reads as a candle.
+        let currentScroll = scrollPosition ?? initialAnchor ?? trailingAnchor
+
+        let domain = dynamicCandleDomain(
+            candles: candles,
+            scrollPosition: currentScroll,
+            visibleSpan: visibleSpan,
+            interval: interval,
+            trailingAnchor: trailingAnchor
+        )
+
+        let bodyWidth = max(2.5, min(18.0, 260.0 / visibleCandleCount))
         let minBody = (domain.upperBound - domain.lowerBound) * 0.004
         return Chart {
             ForEach(candles, id: \.start) { candle in
@@ -391,16 +386,12 @@ public struct BTCLiveView: View {
                 )
                 .foregroundStyle(candleColor(candle))
             }
-            if let target = viewModel.priceToBeat {
+            if let target = viewModel.priceToBeat, domain.contains(doubleValue(target)) {
                 RuleMark(y: .value("Price to beat", doubleValue(target)))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                     .foregroundStyle(DSColor.textSecondary)
             }
-            // The live price line: the value that actually moves while a window is open.
-            // Coloured against the price to beat, so the line and the forming candle agree
-            // on who is winning. Its label is drawn in `.chartOverlay` below, not as an
-            // `.annotation` — see `priceTagOverlay`.
-            if let current = viewModel.currentPrice {
+            if let current = viewModel.currentPrice, domain.contains(doubleValue(current)) {
                 RuleMark(y: .value("Current price", doubleValue(current)))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
                     .foregroundStyle(currentPriceColor)
@@ -410,19 +401,18 @@ public struct BTCLiveView: View {
         .chartScrollableAxes(.horizontal)
         .chartXScale(domain: xDomain)
         .chartXVisibleDomain(length: visibleSpan)
-        // Captured once, on the first non-empty series. Recomputing `trailingAnchor` every
-        // body pass meant this modifier's value changed each time a new 5-minute bucket
-        // opened, and Swift Charts can re-apply an "initial" position when it does.
-        .chartScrollPosition(initialX: initialAnchor ?? trailingAnchor)
+        .chartScrollPosition(x: Binding(
+            get: { scrollPosition ?? initialAnchor ?? trailingAnchor },
+            set: { scrollPosition = $0 }
+        ))
         .trailingScrollAnchor()
         .chartYScale(domain: domain)
-        // Tick-driven data changes must never animate: an interpolating chart is a moving
-        // chart. No implicit-animation source lives in this file, but ancestor
-        // transactions (the enclosing ScrollView's layout, a mode-chip tap) propagate.
         .transaction { $0.animation = nil }
-        // This body only exists once `candles` is non-empty (see `candleChart`), so its
-        // first appearance is exactly the moment the opening anchor becomes meaningful.
-        .onAppear { if initialAnchor == nil { initialAnchor = trailingAnchor } }
+        .simultaneousGesture(zoomGesture)
+        .onAppear {
+            if initialAnchor == nil { initialAnchor = trailingAnchor }
+            if scrollPosition == nil { scrollPosition = trailingAnchor }
+        }
         .chartXAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { _ in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
@@ -436,10 +426,6 @@ public struct BTCLiveView: View {
             AxisMarks(values: .automatic(desiredCount: 3)) { value in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                     .foregroundStyle(DSColor.separator)
-                // A reserved width and tabular figures. The axis gutter is the *other*
-                // thing whose size feeds back into the plot width — and therefore into
-                // every candle's x position — so it must not depend on how many digits
-                // the current band happens to print.
                 AxisValueLabel {
                     Text(LiveFormat.axis(value.as(Double.self)))
                         .font(DSFont.caption2)
@@ -518,6 +504,68 @@ public struct BTCLiveView: View {
             .background(currentPriceColor, in: RoundedRectangle(cornerRadius: 4))
     }
 
+    /// Dynamically computes the Y-axis range for whichever candles are currently visible
+    /// inside the chart's scrolled viewport and zoom level.
+    ///
+    /// When the user scrolls back into historical hours where the asset was trading at vastly
+    /// different levels, this re-fits the range to the visible slice so historical candles
+    /// remain centered, tall, and visible instead of clipping off-screen.
+    private func dynamicCandleDomain(
+        candles: [Candle],
+        scrollPosition: Date,
+        visibleSpan: TimeInterval,
+        interval: TimeInterval,
+        trailingAnchor: Date
+    ) -> ClosedRange<Double> {
+        let viewStart = scrollPosition.addingTimeInterval(-interval)
+        let viewEnd = scrollPosition.addingTimeInterval(visibleSpan + interval)
+
+        let visibleCandles = candles.filter { $0.start >= viewStart && $0.start <= viewEnd }
+        let slice = visibleCandles.isEmpty ? Array(candles.suffix(Int(visibleCandleCount.rounded()))) : visibleCandles
+
+        var lo = slice.map { doubleValue($0.low) }.min() ?? 0
+        var hi = slice.map { doubleValue($0.high) }.max() ?? 1
+
+        // If the viewport includes the live trailing edge, fold in the live spot price & priceToBeat
+        let isViewingLiveEdge = viewEnd >= trailingAnchor.addingTimeInterval(-interval)
+        if isViewingLiveEdge {
+            if let current = viewModel.currentPrice {
+                let value = doubleValue(current)
+                lo = min(lo, value)
+                hi = max(hi, value)
+            }
+            if let target = viewModel.priceToBeat {
+                let value = doubleValue(target)
+                lo = min(lo, value)
+                hi = max(hi, value)
+            }
+        }
+
+        guard hi > lo else {
+            let pad = max(abs(hi) * 0.001, 1)
+            return (lo - pad)...(hi + pad)
+        }
+        let pad = (hi - lo) * CandleChartScale.padding
+        let step = CandleChartScale.step(low: lo, high: hi)
+        let lower = ((lo - pad) / step).rounded(.down) * step
+        let upper = ((hi + pad) / step).rounded(.up) * step
+        return lower...(upper > lower ? upper : lower + step)
+    }
+
+    /// Pinch-to-zoom gesture on the candle chart: pinching in zooms out to reveal more candles;
+    /// pinching out zooms in for a detailed close-up view.
+    private var zoomGesture: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                let scale = value.magnification
+                let target = max(8.0, min(60.0, baseVisibleCandleCount / scale))
+                visibleCandleCount = target
+            }
+            .onEnded { _ in
+                baseVisibleCandleCount = visibleCandleCount
+            }
+    }
+
     /// Y-axis range for the dollar charts, fitted to the data.
     ///
     /// Without this Swift Charts picks its own domain, and both `AreaMark` and
@@ -529,6 +577,11 @@ public struct BTCLiveView: View {
     private func dollarDomain(low: Double?, high: Double?) -> ClosedRange<Double> {
         var lo = low ?? 0
         var hi = high ?? 1
+        if let current = viewModel.currentPrice {
+            let value = doubleValue(current)
+            lo = min(lo, value)
+            hi = max(hi, value)
+        }
         if let target = viewModel.priceToBeat {
             let value = doubleValue(target)
             lo = min(lo, value)
@@ -539,7 +592,7 @@ public struct BTCLiveView: View {
             let pad = max(abs(hi) * 0.001, 1)
             return (lo - pad)...(hi + pad)
         }
-        let pad = (hi - lo) * 0.08
+        let pad = (hi - lo) * 0.04
         return (lo - pad)...(hi + pad)
     }
 
