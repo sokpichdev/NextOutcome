@@ -71,13 +71,6 @@ public struct TradeSheet: View {
         .padding(DSLayout.margin)
         .frame(maxHeight: .infinity)
         .background(DSColor.background)
-        .onChange(of: viewModel.phase) { _, new in
-            guard new == .success else { return }
-            Task {
-                try? await Task.sleep(nanoseconds: 1_200_000_000)
-                dismiss()
-            }
-        }
     }
 
     /// The sheet header: market icon plus the market title and selected-outcome subtitle.
@@ -200,21 +193,111 @@ public struct TradeSheet: View {
         .disabled(!viewModel.isConfirmEnabled)
     }
 
-    /// The success state: an animated checkmark and the "simulated" caption.
+    /// The success state: an animated checkmark, trade receipt card, and Done button.
     private var successView: some View {
-        VStack(spacing: DSLayout.spacing) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(DSColor.positive)
-                .transition(.scale.combined(with: .opacity))
-            Text(viewModel.successCaption)
+        VStack(spacing: DSLayout.spacingLarge) {
+            Spacer(minLength: 0)
+
+            // Animated Success Icon
+            ZStack {
+                Circle()
+                    .fill(DSColor.positive.opacity(0.15))
+                    .frame(width: 76, height: 76)
+                Circle()
+                    .stroke(DSColor.positive.opacity(0.35), lineWidth: 2)
+                    .frame(width: 76, height: 76)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundStyle(DSColor.positive)
+            }
+            .transition(.scale.combined(with: .opacity))
+
+            // Title & Subtitle
+            VStack(spacing: DSLayout.spacingXSmall) {
+                Text("Order Placed!")
+                    .font(DSFont.title)
+                    .foregroundStyle(DSColor.textPrimary)
+                Text(viewModel.successCaption)
+                    .font(DSFont.caption)
+                    .foregroundStyle(DSColor.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            // Receipt Summary Card
+            VStack(spacing: DSLayout.spacingMedium) {
+                // Market and Outcome Row
+                HStack(spacing: DSLayout.spacingSmall) {
+                    CardIcon(url: viewModel.market.imageURL)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(viewModel.market.groupItemTitle ?? viewModel.market.question)
+                            .font(DSFont.subheadline.bold())
+                            .foregroundStyle(DSColor.textPrimary)
+                            .lineLimit(1)
+                        Text(viewModel.outcomeTitle)
+                            .font(DSFont.caption.bold())
+                            .foregroundStyle(viewModel.side == .yes ? DSColor.positive : DSColor.negative)
+                    }
+                    Spacer()
+                    // Traded Price pill
+                    Text("\(viewModel.priceCents)¢")
+                        .font(DSFont.subheadline.bold())
+                        .foregroundStyle(DSColor.textPrimary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(DSColor.surface)
+                        .clipShape(Capsule())
+                }
+
+                Divider().overlay(DSColor.separator)
+
+                // Key-value breakdown
+                VStack(spacing: DSLayout.spacingSmall) {
+                    receiptRow(title: "Amount Invested", value: MarketFormatting.currency(viewModel.amountUSD))
+                    receiptRow(title: "Contracts / Shares", value: "\(MarketFormatting.shares(viewModel.potential.shares)) shares")
+                    receiptRow(title: "Potential Payout", value: MarketFormatting.currency(viewModel.potential.payoutUSD), valueColor: DSColor.positive)
+                }
+            }
+            .padding(DSLayout.margin)
+            .background(DSColor.surfaceElevated)
+            .clipShape(RoundedRectangle(cornerRadius: DSLayout.cardRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: DSLayout.cardRadius, style: .continuous)
+                    .stroke(DSColor.separator, lineWidth: 0.5)
+            )
+
+            Spacer(minLength: 0)
+
+            // Done Action Button
+            Button {
+                dismiss()
+            } label: {
+                Text("Done")
+                    .font(DSFont.subheadline.bold())
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DSLayout.spacingMedium)
+            }
+            .buttonStyle(.plain)
+            .dsRaised(
+                face: DSColor.surfaceElevated,
+                lip: DSLip.surface,
+                isPressed: false
+            )
+        }
+        .padding(.vertical, DSLayout.spacing)
+        .sensoryFeedback(.success, trigger: viewModel.phase)
+        .animation(.easeOut(duration: 0.25), value: viewModel.phase)
+    }
+
+    private func receiptRow(title: String, value: String, valueColor: Color = DSColor.textPrimary) -> some View {
+        HStack {
+            Text(title)
                 .font(DSFont.subheadline)
                 .foregroundStyle(DSColor.textSecondary)
-                .multilineTextAlignment(.center)
+            Spacer()
+            Text(value)
+                .font(DSFont.subheadline.bold())
+                .foregroundStyle(valueColor)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, DSLayout.spacingXLarge)
-        .animation(.easeOut(duration: 0.25), value: viewModel.phase)
     }
 }
 
