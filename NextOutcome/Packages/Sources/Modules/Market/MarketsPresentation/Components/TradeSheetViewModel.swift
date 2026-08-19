@@ -50,8 +50,12 @@ public final class TradeSheetViewModel {
         case success
     }
 
-    /// The entered amount in cents (whole dollars only, built digit-by-digit).
-    public private(set) var amountCents: Int = 0   // dollars entered, digit-by-digit, in cents (no decimals — whole dollars)
+    /// The entered amount in cents.
+    public private(set) var amountCents: Int = 0
+
+    /// Raw input buffer tracking user keypad keystrokes (e.g. "15", "15.", "15.50").
+    private var inputString: String = ""
+
     /// The current phase.
     public private(set) var phase: Phase = .entering
     /// The caption shown on the success screen, making the "mock" nature explicit.
@@ -76,8 +80,10 @@ public final class TradeSheetViewModel {
         self.market = market
         self.side = side
         self.submitter = submitter
-        if let initialDollars {
-            amountCents = min(Self.maxAmountCents, max(0, initialDollars) * 100)
+        if let initialDollars, initialDollars > 0 {
+            let clampedDollars = min(Self.maxAmountCents / 100, max(0, initialDollars))
+            amountCents = clampedDollars * 100
+            inputString = "\(clampedDollars)"
         }
     }
 
@@ -111,12 +117,31 @@ public final class TradeSheetViewModel {
         Decimal(amountCents) / 100
     }
 
-    /// The entered amount formatted for display (e.g. "$1,234.00").
+    /// The entered amount formatted for display (e.g. "$1.00", "$15.50", "$15.").
     public var amountDisplay: String {
-        let dollars = amountCents / 100
-        let cents = amountCents % 100
+        if inputString.isEmpty {
+            return "$0.00"
+        }
+        if inputString.hasSuffix(".") {
+            let parts = inputString.split(separator: ".", omittingEmptySubsequences: false)
+            let dollars = Int(parts[0]) ?? 0
+            let dollarsFormatted = NumberFormatter.localizedString(from: NSNumber(value: dollars), number: .decimal)
+            return "$\(dollarsFormatted)."
+        }
+        if inputString.contains(".") {
+            let parts = inputString.split(separator: ".", omittingEmptySubsequences: false)
+            let dollars = Int(parts[0]) ?? 0
+            let dollarsFormatted = NumberFormatter.localizedString(from: NSNumber(value: dollars), number: .decimal)
+            let dec = String(parts[1])
+            if dec.count == 1 {
+                return "$\(dollarsFormatted).\(dec)0"
+            } else {
+                return "$\(dollarsFormatted).\(dec)"
+            }
+        }
+        let dollars = Int(inputString) ?? 0
         let dollarsFormatted = NumberFormatter.localizedString(from: NSNumber(value: dollars), number: .decimal)
-        return String(format: "$%@.%02d", dollarsFormatted, cents)
+        return "$\(dollarsFormatted).00"
     }
 
     /// The shares and "to win" payout for the entered amount, via `PayoutCalculator`.
@@ -141,37 +166,77 @@ public final class TradeSheetViewModel {
         let next = amountCents + dollars * 100
         guard next <= Self.maxAmountCents else { return }
         amountCents = next
+        if amountCents % 100 == 0 {
+            inputString = "\(amountCents / 100)"
+        } else {
+            inputString = String(format: "%d.%02d", amountCents / 100, amountCents % 100)
+        }
     }
 
     /// Appends a typed keypad digit, capped at the mock ceiling.
+    /// Inputting "1" produces $1.00 (whole dollars first).
     /// - Parameter digit: The digit (0–9) that was tapped.
     public func appendDigit(_ digit: Int) {
         guard phase == .entering else { return }
-        let next = amountCents * 10 + digit
-        guard next <= Self.maxAmountCents else { return }
-        amountCents = next
+        if inputString.contains(".") {
+            let parts = inputString.split(separator: ".", omittingEmptySubsequences: false)
+            if parts.count > 1 && parts[1].count >= 2 {
+                // Already at maximum 2 decimal places (cents)
+                return
+            }
+            let nextString = inputString + "\(digit)"
+            guard let nextCents = parseCents(nextString), nextCents <= Self.maxAmountCents else { return }
+            inputString = nextString
+            amountCents = nextCents
+        } else {
+            let nextString = (inputString == "0") ? "\(digit)" : (inputString + "\(digit)")
+            guard let nextCents = parseCents(nextString), nextCents <= Self.maxAmountCents else { return }
+            inputString = nextString
+            amountCents = nextCents
+        }
     }
 
-    /// Appends two zeroes from the keypad's "00" key, capped at the mock ceiling.
-    /// Rejected as a unit rather than digit-by-digit, so a near-ceiling amount doesn't
-    /// silently take only one of the two zeroes.
-    public func appendDoubleZero() {
+    /// Appends a decimal point from the keypad's "." key.
+    public func appendDecimal() {
         guard phase == .entering else { return }
-        let next = amountCents * 100
-        guard next <= Self.maxAmountCents else { return }
-        amountCents = next
+        if inputString.isEmpty {
+            inputString = "0."
+            amountCents = 0
+        } else if !inputString.contains(".") {
+            inputString += "."
+        }
     }
 
-    /// Removes the last entered digit.
+    /// Removes the last entered digit or decimal separator.
     public func backspace() {
         guard phase == .entering else { return }
-        amountCents /= 10
+        guard !inputString.isEmpty else { return }
+        inputString.removeLast()
+        amountCents = parseCents(inputString) ?? 0
     }
 
     /// Resets the entered amount to zero — the keypad's long-press-on-backspace action.
     public func clear() {
         guard phase == .entering else { return }
+        inputString = ""
         amountCents = 0
+    }
+
+    /// Parses a raw input string like "15", "15.", or "15.50" into total cents.
+    private func parseCents(_ s: String) -> Int? {
+        if s.isEmpty { return 0 }
+        let parts = s.split(separator: ".", omittingEmptySubsequences: false)
+        guard let dollars = Int(parts[0]) else { return nil }
+        var cents = 0
+        if parts.count > 1 && !parts[1].isEmpty {
+            let dec = String(parts[1])
+            if dec.count == 1 {
+                cents = (Int(dec) ?? 0) * 10
+            } else if dec.count >= 2 {
+                cents = Int(dec.prefix(2)) ?? 0
+            }
+        }
+        return dollars * 100 + cents
     }
 
     /// A reasonable mock ceiling ($100,000) so keypad entry can't scroll the amount

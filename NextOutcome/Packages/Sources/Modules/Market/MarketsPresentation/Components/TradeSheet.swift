@@ -59,8 +59,9 @@ public struct TradeSheet: View {
                 Spacer(minLength: 0)
                 quickAmountRow
                 DSNumberPad(
+                    secondaryKey: .decimal,
                     onDigit: viewModel.appendDigit,
-                    onSecondary: viewModel.appendDoubleZero,
+                    onSecondary: viewModel.appendDecimal,
                     onBackspace: viewModel.backspace,
                     onClear: viewModel.clear
                 )

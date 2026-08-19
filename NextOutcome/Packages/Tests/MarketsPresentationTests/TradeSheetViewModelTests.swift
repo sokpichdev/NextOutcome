@@ -48,29 +48,101 @@ final class TradeSheetViewModelTests: XCTestCase {
         XCTAssertEqual(vm.amountUSD, 25)
     }
 
-    /// A pre-filled amount is still editable: the keypad appends to it rather than
-    /// starting from scratch.
+    /// A pre-filled amount is still editable: backspace removes digits from it.
     func test_prefilledAmount_staysEditable() {
         let vm = TradeSheetViewModel(
-            market: makeMarket(), side: .yes, submitter: StubTradeSubmitter(), initialDollars: 5
+            market: makeMarket(), side: .yes, submitter: StubTradeSubmitter(), initialDollars: 50
         )
 
         vm.backspace()
 
-        XCTAssertEqual(vm.amountDisplay, "$0.50")
+        XCTAssertEqual(vm.amountDisplay, "$5.00")
+        XCTAssertEqual(vm.amountUSD, 5)
     }
 
-    func test_amountDisplay_showsCents() {
+    /// Inputting "1" produces $1.00 (whole dollars first, not $0.01).
+    func test_appendDigit_inputsWholeDollarsFirst() {
         let vm = makeVM()
 
         XCTAssertEqual(vm.amountDisplay, "$0.00")
 
         vm.appendDigit(1)
-        vm.appendDigit(5)
-        vm.appendDigit(0)
+        XCTAssertEqual(vm.amountDisplay, "$1.00")
+        XCTAssertEqual(vm.amountUSD, 1)
+        XCTAssertEqual(vm.amountCents, 100)
 
+        vm.appendDigit(5)
+        XCTAssertEqual(vm.amountDisplay, "$15.00")
+        XCTAssertEqual(vm.amountUSD, 15)
+        XCTAssertEqual(vm.amountCents, 1500)
+    }
+
+    /// Tapping "." transitions to cent entry.
+    func test_appendDecimal_allowsCentsInput() {
+        let vm = makeVM()
+
+        vm.appendDigit(1)
+        vm.appendDecimal()
+        XCTAssertEqual(vm.amountDisplay, "$1.")
+
+        vm.appendDigit(5)
         XCTAssertEqual(vm.amountDisplay, "$1.50")
         XCTAssertEqual(vm.amountUSD, Decimal(string: "1.50"))
+        XCTAssertEqual(vm.amountCents, 150)
+
+        vm.appendDigit(2)
+        XCTAssertEqual(vm.amountDisplay, "$1.52")
+        XCTAssertEqual(vm.amountUSD, Decimal(string: "1.52"))
+        XCTAssertEqual(vm.amountCents, 152)
+
+        // Additional digits beyond 2 decimal places are ignored.
+        vm.appendDigit(9)
+        XCTAssertEqual(vm.amountDisplay, "$1.52")
+        XCTAssertEqual(vm.amountCents, 152)
+    }
+
+    /// Tapping "." on an empty pad starts "$0.".
+    func test_appendDecimal_onEmptyPad_startsZeroDecimal() {
+        let vm = makeVM()
+
+        vm.appendDecimal()
+        XCTAssertEqual(vm.amountDisplay, "$0.")
+
+        vm.appendDigit(5)
+        XCTAssertEqual(vm.amountDisplay, "$0.50")
+        XCTAssertEqual(vm.amountUSD, Decimal(string: "0.50"))
+        XCTAssertEqual(vm.amountCents, 50)
+
+        // Duplicate "." is ignored
+        vm.appendDecimal()
+        XCTAssertEqual(vm.amountDisplay, "$0.50")
+    }
+
+    /// Backspacing removes decimals and digits sequentially.
+    func test_backspace_removesDecimalsAndDigitsSequentially() {
+        let vm = makeVM()
+
+        vm.appendDigit(1)
+        vm.appendDecimal()
+        vm.appendDigit(5)
+        vm.appendDigit(2)
+        XCTAssertEqual(vm.amountDisplay, "$1.52")
+
+        vm.backspace()
+        XCTAssertEqual(vm.amountDisplay, "$1.50")
+        XCTAssertEqual(vm.amountCents, 150)
+
+        vm.backspace()
+        XCTAssertEqual(vm.amountDisplay, "$1.")
+        XCTAssertEqual(vm.amountCents, 100)
+
+        vm.backspace()
+        XCTAssertEqual(vm.amountDisplay, "$1.00")
+        XCTAssertEqual(vm.amountCents, 100)
+
+        vm.backspace()
+        XCTAssertEqual(vm.amountDisplay, "$0.00")
+        XCTAssertEqual(vm.amountCents, 0)
     }
 
     func test_addAmount_accumulatesWholeDollars() {
@@ -106,30 +178,6 @@ final class TradeSheetViewModelTests: XCTestCase {
         XCTAssertEqual(vm.priceCents, 50) // No price 0.5 * 100
     }
 
-    func test_appendDoubleZero_appendsBothZeroes() {
-        let vm = makeVM()
-
-        vm.appendDigit(5)
-        vm.appendDoubleZero()
-
-        XCTAssertEqual(vm.amountCents, 500)
-        XCTAssertEqual(vm.amountDisplay, "$5.00")
-    }
-
-    func test_appendDoubleZero_respectsCeiling_asAUnit() {
-        let vm = makeVM()
-
-        // 500_000 * 100 overflows the 100_000_00 ceiling. The "00" key must be rejected
-        // whole — taking only the first zero would leave an amount the user never typed.
-        for digit in [5, 0, 0, 0, 0, 0] {
-            vm.appendDigit(digit)
-        }
-        XCTAssertEqual(vm.amountCents, 500_000)
-
-        vm.appendDoubleZero()
-        XCTAssertEqual(vm.amountCents, 500_000, "\"00\" that overflows the ceiling must be rejected whole")
-    }
-
     func test_clear_resetsAmount() {
         let vm = makeVM()
 
@@ -138,22 +186,5 @@ final class TradeSheetViewModelTests: XCTestCase {
 
         XCTAssertEqual(vm.amountCents, 0)
         XCTAssertEqual(vm.amountDisplay, "$0.00")
-    }
-
-    func test_appendDigit_overflowGuard_usesRealFormula() {
-        let vm = makeVM()
-
-        // Drive amountCents to 9_999_999 (just below the 100_000_00 ceiling) using the
-        // real update formula (amountCents * 10 + digit), then confirm the guard blocks
-        // any digit that would push it over 100_000_00 but allows one that keeps it under.
-        for digit in [9, 9, 9, 9, 9, 9, 9] {
-            vm.appendDigit(digit)
-        }
-        XCTAssertEqual(vm.amountCents, 9_999_999)
-
-        // 9_999_999 * 10 + 9 = 99_999_999, still <= 100_000_00? No: 100_000_00 = 10_000_000.
-        // 99_999_999 > 10_000_000, so this digit must be rejected.
-        vm.appendDigit(9)
-        XCTAssertEqual(vm.amountCents, 9_999_999, "digit that overflows the ceiling must be rejected")
     }
 }
