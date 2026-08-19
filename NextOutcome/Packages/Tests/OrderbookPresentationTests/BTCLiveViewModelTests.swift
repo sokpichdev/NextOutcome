@@ -822,4 +822,25 @@ final class BTCLiveViewModelTests: XCTestCase {
         let vm = makeVM(repository: FakeOrderbookRepository(), windowEnd: Date())
         XCTAssertNil(vm.potentialWin(dollars: 25))
     }
+
+    /// Tapping Trade Up or Trade Down selects that side and invokes the quick-bet / trade callback.
+    @MainActor
+    func test_trade_selectsSideAndInvokesQuickBet() {
+        var received: (side: BTCLiveViewModel.BetSide, dollars: Int)?
+        let vm = makeVM(
+            repository: FakeOrderbookRepository(),
+            windowEnd: Date(),
+            onQuickBet: { side, dollars in received = (side, dollars) }
+        )
+
+        vm.trade(.down)
+        XCTAssertEqual(vm.selectedSide, .down)
+        XCTAssertEqual(received?.side, .down)
+        XCTAssertEqual(received?.dollars, 0)
+
+        vm.trade(.up, dollars: 50)
+        XCTAssertEqual(vm.selectedSide, .up)
+        XCTAssertEqual(received?.side, .up)
+        XCTAssertEqual(received?.dollars, 50)
+    }
 }

@@ -64,6 +64,25 @@ public enum MarketFormatting {
         }
     }
 
+    /// Formats a Decimal dollar amount as currency: 25 -> "$25.00", 15.5 -> "$15.50".
+    public static func currency(_ amount: Decimal) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencySymbol = "$"
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return formatter.string(from: amount as NSDecimalNumber) ?? "$\(amount)"
+    }
+
+    /// Formats Decimal shares: 40.32 -> "40.32", 100 -> "100".
+    public static func shares(_ amount: Decimal) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        return formatter.string(from: amount as NSDecimalNumber) ?? "\(amount)"
+    }
+
     /// Relative countdown. Future → "Ends in 20d" / "Ends in 4h"; past → "Ended"; nil → nil.
     public static func countdown(to date: Date?, now: Date = Date()) -> String? {
         guard let date else { return nil }

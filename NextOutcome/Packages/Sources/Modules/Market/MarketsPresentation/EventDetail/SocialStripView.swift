@@ -155,6 +155,188 @@ public struct SocialStripView: View {
     }
 }
 
+// MARK: - Social Strip Bottom Sheet
+
+/// Enhanced bottom sheet for Comments · Top Holders · Positions · Activity.
+/// Keeps the sheet header, tab switcher, and filter controls pinned at the top while the content area scrolls smoothly underneath.
+public struct SocialStripSheet: View {
+    @State private var viewModel: SocialStripViewModel
+    @State private var positionsStatus: PositionsStatusFilter = .all
+    @State private var positionsSort: PositionsSortFilter = .desc
+    private let title: String?
+
+    /// Creates the social strip sheet.
+    /// - Parameters:
+    ///   - viewModel: The social strip view model.
+    ///   - title: An optional title shown at the top of the sheet.
+    public init(viewModel: SocialStripViewModel, title: String? = nil) {
+        self._viewModel = State(initialValue: viewModel)
+        self.title = title
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Sheet Header with Title
+            HStack(spacing: DSLayout.spacingSmall) {
+                Text(title ?? "Discussion & Activity")
+                    .font(DSFont.headline)
+                    .foregroundStyle(DSColor.textPrimary)
+                    .lineLimit(1)
+                Spacer()
+            }
+            .padding(.horizontal, DSLayout.margin)
+            .padding(.top, DSLayout.spacingLarge)
+            .padding(.bottom, DSLayout.spacingSmall)
+
+            // Pinned Tab Bar & Filter Controls
+            VStack(alignment: .leading, spacing: DSLayout.spacingSmall) {
+                tabStrip
+                filterRow
+            }
+            .padding(.horizontal, DSLayout.margin)
+            .padding(.bottom, DSLayout.spacingSmall)
+
+            Divider().overlay(DSColor.separator)
+
+            // Inner Scrollable Content Area
+            ScrollView {
+                content
+                    .padding(DSLayout.margin)
+            }
+        }
+        .background(DSColor.background.ignoresSafeArea())
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+        .task(id: viewModel.selectedTab) {
+            await viewModel.loadIfNeeded(viewModel.selectedTab)
+            if viewModel.selectedTab == .activity {
+                viewModel.startActivityPolling()
+            } else {
+                viewModel.stopActivityPolling()
+            }
+        }
+        .onDisappear { viewModel.stopActivityPolling() }
+    }
+
+    /// The chip row of tab titles.
+    private var tabStrip: some View {
+        ChipRow(items: SocialTab.allCases.map(\.title), selection: selectionBinding)
+    }
+
+    /// Bridges the chip row's `Int` selection to the view model's `SocialTab`.
+    private var selectionBinding: Binding<Int> {
+        Binding(
+            get: { SocialTab.allCases.firstIndex(of: viewModel.selectedTab) ?? 0 },
+            set: { index in
+                guard SocialTab.allCases.indices.contains(index) else { return }
+                viewModel.selectedTab = SocialTab.allCases[index]
+            }
+        )
+    }
+
+    /// The per-tab filter controls shown above the tab's content.
+    @ViewBuilder
+    private var filterRow: some View {
+        switch viewModel.selectedTab {
+        case .comments:
+            HStack(spacing: 8) {
+                Menu {
+                    Button("Newest") { viewModel.commentSort = .newest }
+                    Button("Most liked") { viewModel.commentSort = .mostLiked }
+                } label: {
+                    SocialMenuLabel(viewModel.commentSort == .newest ? "Newest" : "Most liked")
+                }
+                Button {
+                    viewModel.commentsHoldersOnly.toggle()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: viewModel.commentsHoldersOnly ? "checkmark.square.fill" : "square")
+                        Text("Holders")
+                    }
+                    .font(DSFont.caption).foregroundStyle(DSColor.textSecondary)
+                }
+                .buttonStyle(.plain)
+                Spacer()
+            }
+        case .holders:
+            if !viewModel.candidates.isEmpty {
+                HStack { candidatePicker; Spacer() }
+            }
+        case .positions:
+            HStack(spacing: 8) {
+                if !viewModel.candidates.isEmpty { candidatePicker }
+                Menu {
+                    ForEach(PositionsStatusFilter.allCases, id: \.self) { s in
+                        Button(s.title) { positionsStatus = s }
+                    }
+                } label: { SocialMenuLabel(positionsStatus.title) }
+                Menu {
+                    ForEach(PositionsSortFilter.allCases, id: \.self) { s in
+                        Button(s.title) { positionsSort = s }
+                    }
+                } label: { SocialMenuLabel(positionsSort.title) }
+                Spacer()
+            }
+        case .activity:
+            HStack(spacing: 8) {
+                if !viewModel.candidates.isEmpty { activityCandidatePicker }
+                Menu {
+                    ForEach(ActivityMinAmount.allCases, id: \.title) { option in
+                        Button(option.title) { viewModel.activityMinAmount = option }
+                    }
+                } label: { SocialMenuLabel("Min amount: \(viewModel.activityMinAmount.title)") }
+                Spacer()
+                Label("Live", systemImage: "circle.fill")
+                    .font(DSFont.caption.bold())
+                    .foregroundStyle(DSColor.negative)
+            }
+        }
+    }
+
+    /// The candidate picker shared by Holders/Positions.
+    private var candidatePicker: some View {
+        Menu {
+            ForEach(viewModel.candidates) { candidate in
+                Button(candidate.title) { viewModel.selectedCandidateID = candidate.id }
+            }
+        } label: {
+            SocialMenuLabel(viewModel.candidates.first { $0.id == viewModel.selectedCandidateID }?.title ?? "Select")
+        }
+    }
+
+    /// Activity's candidate picker with "All" option.
+    private var activityCandidatePicker: some View {
+        Menu {
+            Button("All") { viewModel.selectedActivityCandidateID = nil }
+            ForEach(viewModel.candidates) { candidate in
+                Button(candidate.title) { viewModel.selectedActivityCandidateID = candidate.id }
+            }
+        } label: {
+            SocialMenuLabel(viewModel.candidates.first { $0.id == viewModel.selectedActivityCandidateID }?.title ?? "All")
+        }
+    }
+
+    /// The body for the selected tab inside the sheet.
+    @ViewBuilder
+    private var content: some View {
+        switch viewModel.selectedTab {
+        case .comments:
+            CommentsTabContent(
+                state: viewModel.commentsState,
+                fetchHoldings: { await viewModel.commenterHoldings(proxyWallet: $0) },
+                candidateTitle: { viewModel.candidateTitle(for: $0) },
+                onRetry: { await viewModel.retry(.comments) }
+            )
+        case .holders:
+            HoldersTabContent(state: viewModel.holdersState) { await viewModel.retry(.holders) }
+        case .positions:
+            PositionsEmptyState()
+        case .activity:
+            ActivityTabContent(trades: viewModel.visibleActivityTrades, state: viewModel.activityState) { await viewModel.retry(.activity) }
+        }
+    }
+}
+
 // MARK: - Positions UI-only filters
 
 /// Positions tab status filter. UI-only until real position data is available.

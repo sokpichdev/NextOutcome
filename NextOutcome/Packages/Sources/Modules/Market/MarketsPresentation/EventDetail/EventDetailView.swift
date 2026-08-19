@@ -185,17 +185,13 @@ public struct EventDetailView: View {
                     .padding(DSLayout.margin)
             }
             .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
             .background(DSColor.background)
         }
         .sheet(isPresented: $showsDiscussSheet) {
-            ScrollView {
-                if let socialStrip {
-                    SocialStripView(viewModel: socialStrip)
-                        .padding(DSLayout.margin)
-                }
+            if let socialStrip {
+                SocialStripSheet(viewModel: socialStrip, title: event.title)
             }
-            .presentationDetents([.medium, .large])
-            .background(DSColor.background)
         }
     }
 

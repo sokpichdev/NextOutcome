@@ -69,17 +69,13 @@ public struct MoversDetailView: View {
                     .padding(DSLayout.margin)
             }
             .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
             .background(DSColor.background)
         }
         .sheet(isPresented: $showsDiscussSheet) {
-            ScrollView {
-                if let socialStrip = viewModel.socialStrip {
-                    SocialStripView(viewModel: socialStrip)
-                        .padding(DSLayout.margin)
-                }
+            if let socialStrip = viewModel.socialStrip {
+                SocialStripSheet(viewModel: socialStrip, title: viewModel.event?.title ?? viewModel.mover.eventTitle)
             }
-            .presentationDetents([.medium, .large])
-            .background(DSColor.background)
         }
         .task { await viewModel.load() }
     }

@@ -66,7 +66,6 @@ public struct MarketDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSLayout.spacingLarge) {
                 chanceHeader
-                tradeRow
                 liveSection
                 orderbookSection
                 stats
@@ -77,6 +76,7 @@ public struct MarketDetailView: View {
             .padding(.top, DSLayout.spacing)
         }
         .background(DSColor.background)
+        .safeAreaInset(edge: .bottom, spacing: 0) { bottomTradeBar }
         .hidesTabBar()
         .detailToolbar(
             title: market.question, iconURL: market.imageURL,
@@ -108,19 +108,39 @@ public struct MarketDetailView: View {
         if action.contains(.rules) { showsRulesSheet = true }
     }
 
-    /// Yes/No entry into the mock trade sheet — Task 8's hook next to the order book.
+    /// Yes/No entry into the mock trade sheet, pinned to the bottom of the screen for ergonomic thumb reach.
     @ViewBuilder
-    private var tradeRow: some View {
-        if let yes = market.yesOutcome, let no = market.noOutcome {
-            HStack(spacing: DSLayout.spacingSmall) {
-                PriceButton(title: yes.title, price: cents(yes.price), style: .yes) {
+    private var bottomTradeBar: some View {
+        if let yes = market.yesOutcome, let no = market.noOutcome, !market.isResolved {
+            HStack(spacing: DSLayout.spacingMedium) {
+                PriceButton(title: yes.title, price: cents(yes.price), rolling: Double(truncating: yes.price as NSNumber), style: .yes) {
                     tradeContext = TradeSheetContext(market: market, side: .yes)
                 }
-                PriceButton(title: no.title, price: cents(no.price), style: .no) {
+                PriceButton(title: no.title, price: cents(no.price), rolling: Double(truncating: no.price as NSNumber), style: .no) {
                     tradeContext = TradeSheetContext(market: market, side: .no)
                 }
             }
+            .padding(.horizontal, DSLayout.spacing)
+            .padding(.vertical, DSLayout.spacing)
+            .background {
+                DSColor.surfaceElevated
+                    .opacity(0.85)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Self.bottomBarShape)
+                    .overlay(Self.bottomBarShape.stroke(DSColor.separator, lineWidth: 0.5))
+                    .ignoresSafeArea(edges: .bottom)
+            }
         }
+    }
+
+    /// Outline shape for the pinned bottom bar.
+    private static var bottomBarShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            topLeadingRadius: DSLayout.chipRadius,
+            bottomLeadingRadius: 0,
+            bottomTrailingRadius: 0,
+            topTrailingRadius: DSLayout.chipRadius
+        )
     }
 
     /// Formats a 0…1 price as a cent label (reusing the percent formatter's number).

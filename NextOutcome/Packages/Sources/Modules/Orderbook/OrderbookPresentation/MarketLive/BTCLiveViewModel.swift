@@ -102,7 +102,7 @@ public final class BTCLiveViewModel {
     }
 
     /// The "Up" outcome token being charted/traded.
-    private let assetID: String
+    public let assetID: String
     /// The event id used by the recent-trades poll.
     private let eventID: String
     /// When the current 5-minute window closes.
@@ -573,6 +573,15 @@ public final class BTCLiveViewModel {
     /// - Parameter dollars: The tile's whole-dollar stake.
     public func placeBet(dollars: Int) {
         onQuickBet(selectedSide, dollars)
+    }
+
+    /// Opens the trade flow on the specified side, optionally with a pre-filled dollar amount.
+    /// - Parameters:
+    ///   - side: The outcome side (Up or Down) to trade.
+    ///   - dollars: An optional pre-filled dollar amount (or `nil` for empty keypad entry).
+    public func trade(_ side: BetSide, dollars: Int? = nil) {
+        select(side)
+        onQuickBet(side, dollars ?? 0)
     }
 
     // MARK: Loading

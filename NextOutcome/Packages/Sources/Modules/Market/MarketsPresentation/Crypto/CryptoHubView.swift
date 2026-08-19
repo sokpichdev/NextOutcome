@@ -351,12 +351,15 @@ public struct CryptoHubView: View {
 private struct LiveWindowDestination: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.btcLiveFactory) private var btcLiveFactory
+    @Environment(\.socialStripFactory) private var socialStripFactory
 
     let hubViewModel: CryptoHubViewModel
     @Binding var tradeContext: TradeSheetContext?
 
     @State private var currentTarget: CryptoUpDownNavigationTarget
     @State private var isAdvancing = false
+    @State private var showsRulesSheet = false
+    @State private var showsDiscussSheet = false
 
     init(
         target: CryptoUpDownNavigationTarget,
@@ -375,7 +378,7 @@ private struct LiveWindowDestination: View {
                     tradeContext = TradeSheetContext(
                         market: currentTarget.market,
                         side: side == .up ? .yes : .no,
-                        initialDollars: dollars
+                        initialDollars: dollars > 0 ? dollars : nil
                     )
                 },
                 onNextWindow: {
@@ -393,7 +396,47 @@ private struct LiveWindowDestination: View {
                 }
             )
             .id(currentTarget.eventID)
+            .detailToolbar(
+                title: currentTarget.market.groupItemTitle ?? currentTarget.market.question,
+                actions: [.rules, .discuss, .link],
+                onAction: handleHeaderAction
+            )
+            .sheet(isPresented: $showsRulesSheet) {
+                ScrollView {
+                    RulesExpander(eventDescription: nil, marketRules: marketRules, startsExpanded: true)
+                        .padding(DSLayout.margin)
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .background(DSColor.background)
+            }
+            .sheet(isPresented: $showsDiscussSheet) {
+                if let socialStripFactory {
+                    SocialStripSheet(
+                        viewModel: socialStripFactory(
+                            eventID: currentTarget.eventID,
+                            conditionId: currentTarget.market.conditionId,
+                            markets: [currentTarget.market]
+                        ),
+                        title: currentTarget.market.groupItemTitle ?? currentTarget.market.question
+                    )
+                }
+            }
         }
+    }
+
+    private var marketRules: [RulesExpander.MarketRule] {
+        guard let rules = currentTarget.market.rules, !rules.isEmpty else { return [] }
+        return [RulesExpander.MarketRule(
+            id: currentTarget.market.id,
+            title: currentTarget.market.groupItemTitle ?? currentTarget.market.question,
+            text: rules
+        )]
+    }
+
+    private func handleHeaderAction(_ action: DetailToolbarActions) {
+        if action.contains(.rules) { showsRulesSheet = true }
+        if action.contains(.discuss) { showsDiscussSheet = true }
     }
 }
 

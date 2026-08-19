@@ -294,6 +294,20 @@ struct BTCLiveQuickBetSection: View {
     }
 }
 
+// MARK: - Order book
+
+/// The live order book section showing bid/ask depth and spread for the active asset.
+struct BTCLiveOrderbookSection: View {
+    let viewModel: BTCLiveViewModel
+    @Environment(\.orderbookFactory) private var orderbookFactory
+
+    var body: some View {
+        if let factory = orderbookFactory {
+            OrderbookView(viewModel: factory(viewModel.assetID))
+        }
+    }
+}
+
 // MARK: - Recent trades
 
 /// The recent-trades list (up to 8 rows), hidden entirely when there are no trades.

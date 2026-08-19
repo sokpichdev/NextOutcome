@@ -13,7 +13,7 @@ import DesignSystem
 /// The BTC 5-minute live screen: candle/line chart with a dashed price-to-beat line, a
 /// server-clock countdown (red under a minute), live Up/Down quick-bet buttons, and a
 /// recent-trades ticker.
-public struct BTCLiveView: View {
+public struct BTCLiveView<Footer: View>: View {
     /// The view model driving the whole screen.
     @State private var viewModel: BTCLiveViewModel
 
@@ -36,13 +36,22 @@ public struct BTCLiveView: View {
     /// business depending on it.
     private let onNextWindow: (() -> Void)?
 
-    /// Creates the view.
+    /// Optional footer view rendered at the bottom of the scroll content (e.g. Comments/Top Holders/Positions/Activity strip).
+    private let footer: Footer
+
+    /// Creates the view with a custom footer.
     /// - Parameters:
     ///   - viewModel: The BTC-live view model (usually from `btcLiveFactory`).
     ///   - onNextWindow: Invoked when the user taps through from a closed window.
-    public init(viewModel: BTCLiveViewModel, onNextWindow: (() -> Void)? = nil) {
+    ///   - footer: Trailing content rendered below the recent trades ticker.
+    public init(
+        viewModel: BTCLiveViewModel,
+        onNextWindow: (() -> Void)? = nil,
+        @ViewBuilder footer: () -> Footer
+    ) {
         self._viewModel = State(initialValue: viewModel)
         self.onNextWindow = onNextWindow
+        self.footer = footer()
     }
 
     public var body: some View {
@@ -53,7 +62,9 @@ public struct BTCLiveView: View {
                 // candle chart. See `BTCLiveSections.swift`.
                 BTCLiveHeaderSection(viewModel: viewModel)
                 chartCard
+                BTCLiveOrderbookSection(viewModel: viewModel)
                 BTCLiveTradesTicker(viewModel: viewModel)
+                footer
             }
             .padding(DSLayout.spacing)
         }
@@ -98,12 +109,14 @@ public struct BTCLiveView: View {
     }
 
     /// The bet bar's outline: a small radius on the leading and trailing top corners.
-    private static let betBarShape = UnevenRoundedRectangle(
-        topLeadingRadius: DSLayout.chipRadius,
-        bottomLeadingRadius: 0,
-        bottomTrailingRadius: 0,
-        topTrailingRadius: DSLayout.chipRadius
-    )
+    private static var betBarShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            topLeadingRadius: DSLayout.chipRadius,
+            bottomLeadingRadius: 0,
+            bottomTrailingRadius: 0,
+            topTrailingRadius: DSLayout.chipRadius
+        )
+    }
 
     // MARK: Chart
 
@@ -447,10 +460,8 @@ public struct BTCLiveView: View {
     /// label that changed width with the digits would change the plot width, and therefore
     /// every candle's x position. Sized for a seven-figure price ("104,250") so neither the
     /// labels nor the chip can ever be forced to truncate.
-    private static let axisGutterWidth: CGFloat = 52
-
-    /// The gap between the price chip and the trailing edge of the chart.
-    private static let priceTagInset: CGFloat = 2
+    private static var axisGutterWidth: CGFloat { 52 }
+    private static var priceTagInset: CGFloat { 2 }
 
     /// The live price chip, drawn on top of the plot at the current-price line.
     ///
@@ -675,4 +686,11 @@ private struct TrailingScrollAnchor: ViewModifier {
 private extension View {
     /// Applies `TrailingScrollAnchor`.
     func trailingScrollAnchor() -> some View { modifier(TrailingScrollAnchor()) }
+}
+
+public extension BTCLiveView where Footer == EmptyView {
+    /// Creates the view without a custom footer.
+    init(viewModel: BTCLiveViewModel, onNextWindow: (() -> Void)? = nil) {
+        self.init(viewModel: viewModel, onNextWindow: onNextWindow, footer: { EmptyView() })
+    }
 }
