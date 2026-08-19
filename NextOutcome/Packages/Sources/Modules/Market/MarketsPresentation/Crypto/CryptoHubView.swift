@@ -378,7 +378,7 @@ private struct LiveWindowDestination: View {
                     tradeContext = TradeSheetContext(
                         market: currentTarget.market,
                         side: side == .up ? .yes : .no,
-                        initialDollars: dollars
+                        initialDollars: dollars > 0 ? dollars : nil
                     )
                 },
                 onNextWindow: {

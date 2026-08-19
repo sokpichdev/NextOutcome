@@ -294,6 +294,50 @@ struct BTCLiveQuickBetSection: View {
     }
 }
 
+// MARK: - Trade row
+
+/// The Trade Up / Trade Down action buttons below the chart, opening the full trade flow.
+struct BTCLiveTradeRow: View {
+    let viewModel: BTCLiveViewModel
+
+    var body: some View {
+        if !viewModel.hasSettled {
+            HStack(spacing: DSLayout.spacingSmall) {
+                PriceButton(
+                    title: "Trade Up",
+                    price: LiveFormat.centsButton(viewModel.upCents),
+                    rolling: viewModel.upCents.map(Double.init),
+                    style: .yes
+                ) {
+                    viewModel.trade(.up)
+                }
+                PriceButton(
+                    title: "Trade Down",
+                    price: LiveFormat.centsButton(viewModel.downCents),
+                    rolling: viewModel.downCents.map(Double.init),
+                    style: .no
+                ) {
+                    viewModel.trade(.down)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Order book
+
+/// The live order book section showing bid/ask depth and spread for the active asset.
+struct BTCLiveOrderbookSection: View {
+    let viewModel: BTCLiveViewModel
+    @Environment(\.orderbookFactory) private var orderbookFactory
+
+    var body: some View {
+        if let factory = orderbookFactory {
+            OrderbookView(viewModel: factory(viewModel.assetID))
+        }
+    }
+}
+
 // MARK: - Recent trades
 
 /// The recent-trades list (up to 8 rows), hidden entirely when there are no trades.
