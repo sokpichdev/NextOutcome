@@ -62,7 +62,6 @@ public struct BTCLiveView<Footer: View>: View {
                 // candle chart. See `BTCLiveSections.swift`.
                 BTCLiveHeaderSection(viewModel: viewModel)
                 chartCard
-                BTCLiveTradeRow(viewModel: viewModel)
                 BTCLiveOrderbookSection(viewModel: viewModel)
                 BTCLiveTradesTicker(viewModel: viewModel)
                 footer
