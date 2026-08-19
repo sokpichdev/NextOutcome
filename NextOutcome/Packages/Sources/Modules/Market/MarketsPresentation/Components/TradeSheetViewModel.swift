@@ -117,10 +117,10 @@ public final class TradeSheetViewModel {
         Decimal(amountCents) / 100
     }
 
-    /// The entered amount formatted for display (e.g. "$1.00", "$15.50", "$15.").
+    /// The entered amount formatted for display (e.g. "$0", "$1", "$15", "$15.", "$15.50").
     public var amountDisplay: String {
         if inputString.isEmpty {
-            return "$0.00"
+            return "$0"
         }
         if inputString.hasSuffix(".") {
             let parts = inputString.split(separator: ".", omittingEmptySubsequences: false)
@@ -141,7 +141,7 @@ public final class TradeSheetViewModel {
         }
         let dollars = Int(inputString) ?? 0
         let dollarsFormatted = NumberFormatter.localizedString(from: NSNumber(value: dollars), number: .decimal)
-        return "$\(dollarsFormatted).00"
+        return "$\(dollarsFormatted)"
     }
 
     /// The shares and "to win" payout for the entered amount, via `PayoutCalculator`.

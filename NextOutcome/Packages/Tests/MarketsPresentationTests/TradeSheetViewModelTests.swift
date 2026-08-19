@@ -44,7 +44,7 @@ final class TradeSheetViewModelTests: XCTestCase {
             market: makeMarket(), side: .yes, submitter: StubTradeSubmitter(), initialDollars: 25
         )
 
-        XCTAssertEqual(vm.amountDisplay, "$25.00")
+        XCTAssertEqual(vm.amountDisplay, "$25")
         XCTAssertEqual(vm.amountUSD, 25)
     }
 
@@ -56,23 +56,23 @@ final class TradeSheetViewModelTests: XCTestCase {
 
         vm.backspace()
 
-        XCTAssertEqual(vm.amountDisplay, "$5.00")
+        XCTAssertEqual(vm.amountDisplay, "$5")
         XCTAssertEqual(vm.amountUSD, 5)
     }
 
-    /// Inputting "1" produces $1.00 (whole dollars first, not $0.01).
+    /// Inputting "1" produces $1 (whole dollars first, not $0.01).
     func test_appendDigit_inputsWholeDollarsFirst() {
         let vm = makeVM()
 
-        XCTAssertEqual(vm.amountDisplay, "$0.00")
+        XCTAssertEqual(vm.amountDisplay, "$0")
 
         vm.appendDigit(1)
-        XCTAssertEqual(vm.amountDisplay, "$1.00")
+        XCTAssertEqual(vm.amountDisplay, "$1")
         XCTAssertEqual(vm.amountUSD, 1)
         XCTAssertEqual(vm.amountCents, 100)
 
         vm.appendDigit(5)
-        XCTAssertEqual(vm.amountDisplay, "$15.00")
+        XCTAssertEqual(vm.amountDisplay, "$15")
         XCTAssertEqual(vm.amountUSD, 15)
         XCTAssertEqual(vm.amountCents, 1500)
     }
@@ -137,11 +137,11 @@ final class TradeSheetViewModelTests: XCTestCase {
         XCTAssertEqual(vm.amountCents, 100)
 
         vm.backspace()
-        XCTAssertEqual(vm.amountDisplay, "$1.00")
+        XCTAssertEqual(vm.amountDisplay, "$1")
         XCTAssertEqual(vm.amountCents, 100)
 
         vm.backspace()
-        XCTAssertEqual(vm.amountDisplay, "$0.00")
+        XCTAssertEqual(vm.amountDisplay, "$0")
         XCTAssertEqual(vm.amountCents, 0)
     }
 
@@ -153,7 +153,7 @@ final class TradeSheetViewModelTests: XCTestCase {
         vm.addAmount(100)
 
         XCTAssertEqual(vm.amountCents, 111_00)
-        XCTAssertEqual(vm.amountDisplay, "$111.00")
+        XCTAssertEqual(vm.amountDisplay, "$111")
     }
 
     func test_addAmount_respectsCeiling() {
@@ -185,6 +185,6 @@ final class TradeSheetViewModelTests: XCTestCase {
         vm.clear()
 
         XCTAssertEqual(vm.amountCents, 0)
-        XCTAssertEqual(vm.amountDisplay, "$0.00")
+        XCTAssertEqual(vm.amountDisplay, "$0")
     }
 }
