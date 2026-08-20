@@ -9,9 +9,16 @@ import SwiftUI
 
 /// A single price level in an order book depth display, ready for direct
 /// rendering (values are already formatted strings, not raw numbers).
-public struct DepthLevel: Identifiable {
-    /// A unique identifier so SwiftUI can diff rows in a `ForEach`.
-    public let id = UUID()
+public struct DepthLevel: Identifiable, Equatable, Sendable {
+    /// A stable identifier so SwiftUI can diff rows in a `ForEach`.
+    ///
+    /// **Must be derived from the level itself, never freshly generated.** A book that
+    /// re-maps its ladder on every socket frame hands `ForEach` a brand-new identity per
+    /// row several times a second, so SwiftUI tears down and rebuilds every `DepthRow` —
+    /// `GeometryReader` and all — instead of updating the two labels that actually moved.
+    /// Defaults to `price`, which is unique within one side of a book; pass the unrounded
+    /// price when the formatted string could collide across ticks.
+    public let id: String
     /// The formatted price for this level, e.g. "0.62".
     public let price: String
     /// The formatted size (quantity) available at this level, e.g. "1,204".
@@ -22,10 +29,12 @@ public struct DepthLevel: Identifiable {
 
     /// Creates a depth level.
     /// - Parameters:
+    ///   - id: A stable identity for this row across updates. Defaults to `price`.
     ///   - price: The formatted price string.
     ///   - size: The formatted size string.
     ///   - fraction: The relative size (0 to 1) used to size the depth bar.
-    public init(price: String, size: String, fraction: Double) {
+    public init(id: String? = nil, price: String, size: String, fraction: Double) {
+        self.id = id ?? price
         self.price = price
         self.size = size
         self.fraction = fraction

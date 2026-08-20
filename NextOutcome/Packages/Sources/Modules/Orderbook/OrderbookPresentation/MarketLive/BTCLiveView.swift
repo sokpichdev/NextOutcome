@@ -369,15 +369,10 @@ public struct BTCLiveView<Footer: View>: View {
         let lastStart = candles.last?.start ?? .now
         let xDomain = (candles.first?.start ?? lastStart)...lastStart.addingTimeInterval(interval)
         let trailingAnchor = lastStart.addingTimeInterval(interval - visibleSpan)
-        let currentScroll = scrollPosition ?? initialAnchor ?? trailingAnchor
 
-        let domain = dynamicCandleDomain(
-            candles: candles,
-            scrollPosition: currentScroll,
-            visibleSpan: visibleSpan,
-            interval: interval,
-            trailingAnchor: trailingAnchor
-        )
+        // Owned by the model, which re-fits it when the *viewport* moves and holds it still
+        // when only the price does — see `reportVisibleRange` and `CandleChartScale`.
+        let domain = viewModel.candleDomain ?? fittedDomain(candles)
 
         let bodyWidth = max(2.5, min(18.0, 260.0 / visibleCandleCount))
         let minBody = (domain.upperBound - domain.lowerBound) * 0.004
@@ -416,7 +411,10 @@ public struct BTCLiveView<Footer: View>: View {
         .chartXVisibleDomain(length: visibleSpan)
         .chartScrollPosition(x: Binding(
             get: { scrollPosition ?? initialAnchor ?? trailingAnchor },
-            set: { scrollPosition = $0 }
+            set: {
+                scrollPosition = $0
+                reportVisibleRange(scroll: $0)
+            }
         ))
         .trailingScrollAnchor()
         .chartYScale(domain: domain)
@@ -425,7 +423,11 @@ public struct BTCLiveView<Footer: View>: View {
         .onAppear {
             if initialAnchor == nil { initialAnchor = trailingAnchor }
             if scrollPosition == nil { scrollPosition = trailingAnchor }
+            reportVisibleRange()
         }
+        // A new candle moves the trailing edge, so the viewport covers a different slice
+        // even though nothing in the view's own state changed.
+        .onChange(of: viewModel.candles.last?.start) { _, _ in reportVisibleRange() }
         .chartXAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { _ in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
@@ -515,52 +517,43 @@ public struct BTCLiveView<Footer: View>: View {
             .background(currentPriceColor, in: RoundedRectangle(cornerRadius: 4))
     }
 
-    /// Dynamically computes the Y-axis range for whichever candles are currently visible
-    /// inside the chart's scrolled viewport and zoom level.
+    /// Reports the chart's viewport — the span of history on screen, and whether the newest
+    /// candle is still in it — to the model, which owns the y-range.
     ///
-    /// When the user scrolls back into historical hours where the asset was trading at vastly
-    /// different levels, this re-fits the range to the visible slice so historical candles
-    /// remain centered, tall, and visible instead of clipping off-screen.
-    private func dynamicCandleDomain(
-        candles: [Candle],
-        scrollPosition: Date,
-        visibleSpan: TimeInterval,
-        interval: TimeInterval,
-        trailingAnchor: Date
-    ) -> ClosedRange<Double> {
-        let viewStart = scrollPosition.addingTimeInterval(-interval)
-        let viewEnd = scrollPosition.addingTimeInterval(visibleSpan + interval)
+    /// The model needs telling because the viewport lives in view state: `scrollPosition`
+    /// moves with the drag and `visibleCandleCount` with the pinch. Called from those
+    /// handlers rather than from the body: fitting the range filters the whole archive, and
+    /// doing that inline both ran it every frame and let every live tick nudge the domain —
+    /// which resizes the y-axis gutter, which resizes the plot, which slides every candle
+    /// sideways. That feedback loop is the chart's sideways shimmy.
+    /// - Parameter scroll: The new scroll position, or `nil` to reuse the current one.
+    private func reportVisibleRange(scroll: Date? = nil) {
+        let candles = viewModel.candles
+        guard let lastStart = candles.last?.start else { return }
+        let interval = viewModel.candleWidth
+        let visibleSpan = interval * visibleCandleCount
+        let trailingAnchor = lastStart.addingTimeInterval(interval - visibleSpan)
+        let position = scroll ?? scrollPosition ?? initialAnchor ?? trailingAnchor
 
-        let visibleCandles = candles.filter { $0.start >= viewStart && $0.start <= viewEnd }
-        let slice = visibleCandles.isEmpty ? Array(candles.suffix(Int(visibleCandleCount.rounded()))) : visibleCandles
+        // A candle's width of slack at each end, so a partially visible candle at either
+        // edge still counts towards the range.
+        let start = position.addingTimeInterval(-interval)
+        let end = position.addingTimeInterval(visibleSpan + interval)
+        viewModel.updateVisibleCandleRange(
+            start...end,
+            includesLiveEdge: end >= trailingAnchor.addingTimeInterval(-interval)
+        )
+    }
 
-        var lo = slice.map { doubleValue($0.low) }.min() ?? 0
-        var hi = slice.map { doubleValue($0.high) }.max() ?? 1
-
-        // If the viewport includes the live trailing edge, fold in the live spot price & priceToBeat
-        let isViewingLiveEdge = viewEnd >= trailingAnchor.addingTimeInterval(-interval)
-        if isViewingLiveEdge {
-            if let current = viewModel.currentPrice {
-                let value = doubleValue(current)
-                lo = min(lo, value)
-                hi = max(hi, value)
-            }
-            if let target = viewModel.priceToBeat {
-                let value = doubleValue(target)
-                lo = min(lo, value)
-                hi = max(hi, value)
-            }
-        }
-
-        guard hi > lo else {
-            let pad = max(abs(hi) * 0.001, 1)
-            return (lo - pad)...(hi + pad)
-        }
-        let pad = (hi - lo) * CandleChartScale.padding
-        let step = CandleChartScale.step(low: lo, high: hi)
-        let lower = ((lo - pad) / step).rounded(.down) * step
-        let upper = ((hi + pad) / step).rounded(.up) * step
-        return lower...(upper > lower ? upper : lower + step)
+    /// The y-range for the single frame before the model has published one — the chart
+    /// renders as soon as candles exist, which can be a moment before the first
+    /// `reportVisibleRange`. Fits the newest candles on the same quantised grid the model
+    /// uses, so the handover doesn't visibly rescale.
+    private func fittedDomain(_ candles: [Candle]) -> ClosedRange<Double> {
+        let recent = candles.suffix(BTCLiveViewModel.visibleCandleCount)
+        let lo = recent.map { doubleValue($0.low) }.min() ?? 0
+        let hi = recent.map { doubleValue($0.high) }.max() ?? 1
+        return CandleChartScale.quantised(low: lo, high: hi)
     }
 
     /// Pinch-to-zoom gesture on the candle chart: pinching in zooms out to reveal more candles;
@@ -571,6 +564,7 @@ public struct BTCLiveView<Footer: View>: View {
                 let scale = value.magnification
                 let target = max(8.0, min(60.0, baseVisibleCandleCount / scale))
                 visibleCandleCount = target
+                reportVisibleRange()
             }
             .onEnded { _ in
                 baseVisibleCandleCount = visibleCandleCount

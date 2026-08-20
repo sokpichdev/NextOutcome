@@ -27,6 +27,9 @@ public final class OrderbookViewModel {
     private let repository: OrderbookRepository
     /// Supplies live socket deltas.
     private let stream: MarketStreaming
+    /// How often the folded ladder may republish into `@Observable` state.
+    /// See `LiveFeedRate.ladder`.
+    private let updateInterval: Duration
     /// The running subscription task; `nil` when stopped.
     private var streamTask: Task<Void, Never>?
 
@@ -35,10 +38,18 @@ public final class OrderbookViewModel {
     ///   - assetID: The token to stream.
     ///   - repository: The REST source for the seed snapshot.
     ///   - stream: The realtime source for deltas.
-    public init(assetID: String, repository: OrderbookRepository, stream: MarketStreaming) {
+    ///   - updateInterval: How often the folded ladder republishes to the UI. Pass `.zero`
+    ///     to publish every delta (tests, which can't wait out a wall-clock cooldown).
+    public init(
+        assetID: String,
+        repository: OrderbookRepository,
+        stream: MarketStreaming,
+        updateInterval: Duration = LiveFeedRate.ladder
+    ) {
         self.assetID = assetID
         self.repository = repository
         self.stream = stream
+        self.updateInterval = updateInterval
     }
 
     /// Begins loading: fetches the seed snapshot then subscribes to live deltas. Safe to
@@ -73,10 +84,18 @@ public final class OrderbookViewModel {
     /// The subscription body: seed with a REST snapshot, then fold each socket event into
     /// the ladder until cancelled. A cancelled initial fetch resets to `.idle` (not an
     /// error); any other failure surfaces a retry message.
+    ///
+    /// Folding and *publishing* are deliberately separated. Every delta has to be folded —
+    /// they're incremental, so skipping one corrupts the ladder — but a busy market sends
+    /// them faster than anyone can read twenty rows of depth, and each publish re-renders
+    /// the whole ladder. So the fold runs at socket rate into a private ladder and only the
+    /// result is published, at `updateInterval`.
     private func run() async {
+        var ladder: BookLadder
         do {
             let book = try await repository.book(assetID: assetID)
-            state = .loaded(BookLadder.from(book))
+            ladder = BookLadder.from(book)
+            state = .loaded(ladder)
         } catch {
             if isCancellation(error) {
                 state = .idle
@@ -86,30 +105,35 @@ public final class OrderbookViewModel {
             return
         }
 
+        let (ladders, publish) = AsyncStream<BookLadder>.makeStream()
+        Task { [weak self, updateInterval] in
+            for await ladder in ladders.throttled(for: updateInterval) {
+                self?.state = .loaded(ladder)
+            }
+        }
+        // Finishing (rather than cancelling) lets the throttle deliver its pending ladder
+        // before the publishing task ends, so the last state the socket sent still lands.
+        defer { publish.finish() }
+
         for await event in stream.events(assetID: assetID) {
             guard !Task.isCancelled else { break }
-            apply(event)
-        }
-    }
+            switch event {
+            case let .snapshot(bids, asks, _, _):
+                ladder = BookLadder.from(OrderBook(assetID: assetID, bids: bids, asks: asks))
+                publish.yield(ladder)
 
-    /// Folds one socket event into the current state: replacing the ladder on a snapshot,
-    /// applying incremental changes, or updating the connection indicator.
-    /// - Parameter event: The incoming normalized event.
-    private func apply(_ event: OrderBookEvent) {
-        switch event {
-        case let .snapshot(bids, asks, _, _):
-            let book = OrderBook(assetID: assetID, bids: bids, asks: asks)
-            state = .loaded(BookLadder.from(book))
+            case let .priceChanges(changes):
+                ladder = changes.reduce(ladder) { $0.applying($1) }
+                publish.yield(ladder)
 
-        case let .priceChanges(changes):
-            guard case let .loaded(ladder) = state else { return }
-            state = .loaded(changes.reduce(ladder) { $0.applying($1) })
+            case .lastTrade, .tickSize:
+                break // not part of the ladder
 
-        case .lastTrade, .tickSize:
-            break // not part of the ladder
-
-        case let .connectionState(newState):
-            connection = newState
+            case let .connectionState(newState):
+                // Published immediately rather than through the throttle: state changes are
+                // rare, and coalescing one away would leave the indicator lying.
+                if connection != newState { connection = newState }
+            }
         }
     }
 
