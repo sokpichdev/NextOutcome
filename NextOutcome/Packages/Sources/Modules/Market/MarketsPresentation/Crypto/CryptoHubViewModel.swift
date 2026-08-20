@@ -1,5 +1,6 @@
 import Foundation
 import MarketsDomain
+import SharedDomain
 
 /// Drives the Crypto hub: fetches every event under the Crypto tag, classifies each into
 /// a `CryptoMarketKind`, and exposes the sub-tab/sort/period-filtered list the view renders.
@@ -195,7 +196,14 @@ public final class CryptoHubViewModel {
 
     /// `classifiedEvents` filtered by `selectedSubTab`/`period`/`selectedTimeframe`/
     /// `searchQuery`, sorted by `sortOption`.
+    ///
+    /// Signposted: uncached, so every body evaluation re-runs up to five array-allocating
+    /// filters and a sort over the full tag load (up to 500 rows). See
+    /// `Perf.visibleEventsCrypto`.
     public var visibleEvents: [(event: Event, kind: CryptoMarketKind)] {
+        let signpost = Perf.renderPath.beginInterval(Perf.visibleEventsCrypto)
+        defer { Perf.renderPath.endInterval(Perf.visibleEventsCrypto, signpost) }
+
         var events = classifiedEvents
         // The pinned window renders above the list; drop it here so it can't appear twice.
         // Today the tag list never contains it, but that's a property of Gamma's ordering,

@@ -176,7 +176,14 @@ public final class EventListViewModel {
     ///
     /// Pinned rows are removed from the body of the feed so a featured event can't appear
     /// twice, matching how the web de-duplicates its pins against the main list.
+    ///
+    /// Signposted: this is uncached, so `ForEach` re-runs the whole pipeline on every body
+    /// evaluation. The interval's *count* under a scroll is the number that matters — see
+    /// `Perf.visibleEventsHome`.
     public var visibleEvents: [Event] {
+        let signpost = Perf.renderPath.beginInterval(Perf.visibleEventsHome)
+        defer { Perf.renderPath.endInterval(Perf.visibleEventsHome, signpost) }
+
         let source: [Event]
         if isSearchActive {
             source = searchResults ?? []

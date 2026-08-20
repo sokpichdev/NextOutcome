@@ -1,5 +1,6 @@
 import Foundation
 import MarketsDomain
+import SharedDomain
 
 /// Which Home card variant an event should render as.
 public enum HomeCardKind: Equatable {
@@ -52,18 +53,25 @@ public enum HomeCardKind: Equatable {
     }
 
     /// Natural kind for an event. Never returns `.hero` (hero is a feed-level slot).
+    ///
+    /// Signposted: `HomeCard.init` calls this, and SwiftUI rebuilds view structs on every
+    /// body evaluation, so this runs per visible card per frame — allocating a `Set` of
+    /// freshly lowercased strings each time to answer a question that can't change. The
+    /// interval count under a scroll is the measurement that matters; see `Perf.classifyCard`.
     public static func classify(_ event: Event) -> HomeCardKind {
-        let slugs = tagSlugs(event)
-        if let first = event.markets.first, isUpDown(first), !slugs.isDisjoint(with: cryptoTags) {
-            return .liveUpDown
+        Perf.renderPath.measure(Perf.classifyCard) {
+            let slugs = tagSlugs(event)
+            if let first = event.markets.first, isUpDown(first), !slugs.isDisjoint(with: cryptoTags) {
+                return .liveUpDown
+            }
+            if event.markets.count == 1, event.imageURL != nil,
+               isBinaryYesNo(event.markets[0]), !slugs.isDisjoint(with: newsTags) {
+                return .news
+            }
+            if isMoneylineGame(event) { return .game }
+            if event.markets.count >= 2 { return .multiOutcome }
+            return .standard
         }
-        if event.markets.count == 1, event.imageURL != nil,
-           isBinaryYesNo(event.markets[0]), !slugs.isDisjoint(with: newsTags) {
-            return .news
-        }
-        if isMoneylineGame(event) { return .game }
-        if event.markets.count >= 2 { return .multiOutcome }
-        return .standard
     }
 
     /// True when the event belongs to a sports/soccer category (used to pick the hero slot).
