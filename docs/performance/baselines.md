@@ -226,8 +226,8 @@ Median of three runs. Leave a cell blank rather than guessing.
 | Esports hub | | | | |
 | World Cup hub (globe) | | | | |
 
-*Target after Phase 3: the last three columns at ~0. If they are already ~0 at baseline,
-#09 is smaller than the audit claimed and Phase 3 should be re-prioritised accordingly.*
+*Target after Phase 3: the last three columns at ~0. If they are already ~0 at baseline, then
+finding #09 is smaller than the audit claimed and Phase 3 should be re-prioritised accordingly.*
 
 **Probe B — suspend and resume.**
 

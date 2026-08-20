@@ -198,8 +198,8 @@ live screen too — that feeds finding #11.
 
 ## Part 6 — The lifecycle probes (finding #09)
 
-**Read [`baselines.md` §3.6](baselines.md) before doing this.** The audit originally framed
-#09 as background battery drain and that framing was too broad — `Info.plist` declares only
+**Read [`baselines.md` §3.6](baselines.md) before doing this.** The audit originally
+framed #09 as background battery drain and that framing was too broad — `Info.plist` declares only
 `remote-notification`, so iOS suspends the app within seconds of backgrounding and freezes
 every thread no matter what our code does. "Background it and watch CPU" reads ~0 either way.
 
