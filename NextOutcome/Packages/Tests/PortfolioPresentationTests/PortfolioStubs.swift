@@ -10,29 +10,104 @@ enum StubError: Error { case boom }
 /// not just what came back.
 ///
 /// A class (not a struct) so recorded calls survive being captured by the use cases.
+///
+/// Every touch of the mutable state goes through `lock`, because callers reach this from
+/// several tasks at once and the `@unchecked Sendable` is otherwise a lie.
+/// `LeaderboardViewModel` is the routine offender: it is `@MainActor`, but
+/// `FetchLeaderboardUseCase` and this protocol are both nonisolated, so each `load()` hops
+/// onto the cooperative pool — and its `metric`/`window` `didSet` handlers spawn one
+/// `load()` per assignment, so a test that sets both and then calls `load()` has three
+/// tasks appending to `leaderboardCalls` at once. Unsynchronised, that raced on the array's
+/// buffer and killed the whole suite with SIGABRT/SIGSEGV/SIGILL in ~30% of runs, on both
+/// x86_64 and the arm64 CI runner. Same treatment, same reason, as
+/// `FakeCryptoSpotPriceRepository` in the Orderbook suite.
+///
+/// `PortfolioStubsTests` holds this to that promise.
 final class StubPortfolioRepository: PortfolioRepository, @unchecked Sendable {
-    // Canned responses. `nil` on a `*Error` means "succeed".
-    var positionsResult: [Position] = []
-    var valueResult: Decimal = 0
-    var closedResult: [ClosedPosition] = []
-    var leaderboardResult: [LeaderboardEntry] = []
+    private let lock = NSLock()
 
-    var positionsError: Error?
-    var valueError: Error?
-    var closedError: Error?
-    var leaderboardError: Error?
+    // Canned responses. `nil` on a `*Error` means "succeed".
+    private var _positionsResult: [Position] = []
+    var positionsResult: [Position] {
+        get { lock.withLock { _positionsResult } }
+        set { lock.withLock { _positionsResult = newValue } }
+    }
+
+    private var _valueResult: Decimal = 0
+    var valueResult: Decimal {
+        get { lock.withLock { _valueResult } }
+        set { lock.withLock { _valueResult = newValue } }
+    }
+
+    private var _closedResult: [ClosedPosition] = []
+    var closedResult: [ClosedPosition] {
+        get { lock.withLock { _closedResult } }
+        set { lock.withLock { _closedResult = newValue } }
+    }
+
+    private var _leaderboardResult: [LeaderboardEntry] = []
+    var leaderboardResult: [LeaderboardEntry] {
+        get { lock.withLock { _leaderboardResult } }
+        set { lock.withLock { _leaderboardResult = newValue } }
+    }
+
+    private var _positionsError: Error?
+    var positionsError: Error? {
+        get { lock.withLock { _positionsError } }
+        set { lock.withLock { _positionsError = newValue } }
+    }
+
+    private var _valueError: Error?
+    var valueError: Error? {
+        get { lock.withLock { _valueError } }
+        set { lock.withLock { _valueError = newValue } }
+    }
+
+    private var _closedError: Error?
+    var closedError: Error? {
+        get { lock.withLock { _closedError } }
+        set { lock.withLock { _closedError = newValue } }
+    }
+
+    private var _leaderboardError: Error?
+    var leaderboardError: Error? {
+        get { lock.withLock { _leaderboardError } }
+        set { lock.withLock { _leaderboardError = newValue } }
+    }
 
     // Recorded calls.
+    private var _leaderboardCalls: [(metric: LeaderboardMetric,
+                                     window: LeaderboardWindow,
+                                     category: String?,
+                                     limit: Int)] = []
     private(set) var leaderboardCalls: [(metric: LeaderboardMetric,
                                          window: LeaderboardWindow,
                                          category: String?,
-                                         limit: Int)] = []
-    private(set) var positionsCallCount = 0
-    private(set) var closedCallCount = 0
+                                         limit: Int)] {
+        get { lock.withLock { _leaderboardCalls } }
+        set { lock.withLock { _leaderboardCalls = newValue } }
+    }
+
+    private var _positionsCallCount = 0
+    private(set) var positionsCallCount: Int {
+        get { lock.withLock { _positionsCallCount } }
+        set { lock.withLock { _positionsCallCount = newValue } }
+    }
+
+    private var _closedCallCount = 0
+    private(set) var closedCallCount: Int {
+        get { lock.withLock { _closedCallCount } }
+        set { lock.withLock { _closedCallCount = newValue } }
+    }
 
     func positions(address: String) async throws -> [Position] {
-        positionsCallCount += 1
-        if let positionsError { throw positionsError }
+        // Bump the counter and read the canned error under one acquisition: taking the
+        // lock twice would let a concurrent caller interleave between them.
+        let error: Error? = lock.withLock {
+            _positionsCallCount += 1
+            return _positionsError
+        }
+        if let error { throw error }
         return positionsResult
     }
 
@@ -46,16 +121,22 @@ final class StubPortfolioRepository: PortfolioRepository, @unchecked Sendable {
     }
 
     func closedPositions(address: String) async throws -> [ClosedPosition] {
-        closedCallCount += 1
-        if let closedError { throw closedError }
+        let error: Error? = lock.withLock {
+            _closedCallCount += 1
+            return _closedError
+        }
+        if let error { throw error }
         return closedResult
     }
 
     func leaderboard(
         metric: LeaderboardMetric, window: LeaderboardWindow, category: String?, limit: Int
     ) async throws -> [LeaderboardEntry] {
-        leaderboardCalls.append((metric, window, category, limit))
-        if let leaderboardError { throw leaderboardError }
+        let error: Error? = lock.withLock {
+            _leaderboardCalls.append((metric, window, category, limit))
+            return _leaderboardError
+        }
+        if let error { throw error }
         return leaderboardResult
     }
 }

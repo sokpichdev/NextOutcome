@@ -32,17 +32,72 @@ private actor CancellableGate {
 
 /// Configurable stub repository — one lever per social-strip endpoint so tests can
 /// assert lazy fetch counts and failure paths independently.
+/// Mutable state goes through `lock`: `SocialStripViewModel` loads comments, holders and
+/// activity concurrently, so the three recording counters are bumped from several tasks at
+/// once. Unsynchronised that is a data race, which corrupts the heap and kills the process
+/// rather than failing a test. See `PortfolioStubs` for the same fix.
 private final class SocialStripStubRepository: MarketRepository {
-    var comments: [Comment] = []
-    var holders: [Holder] = []
-    var trades: [ActivityTrade] = []
-    var commentsError: Error?
-    var holdersError: Error?
-    var tradesError: Error?
-    var commentsGate: CancellableGate?
-    private(set) var commentsCallCount = 0
-    private(set) var holdersCallCount = 0
-    private(set) var tradesCallCount = 0
+    private let lock = NSLock()
+
+    private var _comments: [Comment] = []
+    var comments: [Comment] {
+        get { lock.withLock { _comments } }
+        set { lock.withLock { _comments = newValue } }
+    }
+
+    private var _holders: [Holder] = []
+    var holders: [Holder] {
+        get { lock.withLock { _holders } }
+        set { lock.withLock { _holders = newValue } }
+    }
+
+    private var _trades: [ActivityTrade] = []
+    var trades: [ActivityTrade] {
+        get { lock.withLock { _trades } }
+        set { lock.withLock { _trades = newValue } }
+    }
+
+    private var _commentsError: Error?
+    var commentsError: Error? {
+        get { lock.withLock { _commentsError } }
+        set { lock.withLock { _commentsError = newValue } }
+    }
+
+    private var _holdersError: Error?
+    var holdersError: Error? {
+        get { lock.withLock { _holdersError } }
+        set { lock.withLock { _holdersError = newValue } }
+    }
+
+    private var _tradesError: Error?
+    var tradesError: Error? {
+        get { lock.withLock { _tradesError } }
+        set { lock.withLock { _tradesError = newValue } }
+    }
+
+    private var _commentsGate: CancellableGate?
+    var commentsGate: CancellableGate? {
+        get { lock.withLock { _commentsGate } }
+        set { lock.withLock { _commentsGate = newValue } }
+    }
+
+    private var _commentsCallCount = 0
+    private(set) var commentsCallCount: Int {
+        get { lock.withLock { _commentsCallCount } }
+        set { lock.withLock { _commentsCallCount = newValue } }
+    }
+
+    private var _holdersCallCount = 0
+    private(set) var holdersCallCount: Int {
+        get { lock.withLock { _holdersCallCount } }
+        set { lock.withLock { _holdersCallCount = newValue } }
+    }
+
+    private var _tradesCallCount = 0
+    private(set) var tradesCallCount: Int {
+        get { lock.withLock { _tradesCallCount } }
+        set { lock.withLock { _tradesCallCount = newValue } }
+    }
 
     func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod) async throws -> Page<Event> { Page(items: [], nextCursor: nil) }
     func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] { [] }
@@ -53,23 +108,34 @@ private final class SocialStripStubRepository: MarketRepository {
     func fetchTags() async throws -> [Tag] { [] }
 
     func holders(conditionId: String) async throws -> [Holder] {
-        holdersCallCount += 1
-        if let holdersError { throw holdersError }
+        // Bump the counter and read the canned error under one acquisition: taking the
+        // lock twice would let a concurrent caller interleave between them.
+        let error: Error? = lock.withLock {
+            _holdersCallCount += 1
+            return _holdersError
+        }
+        if let error { throw error }
         return holders
     }
 
     func comments(eventID: String, sort: CommentSort, holdersOnly: Bool) async throws -> [Comment] {
-        commentsCallCount += 1
-        if let commentsGate {
-            try await commentsGate.wait()
+        let gate: CancellableGate? = lock.withLock {
+            _commentsCallCount += 1
+            return _commentsGate
+        }
+        if let gate {
+            try await gate.wait()
         }
         if let commentsError { throw commentsError }
         return comments
     }
 
     func trades(conditionId: String) async throws -> [ActivityTrade] {
-        tradesCallCount += 1
-        if let tradesError { throw tradesError }
+        let error: Error? = lock.withLock {
+            _tradesCallCount += 1
+            return _tradesError
+        }
+        if let error { throw error }
         return trades
     }
 }

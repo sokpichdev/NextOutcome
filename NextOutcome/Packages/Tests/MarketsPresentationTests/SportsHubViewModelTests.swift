@@ -534,68 +534,157 @@ final class SportsLeagueDetailViewModelTests: XCTestCase {
 /// `fetchAllEvents` (`allEvents`), per-tag futures pages (`futuresPages`, via the paged
 /// `fetchEvents`), and a flat league events list (`leagueEvents`, via `fetchAllEvents` for
 /// any non-sports tag) for `SportsLeagueDetailViewModel` tests.
+/// Mutable state goes through `lock`. `SportsHubViewModel` issues its in-play, upcoming,
+/// catalogue and results requests concurrently, so several of these methods run at once and
+/// every unsynchronised `+= 1` or `last… =` is a data race. Those corrupt the heap and kill
+/// the process rather than failing a test — TSan reported four distinct races here. See
+/// `PortfolioStubs` for the same fix.
 private final class SportsFakeRepository: MarketRepository, @unchecked Sendable {
     private let allEvents: [Event]
-    var futuresPages: [String: [Event]] = [:]
-    var leagueEvents: [Event] = []
-    private(set) var futuresFetchCount = 0
-    private(set) var fetchAllCallCount = 0
-    var catalogue: [SportLeague] = []
-    var catalogueError = false
-    var results: [String: GameResult] = [:]
+    private let lock = NSLock()
+
+    private var _futuresPages: [String: [Event]] = [:]
+    var futuresPages: [String: [Event]] {
+        get { lock.withLock { _futuresPages } }
+        set { lock.withLock { _futuresPages = newValue } }
+    }
+
+    private var _leagueEvents: [Event] = []
+    var leagueEvents: [Event] {
+        get { lock.withLock { _leagueEvents } }
+        set { lock.withLock { _leagueEvents = newValue } }
+    }
+
+    private var _futuresFetchCount = 0
+    private(set) var futuresFetchCount: Int {
+        get { lock.withLock { _futuresFetchCount } }
+        set { lock.withLock { _futuresFetchCount = newValue } }
+    }
+
+    private var _fetchAllCallCount = 0
+    private(set) var fetchAllCallCount: Int {
+        get { lock.withLock { _fetchAllCallCount } }
+        set { lock.withLock { _fetchAllCallCount = newValue } }
+    }
+
+    private var _catalogue: [SportLeague] = []
+    var catalogue: [SportLeague] {
+        get { lock.withLock { _catalogue } }
+        set { lock.withLock { _catalogue = newValue } }
+    }
+
+    private var _catalogueError = false
+    var catalogueError: Bool {
+        get { lock.withLock { _catalogueError } }
+        set { lock.withLock { _catalogueError = newValue } }
+    }
+
+    private var _results: [String: GameResult] = [:]
+    var results: [String: GameResult] {
+        get { lock.withLock { _results } }
+        set { lock.withLock { _results = newValue } }
+    }
+
     /// The ids passed to the most recent `fetchGameResults` call, for asserting fan-out is bounded.
-    private(set) var lastGameResultsEventIDs: [String] = []
+    private var _lastGameResultsEventIDs: [String] = []
+    private(set) var lastGameResultsEventIDs: [String] {
+        get { lock.withLock { _lastGameResultsEventIDs } }
+        set { lock.withLock { _lastGameResultsEventIDs = newValue } }
+    }
+
     /// Keyset pages served in order for the general sports tag. Page *n*'s `nextCursor` is the
     /// key to page *n+1*; a nil cursor means the feed is exhausted.
-    var livePages: [Page<Event>] = []
+    private var _livePages: [Page<Event>] = []
+    var livePages: [Page<Event>] {
+        get { lock.withLock { _livePages } }
+        set { lock.withLock { _livePages = newValue } }
+    }
+
     /// How many times the Live feed hit the network, for asserting reveals don't refetch.
-    private(set) var liveFetchCount = 0
+    private var _liveFetchCount = 0
+    private(set) var liveFetchCount: Int {
+        get { lock.withLock { _liveFetchCount } }
+        set { lock.withLock { _liveFetchCount = newValue } }
+    }
+
     /// The cursor the most recent Live request carried, so a refresh can be shown to restart.
-    private(set) var lastLiveCursor: String?
+    private var _lastLiveCursor: String?
+    private(set) var lastLiveCursor: String? {
+        get { lock.withLock { _lastLiveCursor } }
+        set { lock.withLock { _lastLiveCursor = newValue } }
+    }
+
     /// Games served to the in-play query.
-    var inPlayGames: [Event] = []
+    private var _inPlayGames: [Event] = []
+    var inPlayGames: [Event] {
+        get { lock.withLock { _inPlayGames } }
+        set { lock.withLock { _inPlayGames = newValue } }
+    }
+
     /// How many times the in-play query was made.
-    private(set) var inPlayFetchCount = 0
+    private var _inPlayFetchCount = 0
+    private(set) var inPlayFetchCount: Int {
+        get { lock.withLock { _inPlayFetchCount } }
+        set { lock.withLock { _inPlayFetchCount = newValue } }
+    }
+
     /// The league scope the most recent games request carried, if any.
-    private(set) var lastLeagueTagID: String?
+    private var _lastLeagueTagID: String?
+    private(set) var lastLeagueTagID: String? {
+        get { lock.withLock { _lastLeagueTagID } }
+        set { lock.withLock { _lastLeagueTagID = newValue } }
+    }
 
     init(allEvents: [Event]) { self.allEvents = allEvents }
 
     func fetchAllEvents(tagID: String, status: EventStatus) async throws -> [Event] {
-        fetchAllCallCount += 1
+        lock.withLock { _fetchAllCallCount += 1 }
         return tagID == SportsHubViewModel.sportsTagID ? allEvents : leagueEvents
     }
     func fetchEvents(cursor: String?, tagID: String?, sort: EventSort, status: EventStatus, period: EventPeriod) async throws -> Page<Event> {
-        if let tagID, let futures = futuresPages[tagID] {
-            futuresFetchCount += 1
-            return Page(items: futures, nextCursor: nil)
+        // One acquisition: reading the page and bumping the counter separately would let a
+        // concurrent caller interleave between them.
+        let futures: [Event]? = lock.withLock {
+            guard let tagID, let futures = _futuresPages[tagID] else { return nil }
+            _futuresFetchCount += 1
+            return futures
         }
+        if let futures { return Page(items: futures, nextCursor: nil) }
         return Page(items: [], nextCursor: nil)
     }
     func fetchEvents(seriesID: String, status: EventStatus) async throws -> [Event] { [] }
     func fetchGameResults(eventIDs: [String]) async throws -> [String: GameResult] {
-        lastGameResultsEventIDs = eventIDs
-        return results
+        lock.withLock {
+            _lastGameResultsEventIDs = eventIDs
+            return _results
+        }
     }
     func fetchSportsGames(live: Bool, startingAfter: Date?, cursor: String?, leagueTagID: String?) async throws -> Page<Event> {
-        lastLeagueTagID = leagueTagID
-        if live {
-            inPlayFetchCount += 1
-            return Page(items: inPlayGames, nextCursor: nil)
+        // The whole body runs under one acquisition — the counters, the `last…` recordings
+        // and the page lookup have to agree with each other, and this fake does no awaiting.
+        lock.withLock {
+            _lastLeagueTagID = leagueTagID
+            if live {
+                _inPlayFetchCount += 1
+                return Page(items: _inPlayGames, nextCursor: nil)
+            }
+            _liveFetchCount += 1
+            _lastLiveCursor = cursor
+            // Tests that don't care about paging just seed `allEvents`; they get it as a single,
+            // final page so their setup reads the same as before the feed was paged.
+            guard !_livePages.isEmpty else { return Page(items: allEvents, nextCursor: nil) }
+            // nil cursor means "first page"; otherwise the cursor is the previous page's.
+            let index = cursor.flatMap { c in _livePages.firstIndex { $0.nextCursor == c }.map { $0 + 1 } } ?? 0
+            guard index < _livePages.count else { return Page(items: [], nextCursor: nil) }
+            return _livePages[index]
         }
-        liveFetchCount += 1
-        lastLiveCursor = cursor
-        // Tests that don't care about paging just seed `allEvents`; they get it as a single,
-        // final page so their setup reads the same as before the feed was paged.
-        guard !livePages.isEmpty else { return Page(items: allEvents, nextCursor: nil) }
-        // nil cursor means "first page"; otherwise the cursor is the previous page's.
-        let index = cursor.flatMap { c in livePages.firstIndex { $0.nextCursor == c }.map { $0 + 1 } } ?? 0
-        guard index < livePages.count else { return Page(items: [], nextCursor: nil) }
-        return livePages[index]
     }
 
     func fetchSportsCatalogue() async throws -> [SportLeague] {
-        if catalogueError { throw URLError(.badServerResponse) }
+        let (shouldThrow, catalogue): (Bool, [SportLeague]) = lock.withLock {
+            (_catalogueError, _catalogue)
+        }
+        if shouldThrow { throw URLError(.badServerResponse) }
         return catalogue
     }
     func fetchEvent(slug: String) async throws -> Event { fatalError("unused") }
