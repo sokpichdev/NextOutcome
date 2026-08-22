@@ -71,7 +71,11 @@ public struct GammaMarketRepository: MarketRepository {
     /// Fetches one page of markets by flattening the markets out of an events page.
     public func fetchMarkets(cursor: String?) async throws -> Page<Market> {
         let offset = cursor.flatMap(Int.init) ?? 0
-        let endpoint = Endpoint(host: .gamma, path: "/events", query: GammaEventQuery.params(offset: offset, tagID: nil, sort: .volume24h, status: .active, period: .all))
+        let endpoint = Endpoint(
+            host: .gamma,
+            path: "/events",
+            query: GammaEventQuery.params(offset: offset, tagID: nil, sort: .volume24h, status: .active, period: .all)
+        )
         let dtos: [EventDTO] = try await client.fetch(endpoint)
         let markets = dtos.flatMap { $0.markets }.map(MarketMapper.market(from:))
         let nextCursor = dtos.count == Self.pageSize ? "\(offset + Self.pageSize)" : nil

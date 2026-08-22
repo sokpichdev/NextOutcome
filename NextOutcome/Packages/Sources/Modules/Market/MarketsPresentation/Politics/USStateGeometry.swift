@@ -10,6 +10,9 @@
 /// abbreviation. Each value is the SVG path `d` attribute -- a flat polygon outline
 /// (only move/line/close commands, no curves) -- parsed into a SwiftUI `Path` by
 /// `SVGPathParser` and drawn by `USStateMapView`.
+// Vendored SVG path data, not hand-written code: the `d` strings are single long tokens
+// that cannot be wrapped without corrupting them.
+// swiftlint:disable line_length
 public enum USStateGeometry {
     /// The coordinate space the paths below are defined in (SVG viewBox size).
     public static let viewBoxSize = (width: 959.0, height: 593.0)
@@ -132,3 +135,4 @@ public enum USStateGeometry {
         uniqueKeysWithValues: stateNames.map { (code, name) in (name.lowercased(), code) }
     )
 }
+// swiftlint:enable line_length

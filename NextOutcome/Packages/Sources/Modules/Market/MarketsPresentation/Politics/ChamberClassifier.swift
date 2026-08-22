@@ -46,9 +46,13 @@ public enum ChamberClassifier {
     /// House races title their district directly with a postal code, e.g. `"CA-22 House
     /// Election Winner"`. Senate/Governor races spell out the full state name instead, e.g.
     /// `"California Senate Election Winner"` / `"California Governor Election Winner"`.
+    // Literal patterns, validated by the tests below: `try!` cannot fail at runtime,
+    // and an optional fallback would silently disable classification instead.
+    // swiftlint:disable force_try
     private static let housePattern = try! NSRegularExpression(pattern: #"^([A-Za-z]{2})-\d+\s+House Election Winner$"#)
     private static let senatePattern = try! NSRegularExpression(pattern: #"^(.+?)\s+Senate Election Winner$"#)
     private static let governorPattern = try! NSRegularExpression(pattern: #"^(.+?)\s+Governor Election Winner$"#)
+    // swiftlint:enable force_try
 
     /// Classifies an event title into a chamber and (when resolvable) a state.
     /// - Parameter title: The event's title, as returned by Gamma (may carry incidental

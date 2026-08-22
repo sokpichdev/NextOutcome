@@ -35,6 +35,25 @@ jobs:
         working-directory: NextOutcome/Packages
         run: swift test
 
+  swiftlint:
+    name: SwiftLint
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # macos-latest ships SwiftLint preinstalled; the version is logged so a
+      # runner-image bump that changes the rule set is diagnosable from the log.
+      - name: SwiftLint version
+        run: swiftlint version
+
+      # Plain `lint` -- NOT `--strict`. This fails the build on error-severity
+      # violations only; the ~1050 pre-existing warnings surface as inline PR
+      # annotations instead. Add --strict once that backlog reaches zero.
+      # Config lives in .swiftlint.yml, with test-target overrides in
+      # NextOutcome/Packages/Tests/.swiftlint.yml.
+      - name: swiftlint lint
+        run: swiftlint lint --reporter github-actions-logging
+
   app-build:
     name: App target builds
     runs-on: macos-latest

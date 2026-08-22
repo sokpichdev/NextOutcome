@@ -1,0 +1,29 @@
+# Test-target overrides, merged over the root .swiftlint.yml by SwiftLint's
+# nested-configuration support.
+#
+# Every rule here keeps its `warning` threshold but drops its `error` threshold,
+# so a test file can never fail CI on shape alone. The reasons are specific to
+# test code:
+#
+#   line_length      -- decoding tests embed real API responses as single-line
+#                       JSON literals (up to ~1.3k characters). Wrapping them
+#                       would misrepresent the wire format under test.
+#   file_length,     -- a table-driven XCTestCase legitimately grows past what a
+#   type_body_length    production type should; splitting purely to satisfy a
+#                       line count scatters related cases across files.
+#   large_tuple      -- spy doubles record call arguments as tuples; a 4-member
+#                       record mirrors a 4-parameter method.
+
+line_length:
+  warning: 160
+  ignores_comments: true
+  ignores_urls: true
+
+file_length:
+  warning: 800
+
+type_body_length:
+  warning: 600
+
+large_tuple:
+  warning: 2

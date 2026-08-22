@@ -26,7 +26,13 @@ public struct FetchEventsUseCase: Sendable {
     ///   - status: Which events to include. Defaults to active only.
     ///   - period: How far back an event must have started to be included. Defaults to no restriction.
     /// - Returns: A page of events plus the next cursor.
-    public func execute(cursor: String? = nil, tagID: String? = nil, sort: EventSort = .volume24h, status: EventStatus = .active, period: EventPeriod = .all) async throws -> Page<Event> {
+    public func execute(
+        cursor: String? = nil,
+        tagID: String? = nil,
+        sort: EventSort = .volume24h,
+        status: EventStatus = .active,
+        period: EventPeriod = .all
+    ) async throws -> Page<Event> {
         try await repository.fetchEvents(cursor: cursor, tagID: tagID, sort: sort, status: status, period: period)
     }
 

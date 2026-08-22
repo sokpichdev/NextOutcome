@@ -68,7 +68,7 @@ import SwiftUI
                 value: "$1,240.55",
                 change: "▲ +$84.20 (7.3%) today",
                 isPositive: true,
-                sparkData: DesignSystemGallery_Previews.sampleData
+                sparkData: DesignSystemGallerySamples.sampleData
             )
             .padding(.horizontal)
         }
@@ -127,7 +127,7 @@ import SwiftUI
     .background(DSColor.background)
 }
 
-private extension DesignSystemGallery_Previews {
+private extension DesignSystemGallerySamples {
     /// Generates 30 hours of randomized-but-plausible price points (centered
     /// around 55¢) purely for feeding the `ValuePnLHeader` sparkline preview above.
     static var sampleData: [PricePoint] {
@@ -144,4 +144,4 @@ private extension DesignSystemGallery_Previews {
 /// An empty marker type — exists solely so `sampleData` above has a namespace
 /// to live in, since Swift's `#Preview` macro can't directly reference a
 /// standalone top-level `static let`.
-private enum DesignSystemGallery_Previews {}
+private enum DesignSystemGallerySamples {}
