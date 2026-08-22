@@ -38,11 +38,23 @@ jobs:
   swiftlint:
     name: SwiftLint
     runs-on: macos-latest
+    env:
+      # Keep in step with what developers run locally.
+      SWIFTLINT_VERSION: 0.63.2
     steps:
       - uses: actions/checkout@v4
 
-      # macos-latest ships SwiftLint preinstalled; the version is logged so a
-      # runner-image bump that changes the rule set is diagnosable from the log.
+      # Pinned rather than installed from Homebrew (and NOT taken from the runner
+      # image, which no longer ships SwiftLint). A floating version would change
+      # the rule set underneath us, so a green PR could go red on an unrelated
+      # push. Bump this deliberately, and re-run the lint locally when you do.
+      - name: Install SwiftLint ${{ env.SWIFTLINT_VERSION }}
+        run: |
+          curl -sSL --fail -o /tmp/swiftlint.zip \
+            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/portable_swiftlint.zip"
+          unzip -q -o /tmp/swiftlint.zip -d /tmp/swiftlint
+          echo "/tmp/swiftlint" >> "$GITHUB_PATH"
+
       - name: SwiftLint version
         run: swiftlint version
 
