@@ -152,7 +152,12 @@ final class SportsShots: XCTestCase {
         // chip happens to be first.
         let worldCup = sportsChip(containing: "World Cup", in: app)
         try requireMarket(worldCup, named: "home_sports_worldcup")
-        scrollChipIntoView(worldCup, in: app)
+        // requireMarket only proved the chip exists, not that it's reachable — an unconditional
+        // tap after a scroll that silently failed to fully land it on screen is exactly the
+        // "Activation point invalid" crash root-caused above. Assert the scroll actually
+        // landed it: a chip that exists but can't be scrolled into view is a real regression,
+        // not a live-data gap requireMarket already covers.
+        XCTAssertTrue(scrollChipIntoView(worldCup, in: app), "'World Cup' chip never scrolled into view")
         worldCup.tap()
         settle(app)
         capture("home_sports_worldcup", of: app)
@@ -184,8 +189,23 @@ final class SportsShots: XCTestCase {
             return
         }
         XCTAssertTrue(teamButton.waitForHittable(timeout: UIWait.load), "No team row to open")
+        // The content+position filter above fixed the one concrete way this picked the wrong
+        // control (the "Home" tab button), but it's still a heuristic — a future addition to
+        // that vertical band with no "¢"/"Vol" in its label would pass the filter silently.
+        // That exact failure mode (a green test saving the wrong screen) already happened once
+        // in this file and was only caught by opening the image. So: don't trust the tap:
+        // capture the team's bare name from the button's own label before tapping (`GameCard`
+        // renders it as "Team Name" or "Team Name, W-L record" — the name is always the part
+        // before the first comma), then require it to reappear as its own `staticText` after
+        // the tap. This is specific to `TeamProfileView`, which renders
+        // `Text(viewModel.target.name)` as a plain title — on every other screen in this test
+        // (the MLB games list included) that same string is only ever *part of* a composite
+        // button label, never its own static text, so this can't pass by staying put.
+        let teamName = teamButton.label.components(separatedBy: ", ").first ?? teamButton.label
         teamButton.tap()
         settle(app)
+        XCTAssertTrue(app.staticTexts[teamName].waitForExistence(timeout: UIWait.load),
+                      "Tap did not open TeamProfileView for \"\(teamName)\" — its name never appeared as its own heading")
         capture("team_profile", of: app)
     }
 
@@ -278,7 +298,9 @@ final class SportsShots: XCTestCase {
         let wimbledon = app.buttons.matching(
             NSPredicate(format: "label CONTAINS[c] %@", "Wimbledon")).firstMatch
         try requireMarket(wimbledon, named: "home_sports_wimbledon")
-        scrollChipIntoView(wimbledon, in: app)
+        // Same reasoning as `test_homeSportsWorldCup`: requireMarket proves existence, not
+        // reachability — assert the scroll actually landed it before tapping.
+        XCTAssertTrue(scrollChipIntoView(wimbledon, in: app), "'Wimbledon' chip never scrolled into view")
         wimbledon.tap()
         settle(app)
         capture("home_sports_wimbledon", of: app)
