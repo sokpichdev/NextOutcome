@@ -32,3 +32,6 @@ NextOutcome/NextOutcome.xcodeproj/xcuserdata/ctrcomputer.xcuserdatad/xcschemes/x
 /design/icon
 /TestResults
 /scripts
+
+# Claude Code worktrees
+.claude/worktrees/
