@@ -58,7 +58,12 @@ final class HomeShots: XCTestCase {
         let deepMover = app.staticTexts
             .matching(NSPredicate(format: "label IN %@",
                                    ["10", "11", "12", "13", "14", "15"])).firstMatch
-        app.scrollTo(deepMover)
+        // Unlike the World Cup Winner card, this isn't tied to a seasonal event: "All"
+        // movers has no tag filter and pulls from the whole live market set, so ranks
+        // 10-15 being unreachable would mean the movers feed, list ordering, or layout
+        // broke — a real regression, not a legitimate quiet-live-data state. Fail loudly
+        // instead of silently capturing whatever scroll position `scrollTo` gave up at.
+        XCTAssertTrue(app.scrollTo(deepMover), "Never reached the deep mover ranks")
         settle(app)
         capture("breaking_movers", of: app)
     }
