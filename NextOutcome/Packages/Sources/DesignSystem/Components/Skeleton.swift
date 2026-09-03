@@ -81,7 +81,7 @@ extension View {
     /// static; the placeholder still communicates "loading" through its shape.
     /// - Parameter isActive: Whether to shimmer. Defaults to `true`.
     public func shimmering(_ isActive: Bool = true) -> some View {
-        modifier(Skeleton(isActive: isActive))
+        modifier(ShimmerModifier(isActive: isActive))
     }
 }
 
@@ -91,7 +91,10 @@ extension View {
 /// a fixed-width overlay: unit points are resolution-independent, so one sweep reads the
 /// same across a full-width card and a narrow column, and there's no dependency on a
 /// `GeometryReader` having reported a non-zero width before the animation starts.
-struct Skeleton: ViewModifier {
+///
+/// Internal rather than private so `ShimmerModifier.shimmerAnimation` is unit-testable
+/// from the `DesignSystemTests` target via `@testable import`.
+struct ShimmerModifier: ViewModifier {
     /// Set when the user has asked the system to reduce motion; suppresses the sweep.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Whether the caller wants the sweep at all.
