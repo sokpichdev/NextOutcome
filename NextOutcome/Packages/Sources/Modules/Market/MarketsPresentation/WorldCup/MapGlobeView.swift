@@ -97,7 +97,9 @@ struct GlobeSceneView: UIViewRepresentable {
         let globe = SCNNode(geometry: makeGlobeGeometry())
         globe.name = "globe"
         globe.eulerAngles = SCNVector3(0.35, 0, 0) // tilt so the northern hemisphere shows
-        globe.runAction(.repeatForever(.rotateBy(x: 0, y: .pi * 2, z: 0, duration: 40)))
+        if !ScreenshotMode.isActive {
+            globe.runAction(.repeatForever(.rotateBy(x: 0, y: .pi * 2, z: 0, duration: 40)))
+        }
         scene.rootNode.addChildNode(globe)
 
         return scene
@@ -242,7 +244,9 @@ struct GlobeSceneView: UIViewRepresentable {
                 )
             case .ended, .cancelled:
                 // Resume the slow spin from the current orientation.
-                globe.runAction(.repeatForever(.rotateBy(x: 0, y: .pi * 2, z: 0, duration: 40)))
+                if !ScreenshotMode.isActive {
+                    globe.runAction(.repeatForever(.rotateBy(x: 0, y: .pi * 2, z: 0, duration: 40)))
+                }
             default:
                 break
             }

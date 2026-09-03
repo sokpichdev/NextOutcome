@@ -90,7 +90,7 @@ struct FlagMarqueeView: View {
     var body: some View {
         if !tiles.isEmpty {
             GeometryReader { geo in
-                if reduceMotion {
+                if reduceMotion || ScreenshotMode.isActive {
                     conveyor(width: geo.size.width, offset: 0)
                 } else {
                     TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in

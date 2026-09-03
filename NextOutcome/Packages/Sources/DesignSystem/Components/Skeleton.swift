@@ -81,7 +81,7 @@ extension View {
     /// static; the placeholder still communicates "loading" through its shape.
     /// - Parameter isActive: Whether to shimmer. Defaults to `true`.
     public func shimmering(_ isActive: Bool = true) -> some View {
-        modifier(ShimmerModifier(isActive: isActive))
+        modifier(Skeleton(isActive: isActive))
     }
 }
 
@@ -91,7 +91,7 @@ extension View {
 /// a fixed-width overlay: unit points are resolution-independent, so one sweep reads the
 /// same across a full-width card and a narrow column, and there's no dependency on a
 /// `GeometryReader` having reported a non-zero width before the animation starts.
-private struct ShimmerModifier: ViewModifier {
+struct Skeleton: ViewModifier {
     /// Set when the user has asked the system to reduce motion; suppresses the sweep.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Whether the caller wants the sweep at all.
@@ -103,6 +103,17 @@ private struct ShimmerModifier: ViewModifier {
 
     /// Seconds for one full left-to-right pass.
     private static let duration: Double = 1.4
+
+    /// The shimmer's repeating animation, or `nil` when screenshots are being taken.
+    ///
+    /// A `repeatForever` shimmer never reaches a stable frame, so a screenshot of a
+    /// skeleton is different every run. Returning `nil` leaves the placeholder drawn but
+    /// still.
+    /// - Parameter screenshotMode: Whether a screenshot run is in progress.
+    static func shimmerAnimation(screenshotMode: Bool = ScreenshotMode.isActive) -> Animation? {
+        guard !screenshotMode else { return nil }
+        return .linear(duration: Self.duration).repeatForever(autoreverses: false)
+    }
 
     func body(content: Content) -> some View {
         if isActive && !reduceMotion {
@@ -126,7 +137,7 @@ private struct ShimmerModifier: ViewModifier {
                     .allowsHitTesting(false)
                 }
                 .onAppear {
-                    withAnimation(.linear(duration: Self.duration).repeatForever(autoreverses: false)) {
+                    withAnimation(Self.shimmerAnimation()) {
                         start = UnitPoint(x: 1.0, y: 0.5)
                         end = UnitPoint(x: 2.0, y: 0.5)
                     }
