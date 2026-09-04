@@ -35,6 +35,37 @@ jobs:
         working-directory: NextOutcome/Packages
         run: swift test
 
+  swiftlint:
+    name: SwiftLint
+    runs-on: macos-latest
+    env:
+      # Keep in step with what developers run locally.
+      SWIFTLINT_VERSION: 0.63.2
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned rather than installed from Homebrew (and NOT taken from the runner
+      # image, which no longer ships SwiftLint). A floating version would change
+      # the rule set underneath us, so a green PR could go red on an unrelated
+      # push. Bump this deliberately, and re-run the lint locally when you do.
+      - name: Install SwiftLint ${{ env.SWIFTLINT_VERSION }}
+        run: |
+          curl -sSL --fail -o /tmp/swiftlint.zip \
+            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/portable_swiftlint.zip"
+          unzip -q -o /tmp/swiftlint.zip -d /tmp/swiftlint
+          echo "/tmp/swiftlint" >> "$GITHUB_PATH"
+
+      - name: SwiftLint version
+        run: swiftlint version
+
+      # Plain `lint` -- NOT `--strict`. This fails the build on error-severity
+      # violations only; the ~1050 pre-existing warnings surface as inline PR
+      # annotations instead. Add --strict once that backlog reaches zero.
+      # Config lives in .swiftlint.yml, with test-target overrides in
+      # NextOutcome/Packages/Tests/.swiftlint.yml.
+      - name: swiftlint lint
+        run: swiftlint lint --reporter github-actions-logging
+
   app-build:
     name: App target builds
     runs-on: macos-latest

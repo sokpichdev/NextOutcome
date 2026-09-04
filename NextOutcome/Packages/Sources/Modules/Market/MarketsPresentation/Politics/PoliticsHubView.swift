@@ -143,8 +143,12 @@ public struct PoliticsHubView: View {
     }
 
     private static let faqs: [(String, String)] = [
-        ("How are these odds calculated?", "Each market's price reflects the probability traders assign to that outcome, based on real money bought and sold on that side."),
-        ("When do these markets resolve?", "Race markets resolve once a winner is officially called by major news outlets, typically on election night or shortly after."),
+        ("How are these odds calculated?",
+         "Each market's price reflects the probability traders assign to that outcome, "
+         + "based on real money bought and sold on that side."),
+        ("When do these markets resolve?",
+         "Race markets resolve once a winner is officially called by major news outlets, "
+         + "typically on election night or shortly after."),
         ("Can the odds change?", "Yes — prices move continuously as new information (polls, news, ads) shifts trader sentiment."),
     ]
 

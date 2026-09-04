@@ -197,7 +197,10 @@ extension Color {
         return Color(UIColor { traits in
             let base = UIColor(self).resolvedColor(with: traits)
             let target = UIColor(other).resolvedColor(with: traits)
+            // RGBA mirrors `getRed(_:green:blue:alpha:)`; splitting it would obscure the call.
+            // swiftlint:disable:next large_tuple
             var (r1, g1, b1, a1): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
+            // swiftlint:disable:next large_tuple
             var (r2, g2, b2, a2): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
             base.getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
             target.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
