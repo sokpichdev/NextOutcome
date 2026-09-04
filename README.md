@@ -1,6 +1,6 @@
 <!-- App Icon -->
 <p align="center">
-  <img src="screenshots/app_icon.png" alt="NextOutcome app icon" width="120"/>
+  <img src="screenshots/v2/app_icon.png" alt="NextOutcome app icon" width="120"/>
 </p>
 
 <h1 align="center">NextOutcome</h1>
@@ -75,32 +75,32 @@ actively on the roadmap.
 
 | | | |
 |---|---|---|
-| <img src="screenshots/home_trending.png" width="200"/><br/>Home feed — Trending | <img src="screenshots/home_politics.png" width="200"/><br/>Home feed — Politics | <img src="screenshots/home_breaking.png" width="200"/><br/>Home feed — Breaking |
-| <img src="screenshots/breaking_movers.png" width="200"/><br/>Breaking — 24h movers | <img src="screenshots/search.png" width="200"/><br/>Search | <img src="screenshots/theme_dark.png" width="200"/><br/>Dark theme |
+| <img src="screenshots/v2/home_trending.png" width="200"/><br/>Home feed — Trending | <img src="screenshots/v2/home_politics.png" width="200"/><br/>Home feed — Politics | <img src="screenshots/v2/home_breaking.png" width="200"/><br/>Home feed — Breaking |
+| <img src="screenshots/v2/breaking_movers.png" width="200"/><br/>Breaking — 24h movers | <img src="screenshots/v2/search.png" width="200"/><br/>Search | <img src="screenshots/v2/theme_dark.png" width="200"/><br/>Dark theme |
 
 ### Market detail & trading
 
 | | | |
 |---|---|---|
-| <img src="screenshots/market_detail.png" width="200"/><br/>Market detail — sticky Yes/No bar | <img src="screenshots/orderbook_live.png" width="200"/><br/>Live order book | <img src="screenshots/portfolio.png" width="200"/><br/>Portfolio (watch-only) |
-| <img src="screenshots/trade_sheet.png" width="200"/><br/>Trade sheet — `DSNumberPad` | <img src="screenshots/trade_receipt.png" width="200"/><br/>Trade receipt (simulated) | |
+| <img src="screenshots/v2/market_detail.png" width="200"/><br/>Market detail — sticky Yes/No bar | <img src="screenshots/v2/orderbook_live.png" width="200"/><br/>Live order book | <img src="screenshots/v2/portfolio.png" width="200"/><br/>Portfolio (watch-only) |
+| <img src="screenshots/v2/trade_sheet.png" width="200"/><br/>Trade sheet — `DSNumberPad` | <img src="screenshots/v2/trade_receipt.png" width="200"/><br/>Trade receipt (simulated) | |
 
 ### Sports, World Cup & Esports
 
 | | | |
 |---|---|---|
-| <img src="screenshots/home_sports_live.png" width="200"/><br/>Sports hub — Live feed | <img src="screenshots/home_sports_futures.png" width="200"/><br/>Sports hub — Futures | <img src="screenshots/sports_hub_catalogue.png" width="200"/><br/>Sports hub — catalogue nav |
-| <img src="screenshots/home_sports_mlb.png" width="200"/><br/>Sports hub — MLB league | <img src="screenshots/home_sports_wimbledon.png" width="200"/><br/>Sports hub — Wimbledon | <img src="screenshots/team_profile.png" width="200"/><br/>Team / fighter profile |
-| <img src="screenshots/home_sports_worldcup.png" width="200"/><br/>Sports hub — World Cup | <img src="screenshots/home_worldcup_game.png" width="200"/><br/>World Cup — Games | <img src="screenshots/home_worldcup_bracket.png" width="200"/><br/>World Cup — Bracket |
-| <img src="screenshots/home_worldcup_props.png" width="200"/><br/>World Cup — Props | <img src="screenshots/home_worldcup_map.png" width="200"/><br/>World Cup — SceneKit globe | <img src="screenshots/home_trending_worldcup_winners.png" width="200"/><br/>World Cup winner odds |
-| <img src="screenshots/worldcup_franch_winner.png" width="200"/><br/>France-to-win market | <img src="screenshots/esports_hub.png" width="200"/><br/>Esports hub | <img src="screenshots/esports_match_detail.png" width="200"/><br/>Esports match detail |
+| <img src="screenshots/v2/home_sports_live.png" width="200"/><br/>Sports hub — Live feed | <img src="screenshots/v2/home_sports_futures.png" width="200"/><br/>Sports hub — Futures | <img src="screenshots/v2/sports_hub_catalogue.png" width="200"/><br/>Sports hub — catalogue nav |
+| <img src="screenshots/v2/home_sports_mlb.png" width="200"/><br/>Sports hub — MLB league | <img src="screenshots/v2/home_sports_wimbledon.png" width="200"/><br/>Sports hub — Wimbledon | <img src="screenshots/v2/team_profile.png" width="200"/><br/>Team / fighter profile |
+| <img src="screenshots/v2/home_sports_worldcup.png" width="200"/><br/>Sports hub — World Cup | <img src="screenshots/v2/home_worldcup_game.png" width="200"/><br/>World Cup — Games | <img src="screenshots/v2/home_worldcup_bracket.png" width="200"/><br/>World Cup — Bracket |
+| <img src="screenshots/v2/home_worldcup_props.png" width="200"/><br/>World Cup — Props | <img src="screenshots/v2/home_worldcup_map.png" width="200"/><br/>World Cup — SceneKit globe | <img src="screenshots/v2/home_trending_worldcup_winners.png" width="200"/><br/>World Cup winner odds |
+| <img src="screenshots/v2/worldcup_franch_winner.png" width="200"/><br/>France-to-win market | <img src="screenshots/v2/esports_hub.png" width="200"/><br/>Esports hub | <img src="screenshots/v2/esports_match_detail.png" width="200"/><br/>Esports match detail |
 
 ### Crypto & Politics
 
 | | | |
 |---|---|---|
-| <img src="screenshots/crypto_hub.png" width="200"/><br/>Crypto hub | <img src="screenshots/crypto_live.png" width="200"/><br/>Crypto live window | <img src="screenshots/crypto_live_sections.png" width="200"/><br/>Crypto live — book & holders |
-| <img src="screenshots/politics_hub.png" width="200"/><br/>Politics hub — Midterms map | | |
+| <img src="screenshots/v2/crypto_hub.png" width="200"/><br/>Crypto hub | <img src="screenshots/v2/crypto_live.png" width="200"/><br/>Crypto live window | <img src="screenshots/v2/crypto_live_sections.png" width="200"/><br/>Crypto live — book & holders |
+| <img src="screenshots/v2/politics_hub.png" width="200"/><br/>Politics hub — Midterms map | | |
 
 ---
 
@@ -108,7 +108,7 @@ actively on the roadmap.
 
 | World Cup hub navigation | World Cup Map — SceneKit globe | Crypto live window | Esports hub |
 |---|---|---|---|
-| <img src="screenshots/home_world_cup.gif" width="200"/> | <img src="screenshots/home_worldcup_map.gif" width="200"/> | <img src="screenshots/crypto_live.gif" width="200"/> | <img src="screenshots/esports_hub.gif" width="200"/> |
+| <img src="screenshots/v2/home_world_cup.gif" width="200"/> | <img src="screenshots/v2/home_worldcup_map.gif" width="200"/> | <img src="screenshots/v2/crypto_live.gif" width="200"/> | <img src="screenshots/v2/esports_hub.gif" width="200"/> |
 
 ---
 
