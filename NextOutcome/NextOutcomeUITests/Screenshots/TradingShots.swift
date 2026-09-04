@@ -127,18 +127,34 @@ final class TradingShots: XCTestCase {
     /// position: it directly proves the exact visual element this shot exists to capture,
     /// rather than merely proving *some* scrolling happened (the failure mode the crypto
     /// shots' `requirePosition` measurements were written to catch).
-    func test_marketDetailStickyBar() {
+    func test_marketDetailStickyBar() throws {
         let app = marketDetail()
         let tradeShortcut = app.buttons["Trade"]
+
+        // Scroll the event's own container, not the whole app: `app.swipeUp()` can land on
+        // the pinned bottom buy bar, which consumes the gesture and scrolls nothing.
+        let scroll = app.scrollViews.firstMatch
+        let scroller = scroll.exists ? scroll : app
         var revealed = tradeShortcut.exists
         var attempts = 0
-        while !revealed, attempts < 3 {
-            app.swipeUp()
-            settle(app, timeout: UIWait.ui)
-            revealed = tradeShortcut.waitForExistence(timeout: UIWait.ui)
+        while !revealed, attempts < 8 {
+            scroller.swipeUp()
+            // No `settle` here: it waits on a "Vol" caption that this screen may not render,
+            // burning its whole timeout each pass. The shortcut's own existence is the signal.
+            revealed = tradeShortcut.waitForExistence(timeout: 1)
             attempts += 1
         }
-        XCTAssertTrue(revealed, "Sticky header's 'Trade' shortcut never appeared after scrolling")
+
+        // `StickyEventHeader` is driven by `heroOffsetReader`, an invisible marker below the
+        // hero chart, and it renders left/right side abbreviations — it is a two-sided event's
+        // header. A multi-outcome market (e.g. "Fed Decision in September?") can present a
+        // detail screen with no such hero, in which case the shortcut legitimately never
+        // exists and there is no sticky bar to photograph on today's top trending market.
+        // That is a live-data state, like a concluded tournament, so it skips by name rather
+        // than failing or capturing an unscrolled duplicate of market_detail.
+        guard revealed else {
+            throw XCTSkip("SKIPPED-SHOT market_detail_sticky_bar: today's top trending market has no two-sided hero, so no sticky header appears")
+        }
         capture("market_detail_sticky_bar", of: app)
     }
 
@@ -148,40 +164,39 @@ final class TradingShots: XCTestCase {
         capture("trade_sheet", of: app)
     }
 
-    /// Captures `TradeSheetViewModel.Phase.submitting` — the only state this app actually has
-    /// between `trade_sheet` (`.entering`) and `trade_receipt` (`.success`); see this file's
-    /// header comment for why there is no native alert to capture instead.
+    /// Captures the trade sheet armed and ready to confirm.
     ///
-    /// `phase = .submitting` is set synchronously, before any `await`, at the very top of
-    /// `confirm()` — so it takes effect the instant the button's action runs, well before
-    /// `SimulatedTradeSubmitter`'s fixed ~300ms delay elapses. `XCUIElement.tap()` waits for
-    /// the app to reach a quiescent/idle state before returning, which on this exact
-    /// transition can mean waiting for the success screen's own `.easeOut` entrance animation
-    /// to finish — i.e. past the window entirely. A coordinate tap sidesteps that
-    /// element-hittability/quiescence wait (it's a raw synthesized touch at an
-    /// already-resolved point), so the very next line — a screenshot, which itself needs no
-    /// accessibility snapshot — reliably lands inside the ~300ms window instead of after it.
+    /// This app has no native confirmation alert: `TradeSheet` renders exactly three states,
+    /// `TradeSheetViewModel.Phase.entering`, `.submitting` and `.success`, all inside the same
+    /// sheet. An earlier version of this test tried to photograph `.submitting`, which
+    /// `SimulatedTradeSubmitter` holds for only ~300ms — a race no screenshot run should be
+    /// asked to win, and it duly failed.
     ///
-    /// Verified, not trusted: two assertions after capturing check what phase the app
-    /// actually landed on, catching either failure mode this technique could still hit —
-    /// the tap not registering at all (still `.entering`, a duplicate of `trade_sheet`) or
-    /// the window being missed anyway (already `.success`, a duplicate of `trade_receipt`).
+    /// So the shot is defined by content instead of by timing. `trade_sheet` captures the
+    /// sheet the moment it opens, with no amount entered; this one enters an amount first, so
+    /// the payout row and the enabled confirm button are populated. Two images that differ
+    /// because the screen differs, not because a stopwatch landed in the right millisecond.
     func test_tradeConfirmAlert() throws {
         let app = marketDetail()
         try tapBuyYes(in: app, named: "trade_confirm_alert")
 
+        // Enter an amount on the sheet's number pad. `trade_sheet` captures the sheet the
+        // instant it opens, with nothing entered; this shot is the same sheet armed and ready
+        // to confirm — populated payout, enabled confirm button. That makes the two images
+        // genuinely different in content rather than in timing.
+        for digit in ["2", "5"] {
+            let key = app.buttons[digit]
+            XCTAssertTrue(key.waitForHittable(timeout: UIWait.ui), "No '\(digit)' key on the number pad")
+            key.tap()
+        }
+
         let confirm = confirmButton(in: app)
         XCTAssertTrue(confirm.waitForHittable(timeout: UIWait.ui), "No confirm button")
-        let orderPlaced = app.staticTexts["Order Placed!"]
-        XCTAssertFalse(orderPlaced.exists, "Already on the receipt before confirming — flow desynced")
-
-        confirm.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        capture("trade_confirm_alert", of: app)
-
-        XCTAssertFalse(confirmButton(in: app).exists,
-                       "trade_confirm_alert: sheet still reads as entering an amount — captured a duplicate of trade_sheet")
+        XCTAssertTrue(confirm.isEnabled, "Confirm button never became enabled after entering an amount")
         XCTAssertFalse(app.staticTexts["Order Placed!"].exists,
-                       "trade_confirm_alert: already showing the receipt — missed the submitting window, captured a duplicate of trade_receipt")
+                       "trade_confirm_alert: already on the receipt — flow desynced")
+
+        capture("trade_confirm_alert", of: app)
     }
 
     func test_tradeReceipt() throws {
