@@ -160,11 +160,21 @@ final class PoliticsHubViewModelTests: XCTestCase {
 }
 
 /// A fake repository that returns canned events per tag and records call count.
+/// `callCount` goes through `lock`: `PoliticsHubViewModel.load()` fetches the midterms and
+/// referendums tags concurrently, so both land in `fetchAllEvents` at once and an
+/// unsynchronised `+= 1` is a data race — the kind that corrupts the heap and takes the
+/// whole suite down rather than failing a test. See `PortfolioStubs` for the same fix.
 private final class FakePoliticsRepository: MarketRepository, @unchecked Sendable {
     private let midterms: [Event]
     private let referendums: [Event]
     private let shouldThrow: Bool
-    private(set) var callCount = 0
+    private let lock = NSLock()
+
+    private var _callCount = 0
+    private(set) var callCount: Int {
+        get { lock.withLock { _callCount } }
+        set { lock.withLock { _callCount = newValue } }
+    }
 
     init(midterms: [Event], referendums: [Event], shouldThrow: Bool = false) {
         self.midterms = midterms
@@ -173,7 +183,7 @@ private final class FakePoliticsRepository: MarketRepository, @unchecked Sendabl
     }
 
     func fetchAllEvents(tagID: String, status: EventStatus) async throws -> [Event] {
-        callCount += 1
+        lock.withLock { _callCount += 1 }
         if shouldThrow { throw NSError(domain: "test", code: 1) }
         return tagID == PoliticsHubViewModel.midtermsTagID ? midterms : referendums
     }
