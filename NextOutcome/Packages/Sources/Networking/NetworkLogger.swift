@@ -41,10 +41,27 @@ public struct NetworkLogger: Sendable {
         self.level = level
     }
 
-    /// Verbose in DEBUG (body included), off in release.
+    /// The launch argument that opts a DEBUG build back into `.verbose`.
+    ///
+    /// Add it under Product → Scheme → Edit Scheme → Run → Arguments when you actually
+    /// want to read bodies; leave it off the rest of the time.
+    public static let verboseArgument = "-verboseNetworkLogging"
+
+    /// Whether this process asked for body logging. Read once — the launch arguments
+    /// can't change while the app is running.
+    private static let isVerboseRequested = ProcessInfo.processInfo.arguments.contains(verboseArgument)
+
+    /// One line per request in DEBUG, bodies only on request, silent in release.
+    ///
+    /// `.verbose` is opt-in rather than the DEBUG default because `prettyJSON` parses and
+    /// re-serializes every response body through `JSONSerialization` — a second full pass
+    /// over payloads that are already being decoded, on top of pushing the whole formatted
+    /// string through `os_log`. On a 500-event hub load that is megabytes of avoidable work,
+    /// and it lands squarely on top of anything you're trying to measure locally. Release
+    /// builds were never affected; local profiling runs were.
     public static var `default`: NetworkLogger {
         #if DEBUG
-        NetworkLogger(level: .verbose)
+        NetworkLogger(level: isVerboseRequested ? .verbose : .basic)
         #else
         NetworkLogger(level: .none)
         #endif

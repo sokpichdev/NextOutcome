@@ -1,6 +1,13 @@
 /mobile-engineering-agents
 CLAUDE.md
-/docs
+# Docs are local working notes and stay untracked — except performance/, which holds the
+# baseline measurements Phases 1-3 of the performance plan are graded against. A
+# before/after record is worthless if it only exists on one machine.
+#
+# Written as `/docs/*` rather than `/docs` on purpose: git never descends into a fully
+# excluded directory, so a negation nested inside one can never take effect.
+/docs/*
+!/docs/performance/
 .mobile-agents/
 /mockups
 .DS_Store

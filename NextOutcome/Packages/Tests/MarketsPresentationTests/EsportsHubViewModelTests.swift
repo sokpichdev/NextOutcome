@@ -543,6 +543,11 @@ final class EsportsHubViewModelTests: XCTestCase {
         XCTAssertEqual(updated?.teams.first?.name, "QUAZAR") // poll metadata preserved
 
         vm.stopLivePolling()
+        // `stopLivePolling` cancels the subscription task, but the stream's `onTermination`
+        // — which is what records the cancellation — runs on the cancelled task's own
+        // scheduling, not before `stopLivePolling` returns. Asserting straight away is a
+        // race that loses on fast/parallel hardware. Same wait the match-detail suite uses.
+        for _ in 0..<200 where !streamer.cancelledGameIDs.contains("feed-live") { await Task.yield() }
         XCTAssertTrue(streamer.cancelledGameIDs.contains("feed-live"))
     }
 
