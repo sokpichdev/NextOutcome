@@ -22,11 +22,11 @@ struct MapView: View {
                     .frame(height: 360)
             } else {
                 GlobeSceneView(countries: countries)
-                    .frame(height: 420)
+                    .frame(height: 360)
                     .frame(maxWidth: .infinity)
             }
             #else
-            Color.clear.frame(height: 420)
+            Color.clear.frame(height: 360)
             #endif
         }
     }
@@ -84,14 +84,21 @@ struct GlobeSceneView: UIViewRepresentable {
 
         let camera = SCNCamera()
         camera.fieldOfView = 40
+        // Pin the field of view to the horizontal axis: the hub's globe is in a wide, short
+        // container, and leaving this automatic lets SceneKit measure against the taller
+        // dimension, which crops the sphere's left and right edges off screen.
+        camera.projectionDirection = .horizontal
         camera.wantsHDR = true
-        camera.bloomIntensity = 1.1
-        camera.bloomThreshold = 0.3
-        camera.bloomBlurRadius = 8
+        // A tight bloom: a wide one smears the land dots' glow across the whole sphere and
+        // washes the ocean out to a flat mid-blue, which is what made the globe read as a
+        // featureless ball.
+        camera.bloomIntensity = 0.7
+        camera.bloomThreshold = 0.5
+        camera.bloomBlurRadius = 3
         let cameraNode = SCNNode()
         cameraNode.name = "camera"
         cameraNode.camera = camera
-        cameraNode.position = SCNVector3(0, 0, 5)
+        cameraNode.position = SCNVector3(0, 0, 6) // far enough that the whole sphere fits with margin
         scene.rootNode.addChildNode(cameraNode)
 
         let globe = SCNNode(geometry: makeGlobeGeometry())
@@ -108,7 +115,9 @@ struct GlobeSceneView: UIViewRepresentable {
         let sphere = SCNSphere(radius: Self.radius)
         sphere.segmentCount = 96
         let material = SCNMaterial()
-        material.diffuse.contents = UIColor(red: 0.04, green: 0.06, blue: 0.13, alpha: 1)
+        // Near-black: the emission texture supplies the ocean colour, and a lighter diffuse
+        // on top of it washes the continents out.
+        material.diffuse.contents = UIColor(red: 0.01, green: 0.02, blue: 0.05, alpha: 1)
         material.emission.contents = Self.dotTexture()
         material.emission.intensity = 1
         material.lightingModel = .constant
@@ -116,23 +125,55 @@ struct GlobeSceneView: UIViewRepresentable {
         return sphere
     }
 
-    /// A dark texture speckled with glowing blue dots — the "dotted globe" look.
-    /// - Parameter size: The texture width in pixels (height is half).
+    /// The dotted-continents texture: a dark ocean with glowing blue dots laid out only where
+    /// `WorldLandMask` says there is land, so the sphere reads as a real world map rather than
+    /// a uniformly speckled ball.
+    ///
+    /// The dot grid is spaced evenly in texture space and each row's horizontal step is
+    /// widened by `1 / cos(latitude)` so that dots stay roughly evenly spaced *on the sphere*
+    /// instead of bunching up towards the poles, where the equirectangular projection squeezes
+    /// longitude together.
+    /// - Parameter size: The texture width in pixels (height is half, as equirectangular
+    ///   textures are 2:1).
     /// - Returns: The dotted globe emission texture.
-    private static func dotTexture(size: Int = 1024) -> UIImage {
+    static func dotTexture(size: Int = 2048) -> UIImage {
         let s = CGSize(width: size, height: size / 2)
+        let step = CGFloat(size) / 128 // ~128 dots across the equator
+        let dot = step * 0.42
         return UIGraphicsImageRenderer(size: s).image { ctx in
-            UIColor(red: 0.03, green: 0.05, blue: 0.11, alpha: 1).setFill()
+            // Very nearly black: the camera renders HDR and converts to sRGB on the way out,
+            // which lifts dark values noticeably, so an ocean that looks right in the texture
+            // reads as pale slate on screen.
+            UIColor(red: 0.004, green: 0.01, blue: 0.03, alpha: 1).setFill()
             ctx.fill(CGRect(origin: .zero, size: s))
-            let step: CGFloat = 12
-            let dot: CGFloat = 2.4
-            UIColor(red: 0.3, green: 0.55, blue: 1, alpha: 0.55).setFill()
-            var y: CGFloat = step
+            UIColor(red: 0.34, green: 0.62, blue: 1, alpha: 0.95).setFill()
+
+            var y = step / 2
             while y < s.height {
-                var x: CGFloat = step
+                let latitude = 90 - Double(y / s.height) * 180
+                // Past this latitude every column of the projection converges on the pole and
+                // the dots wind into a visible spiral, so leave the ice caps bare.
+                guard abs(latitude) < 82 else {
+                    y += step
+                    continue
+                }
+                // Widen the step towards the poles; clamp so the very last rows stay sane.
+                let squeeze = min(6, 1 / max(0.17, cos(latitude * .pi / 180)))
+                let rowStep = step * CGFloat(squeeze)
+                // Offset alternate rows by half a step for a denser, hex-like packing.
+                var x = (Int(y / step) % 2 == 0) ? rowStep / 2 : rowStep
+                // Stretch each dot horizontally by the same factor, so the projection's
+                // squeeze turns the ellipse back into a round dot on the sphere instead of a
+                // sliver.
+                let dotWidth = dot * CGFloat(squeeze)
                 while x < s.width {
-                    ctx.cgContext.fillEllipse(in: CGRect(x: x, y: y, width: dot, height: dot))
-                    x += step
+                    let longitude = Double(x / s.width) * 360 - 180
+                    if WorldLandMask.isLand(latitude: latitude, longitude: longitude) {
+                        ctx.cgContext.fillEllipse(
+                            in: CGRect(x: x - dotWidth / 2, y: y - dot / 2, width: dotWidth, height: dot)
+                        )
+                    }
+                    x += rowStep
                 }
                 y += step
             }
