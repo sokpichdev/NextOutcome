@@ -33,7 +33,7 @@ final class DrawerUITests: XCTestCase {
         let app = XCUIApplication.launched()
         openDrawer(app)
 
-        for item in ["Leaderboard", "Rewards", "APIs",
+        for item in ["Leaderboard", "Rewards", "APIs", "Globe",
                      "Accuracy", "Support", "Status",
                      "Documentation", "Help Center", "Terms of Use",
                      "Logout"] {
@@ -73,5 +73,27 @@ final class DrawerUITests: XCTestCase {
             volume.tap()
             attachScreenshot(of: app, named: "Leaderboard — volume ranking")
         }
+    }
+
+    /// The drawer's Globe item opens the full-screen SceneKit globe, which closes again.
+    @MainActor
+    func testDrawerGlobeOpensAndCloses() throws {
+        let app = XCUIApplication.launched()
+        openDrawer(app)
+
+        let globeItem = app.buttons["Globe"].exists ? app.buttons["Globe"] : app.staticTexts["Globe"]
+        globeItem.tap()
+
+        let close = app.buttons["Close globe"]
+        assertAppears(close, timeout: UIWait.ui, "Globe screen should open from the drawer")
+        // Odds come from the network; once they land, give MapKit a moment to stream tiles.
+        if app.staticTexts["Favourites"].waitForExistence(timeout: UIWait.firstLoad) {
+            _ = app.staticTexts["__never__"].waitForExistence(timeout: 4)
+        }
+        attachScreenshot(of: app, named: "Globe — from drawer")
+
+        close.tap()
+        XCTAssertTrue(app.buttons["Account menu"].waitForExistence(timeout: UIWait.ui),
+                      "Closing the globe should return to the shell")
     }
 }

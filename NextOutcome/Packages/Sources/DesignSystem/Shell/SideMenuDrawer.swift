@@ -29,11 +29,12 @@ public struct SideMenuItem: Identifiable, Hashable {
 /// `.offset` or `.overlay` combined with a tap-to-dismiss scrim.
 public struct SideMenuDrawer: View {
     /// The main navigation items shown at the top of the drawer (Leaderboard,
-    /// Rewards, APIs), each with an icon.
+    /// Rewards, APIs, Globe), each with an icon.
     public static let primaryItems: [SideMenuItem] = [
         .init(id: "leaderboard", title: "Leaderboard", glyph: "trophy"),
         .init(id: "rewards",     title: "Rewards",     glyph: "dollarsign.circle"),
-        .init(id: "apis",        title: "APIs",        glyph: "cablecar")
+        .init(id: "apis",        title: "APIs",        glyph: "cablecar"),
+        .init(id: "globe",       title: "Globe",       glyph: "globe.americas")
     ]
 
     /// Secondary, text-only links shown below a divider (Accuracy, Support,

@@ -105,6 +105,8 @@ struct RootView: View {
     }()
     /// Whether the side drawer is currently slid in over the main content.
     @State private var isDrawerOpen = false
+    /// Whether the full-screen globe (opened from the drawer's "Globe" row) is showing.
+    @State private var isGlobePresented = false
 
     /// Builds the root view, resolving every view model and factory from the container.
     ///
@@ -165,6 +167,9 @@ struct RootView: View {
         .tint(DSColor.accent)
         .preferredColorScheme(themeManager.isDarkMode ? .dark : .light)
         .animation(.easeInOut(duration: 0.3), value: isDrawerOpen)
+        .fullScreenCover(isPresented: $isGlobePresented) {
+            GlobeExplorerView(viewModel: worldCupViewModel) { isGlobePresented = false }
+        }
         // Provide shared factories and services to child views through environment keys.
         .environment(\.marketLiveFactory, marketLiveFactory)
         .environment(\.orderbookFactory, orderbookFactory)
@@ -294,7 +299,10 @@ struct RootView: View {
             SideMenuDrawer(
                 addressShort: shellViewModel.addressShort,
                 isDarkMode: themeManager.isDarkMode,
-                onSelect: { _ in isDrawerOpen = false },
+                onSelect: { id in
+                    isDrawerOpen = false
+                    if id == "globe" { isGlobePresented = true }
+                },
                 onLogout: { isDrawerOpen = false },
                 onToggleTheme: { themeManager.toggle() }
             )

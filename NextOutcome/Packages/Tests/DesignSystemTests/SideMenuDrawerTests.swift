@@ -2,10 +2,10 @@ import XCTest
 @testable import DesignSystem
 
 final class SideMenuDrawerTests: XCTestCase {
-    func test_primaryItems_areLeaderboardRewardsAPIs() {
+    func test_primaryItems_areLeaderboardRewardsAPIsGlobe() {
         XCTAssertEqual(
             SideMenuDrawer.primaryItems.map(\.title),
-            ["Leaderboard", "Rewards", "APIs"]
+            ["Leaderboard", "Rewards", "APIs", "Globe"]
         )
     }
 
